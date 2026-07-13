@@ -200,6 +200,74 @@ RPC-dependent Base tests are separate from default CI and require `BASE_RPC_URL`
 Use a pinned or documented fork block where reproducibility matters. Never weaken
 validation solely to reduce gas or make a test pass.
 
+## Documentation maintenance
+
+Documentation is part of the implementation, not a separate follow-up task.
+
+Before completing a change, review whether the implementation changes any
+documented behavior, convention, security assumption, or architectural decision.
+
+English documents under `docs/` are normative. When a normative document
+changes, update its Traditional Chinese `*.zh-TW.md` companion in the same PR.
+
+Update `docs/ARCHITECTURE.md` and `docs/ARCHITECTURE.zh-TW.md` when a change
+affects:
+
+- contract, package, or module boundaries;
+- dependency direction;
+- ownership of protocol or business logic;
+- execution, calldata, or transaction flow;
+- storage or transient-storage strategy;
+- component responsibilities;
+- canonical implementation patterns.
+
+Update `docs/SPECIFICATION.md` and `docs/SPECIFICATION.zh-TW.md` when a change
+affects:
+
+- public interfaces or ABI;
+- structs, enums, functions, or custom errors;
+- validation order or revert behavior;
+- checkpoint, patch, assertion, or call semantics;
+- authorization or state lifecycle;
+- observable contract behavior.
+
+Update `docs/SECURITY.md` and `docs/SECURITY.zh-TW.md` when a change affects:
+
+- authorization or trust boundaries;
+- security invariants;
+- reentrancy or callback behavior;
+- atomicity guarantees or non-guarantees;
+- token, protocol, EntryPoint, factory, or oracle assumptions;
+- accepted risks or required mitigations.
+
+Update `docs/ROADMAP.md` and `docs/ROADMAP.zh-TW.md` when a change affects:
+
+- implementation order;
+- phase scope;
+- release or verification gates;
+- supported chain or protocol claims;
+- deferred capabilities.
+
+Update `AGENTS.md` in the same PR when a change introduces or modifies:
+
+- repository-wide development rules;
+- required validation commands;
+- coding conventions future changes must follow;
+- PR or review requirements;
+- instructions for locating canonical implementations.
+
+Create or update an ADR when introducing a significant, long-lived
+architectural decision or replacing an established pattern. Do not create an ADR
+for a one-off implementation detail that does not establish a reusable
+convention.
+
+Before finishing a change, report exactly one of:
+
+- `Documentation updated:` list the files and why each changed.
+- `No documentation update required:` explain why the change does not alter
+  documented behavior, repository conventions, security assumptions, or
+  architecture.
+
 ## Definition of done
 
 Before marking a Linear issue complete:
