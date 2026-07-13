@@ -1,1 +1,7 @@
 ProjectBootstrapTest:test_BootstrapFixtureCompilesAndRuns() (gas: 56054)
+UpstreamCompatibilityTest:test_Simple7702AccountAcceptsPlainEthTransfers() (gas: 555097)
+UpstreamCompatibilityTest:test_Simple7702AccountFallbackAcceptsUnknownCalls() (gas: 555335)
+UpstreamCompatibilityTest:test_Simple7702AccountPreservesInheritedInterfacesAndReceivers() (gas: 558927)
+UpstreamCompatibilityTest:test_Simple7702AccountReceiverHooksReturnExpectedSelectors() (gas: 560857)
+UpstreamCompatibilityTest:test_Simple7702AccountUsesConfiguredImmutableEntryPoint() (gas: 555642)
+UpstreamEntryPointCompilationTest:test_UpstreamEntryPointCompilesWithPinnedToolchain() (gas: 7812)

@@ -1,7 +1,7 @@
 # Contract Specification
 
 Status: normative v1 draft
-Date: 2026-07-12
+Date: 2026-07-13
 
 The key words MUST, MUST NOT, REQUIRED, SHOULD, SHOULD NOT, and MAY are to be
 interpreted as normative requirements.
@@ -12,14 +12,17 @@ The contract design is derived from the `defi-simplify` SDK and product
 architecture:
 
 - Project source: https://github.com/tn606024/defi-simplify
-- Upstream account baseline: eth-infinitism account-abstraction v0.9
-  `Simple7702Account.sol`.
-  Reading reference:
-  https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/accounts/Simple7702Account.sol
+- Upstream account baseline: eth-infinitism account-abstraction v0.9.0
+  `Simple7702Account.sol` at
+  `b36a1ed52ae00da6f8a4c8d50181e2877e4fa410`.
+- Dependency and Base EntryPoint lock:
+  `config/account-abstraction-v0.9.0.json`.
+- Architectural decision and audit evidence: ADR-001.
 
-The `develop` URL is not a version pin. Implementations MUST pin the exact
-v0.9 release tag or full commit used for `Simple7702Account.sol`, EntryPoint,
-interfaces, compiler compatibility, and reproducible deployment artifacts.
+Implementations MUST use that exact unmodified upstream commit for
+`Simple7702Account.sol`, `BaseAccount.sol`, EntryPoint interfaces, compiler
+compatibility tests, and reproducible deployment artifacts. A later revision
+requires a superseding ADR and a new deployment identity.
 
 ## 1. Build and Platform Requirements
 
@@ -29,6 +32,10 @@ interfaces, compiler compatibility, and reproducible deployment artifacts.
 - Chains used for delegated execution MUST support EIP-7702.
 - Foundry, dependency revisions, optimizer runs, `via_ir`, and EVM version MUST
   be committed and reproducible.
+- Base v1 MUST configure EntryPoint v0.9.0 at
+  `0x433709009B8330FDa32311DF1C2AFA402eD8D009` and verify runtime code hash
+  `0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d`
+  before ERC-4337 use.
 - Production deployments MUST use verified source and publish runtime code hash.
 - Official v1 deployments MUST use Foundry's default Arachnid Deterministic
   Deployment Proxy at `0x4e59b44847b379578588920cA78FbF26c0B4956C`.

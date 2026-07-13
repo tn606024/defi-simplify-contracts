@@ -1,7 +1,7 @@
 # Architecture
 
 Status: implementation design
-Date: 2026-07-12
+Date: 2026-07-13
 
 ## 1. System Context
 
@@ -55,15 +55,18 @@ contain Go protocol adapters.
 
 ## 3. Upstream Account Baseline
 
-`DefiSimplify7702Account` inherits `Simple7702Account` from a pinned
-`eth-infinitism/account-abstraction` release.
+`DefiSimplify7702Account` inherits `Simple7702Account` from
+`eth-infinitism/account-abstraction` v0.9.0 at full commit
+`b36a1ed52ae00da6f8a4c8d50181e2877e4fa410`. The source is an unmodified Git
+submodule, and its OpenZeppelin v5.1.0 Solidity dependency is pinned at
+`69c8def5f222ff96f2b5beff05dfba996368aa79`.
 
-The current SDK references v0.9.0, whose account accepts an immutable EntryPoint
-constructor argument. The contract repository should initially target v0.9.0,
-pin its full commit hash and dependency lock, and record the selected EntryPoint
-per deployment. The v0.8.0 release explicitly described `Simple7702Account` as
-fully audited; v0.9.0 audit coverage must be verified before making the same
-claim for the inherited code.
+The account accepts an immutable EntryPoint constructor argument. Base uses
+v0.9.0 EntryPoint `0x433709009B8330FDa32311DF1C2AFA402eD8D009` with runtime
+code hash `0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d`.
+The lock, compiler compatibility, licensing, audit evidence, inherited risks,
+and update rule are recorded in ADR-001. No v0.9-specific audit evidence was
+found, so the v0.8.0 release's audit statement is not extended to this baseline.
 
 The custom account must not copy or edit upstream files. Inheritance preserves:
 

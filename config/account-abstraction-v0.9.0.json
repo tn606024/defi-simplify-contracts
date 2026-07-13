@@ -1,0 +1,38 @@
+{
+  "accountAbstraction": {
+    "repository": "https://github.com/eth-infinitism/account-abstraction.git",
+    "tag": "v0.9.0",
+    "commit": "b36a1ed52ae00da6f8a4c8d50181e2877e4fa410",
+    "path": "lib/account-abstraction",
+    "license": "mixed: GPL-3.0 repository; source-file SPDX identifiers control"
+  },
+  "openzeppelinContracts": {
+    "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
+    "tag": "v5.1.0",
+    "commit": "69c8def5f222ff96f2b5beff05dfba996368aa79",
+    "path": "lib/openzeppelin-contracts",
+    "license": "MIT"
+  },
+  "base": {
+    "chainId": 8453,
+    "entryPointVersion": "v0.9.0",
+    "entryPointAddress": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
+    "entryPointRuntimeCodeHash": "0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d",
+    "entryPointConstructorArguments": [],
+    "verificationUrl": "https://basescan.org/address/0x433709009B8330FDa32311DF1C2AFA402eD8D009#code"
+  },
+  "upstreamEntryPointBuild": {
+    "solidity": "0.8.28",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 1000000,
+    "viaIR": true
+  },
+  "localCompatibilityBuild": {
+    "solidity": "0.8.28",
+    "evmVersion": "prague",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "viaIR": true
+  }
+}

@@ -1,7 +1,7 @@
 # 合約規格
 
 狀態：v1 normative draft
-日期：2026-07-12
+日期：2026-07-13
 
 本文的 MUST、MUST NOT、REQUIRED、SHOULD、SHOULD NOT、MAY 都是規範性要求。
 
@@ -10,14 +10,17 @@
 本合約設計來自 `defi-simplify` SDK 與產品架構：
 
 - project source: https://github.com/tn606024/defi-simplify
-- upstream account baseline: eth-infinitism account-abstraction v0.9
-  `Simple7702Account.sol`。
-  閱讀參考：
-  https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/accounts/Simple7702Account.sol
+- upstream account baseline：eth-infinitism account-abstraction v0.9.0
+  `Simple7702Account.sol`，commit
+  `b36a1ed52ae00da6f8a4c8d50181e2877e4fa410`。
+- dependency 與 Base EntryPoint lock：
+  `config/account-abstraction-v0.9.0.json`。
+- architecture decision 與 audit evidence：ADR-001。
 
-上面的 `develop` URL 不是版本鎖定。實作必須 pin 實際使用的 v0.9 release tag
-或完整 commit，範圍包含 `Simple7702Account.sol`、EntryPoint、interfaces、
-compiler compatibility 與 reproducible deployment artifacts。
+實作必須以此精確、未修改的 upstream commit 取得 `Simple7702Account.sol`、
+`BaseAccount.sol`、EntryPoint interfaces、compiler compatibility tests 與
+reproducible deployment artifacts。後續 revision 必須建立 superseding ADR 與新
+deployment identity。
 
 ## 1. Build 與平台要求
 
@@ -27,6 +30,10 @@ compiler compatibility 與 reproducible deployment artifacts。
 - delegated execution 的 chain 必須支援 EIP-7702。
 - Foundry、dependency revision、optimizer runs、`via_ir` 與 EVM version 都
   必須 commit 且可重現。
+- Base v1 必須設定 v0.9.0 EntryPoint
+  `0x433709009B8330FDa32311DF1C2AFA402eD8D009`，並在 ERC-4337 使用前驗證
+  runtime code hash
+  `0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d`。
 - production deployment 必須 verify source 並公布 runtime code hash。
 - official v1 deployment 必須使用 Foundry 預設的 Arachnid Deterministic
   Deployment Proxy `0x4e59b44847b379578588920cA78FbF26c0B4956C`。其
