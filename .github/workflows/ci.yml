@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  test:
+    name: Format, build, test, coverage, and reproducibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+
+      - name: Verify Foundry version
+        run: ./script/check-foundry-version.sh
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Build contracts
+        run: forge build --sizes
+
+      - name: Run non-fork tests
+        run: forge test --no-match-path 'test/fork/**' -vvv
+
+      - name: Check gas snapshot
+        run: forge snapshot --check --no-match-test 'testFuzz' --no-match-path 'test/fork/**'
+
+      - name: Generate coverage summary
+        run: forge coverage --no-match-path 'test/fork/**' --report summary
+
+      - name: Check reproducible artifacts
+        run: ./script/check-reproducible-build.sh
+
+  slither:
+    name: Slither
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+
+      - name: Install pinned Slither
+        run: python -m pip install --disable-pip-version-check slither-analyzer==0.11.5
+
+      - name: Run Slither
+        run: slither . --fail-high

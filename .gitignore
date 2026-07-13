@@ -1,0 +1,24 @@
+# Foundry build output
+cache/
+out/
+broadcast/
+
+# Coverage output
+lcov.info
+coverage/
+
+# Local environment and RPC credentials
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local analysis output
+slither.db.json
+crytic-export/
