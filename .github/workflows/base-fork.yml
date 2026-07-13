@@ -1,0 +1,30 @@
+name: Base fork tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_PROFILE: ci
+  BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+
+jobs:
+  fork:
+    name: Base RPC-dependent suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+
+      - name: Require Base RPC secret
+        run: test -n "$BASE_RPC_URL"
+
+      - name: Run Base fork tests
+        run: forge test --match-path 'test/fork/**/*.t.sol' --fork-url "$BASE_RPC_URL" -vvv
