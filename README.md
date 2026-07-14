@@ -15,6 +15,8 @@ normative when translations differ.
 - EVM: `prague`
 - optimizer: enabled, 200 runs
 - IR pipeline: enabled
+- forge-std: `v1.16.2`,
+  `bf647bd6046f2f7da30d0c2bf435e5c76a780c1b`
 
 ## Pinned account-abstraction baseline
 
@@ -31,6 +33,7 @@ Initialize submodules and verify the dependency lock before building:
 ```sh
 git submodule update --init
 ./script/check-account-abstraction-revision.sh
+./script/check-forge-std-revision.sh
 ```
 
 See `docs/adr/ADR-001-account-abstraction-v0.9.0.md` for compiler, audit,
@@ -42,6 +45,7 @@ Install the pinned Foundry release, then run:
 ```sh
 ./script/check-foundry-version.sh
 ./script/check-account-abstraction-revision.sh
+./script/check-forge-std-revision.sh
 forge fmt --check
 forge build
 ./script/check-minimal-account-surface.sh
