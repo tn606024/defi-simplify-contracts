@@ -1,7 +1,7 @@
 # 架構
 
 狀態：實作設計
-日期：2026-07-12
+日期：2026-07-13
 
 ## 1. 系統脈絡
 
@@ -54,14 +54,18 @@ settings 與 source verification metadata；不放 Go protocol adapter。
 
 ## 3. 上游 Account Baseline
 
-`DefiSimplify7702Account` 繼承鎖定版本的
-`eth-infinitism/account-abstraction` `Simple7702Account`。
+`DefiSimplify7702Account` 繼承 `eth-infinitism/account-abstraction` v0.9.0
+完整 commit `b36a1ed52ae00da6f8a4c8d50181e2877e4fa410` 的
+`Simple7702Account`。source 是未修改的 Git submodule，其 OpenZeppelin
+v5.1.0 Solidity dependency 另外鎖在
+`69c8def5f222ff96f2b5beff05dfba996368aa79`。
 
-目前 SDK 指向 v0.9.0，該版 account 以 constructor 接收 immutable EntryPoint。
-合約 repo 初始應以 v0.9.0 為目標，鎖完整 commit hash 與 dependency lock，並在
-每次 deployment 記錄 EntryPoint。v0.8.0 release 明確稱
-`Simple7702Account` 已完整 audit；在確認 v0.9.0 audit coverage 前，不能對
-v0.9.0 繼承程式碼做相同宣稱。
+account 以 constructor 接收 immutable EntryPoint。Base 使用 v0.9.0 EntryPoint
+`0x433709009B8330FDa32311DF1C2AFA402eD8D009`，runtime code hash 為
+`0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d`。
+dependency lock、compiler compatibility、license、audit evidence、inherited
+risks 與 update rule 記錄在 ADR-001。目前沒有找到 v0.9-specific audit
+evidence，因此不把 v0.8.0 release 的 audit 說法延伸到此 baseline。
 
 自家合約不得複製或修改上游檔案。透過繼承保留：
 

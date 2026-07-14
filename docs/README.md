@@ -1,11 +1,10 @@
-# defi-simplify-contract Documentation Seed
+# defi-simplify-contracts Documentation
 
-Status: design approved with required corrections
-Date: 2026-07-12
+Status: implementation source of truth
+Date: 2026-07-13
 
-This directory is the documentation seed for the future
-`defi-simplify-contract` repository. Copy these files to the new repository
-before Solidity implementation begins.
+This directory contains the normative design, security, and implementation
+sequence for `defi-simplify-contracts`.
 
 English is the normative language for contract behavior. Traditional Chinese
 files are maintained as complete companion documents. If translations differ,
@@ -16,12 +15,11 @@ the English specification wins until both files are reconciled.
 This documentation seed is derived from the product and SDK work in
 [tn606024/defi-simplify](https://github.com/tn606024/defi-simplify).
 
-The Tier 1 static account path and the Tier 2 custom account inheritance model
-are based on eth-infinitism account-abstraction v0.9
-[`Simple7702Account.sol`](https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/accounts/Simple7702Account.sol).
-The linked `develop` branch is a reading reference only; implementation MUST
-pin an exact v0.9 release tag or full commit before deployment artifacts are
-built.
+The static account path and custom account inheritance model use
+eth-infinitism account-abstraction v0.9.0 at full commit
+`b36a1ed52ae00da6f8a4c8d50181e2877e4fa410`. ADR-001 records the dependency,
+Base EntryPoint, compiler compatibility, audit evidence, licenses, and update
+rule.
 
 ## Documents
 
@@ -30,6 +28,8 @@ built.
 - `SPECIFICATION.md` / `SPECIFICATION.zh-TW.md`: normative Solidity behavior and ABI.
 - `SECURITY.md` / `SECURITY.zh-TW.md`: threat model, invariants, and audit requirements.
 - `ROADMAP.md` / `ROADMAP.zh-TW.md`: implementation order and release gates.
+- `adr/ADR-001-account-abstraction-v0.9.0.md` and its `zh-TW` companion:
+  upstream dependency and Base EntryPoint decision.
 
 ## Decision Summary
 

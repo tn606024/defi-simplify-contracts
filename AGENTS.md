@@ -26,9 +26,15 @@ surface the conflict before coding.
 
 - Target Base only. Do not add multi-chain deployment logic unless a later issue
   explicitly expands scope.
-- Pin `eth-infinitism/account-abstraction` v0.9.0 to an exact commit. Never build
-  production artifacts from `develop`, another moving branch, or an unpinned tag.
-- Use the canonical v0.9 EntryPoint address and verify its Base runtime code hash.
+- Use `eth-infinitism/account-abstraction` v0.9.0 at exact commit
+  `b36a1ed52ae00da6f8a4c8d50181e2877e4fa410`. Never build production artifacts
+  from `develop`, another moving branch, or an unpinned tag.
+- Use Base v0.9 EntryPoint `0x433709009B8330FDa32311DF1C2AFA402eD8D009`
+  and runtime code hash
+  `0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d`.
+- Treat `config/account-abstraction-v0.9.0.json` as the dependency and Base
+  EntryPoint lock. ADR-001 is canonical for compiler, audit, license, inherited
+  risk, and dependency-update decisions.
 - Build with the repository-pinned Foundry and Solidity settings. Do not change
   compiler, EVM target, optimizer, `via_ir`, metadata, or dependency revisions
   casually: they affect bytecode, CREATE2 addresses, manifests, and audits.
@@ -176,6 +182,7 @@ Every behavior change includes proportional tests. At minimum, run:
 ```sh
 export PATH="$HOME/.foundry/bin:$PATH"
 ./script/check-foundry-version.sh
+./script/check-account-abstraction-revision.sh
 forge fmt --check
 forge build --sizes
 forge test --no-match-path 'test/fork/**'

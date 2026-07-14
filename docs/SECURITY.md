@@ -1,7 +1,7 @@
 # Security Model
 
 Status: pre-implementation threat model
-Date: 2026-07-12
+Date: 2026-07-13
 
 ## 1. Security Boundary
 
@@ -155,9 +155,21 @@ deployment must verify its address and code hash. ERC-4337 is optional transport
 for this project, but an incorrect EntryPoint selection affects the inherited
 authorization path.
 
+Base v1 pins EntryPoint `0x433709009B8330FDa32311DF1C2AFA402eD8D009` and
+runtime code hash
+`0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d`.
+The Base fork suite must fail if the address has no code, the chain ID is not
+8453, or the hash changes.
+
 The custom contract must not alter upstream signature validation. Changes to
 the pinned account-abstraction release require a new review and deployment, not
 an automatic dependency update.
+
+The March 2025 Spearbit report in the pinned repository predates the v0.9
+implementation commit. No v0.9-specific audit evidence was found, and BaseScan
+lists no submitted audit for the selected EntryPoint. The project therefore
+does not label the v0.9 baseline audited. See ADR-001 for commit comparison,
+license obligations, release-note risks, and the update rule.
 
 Official v1 deployments use Foundry's default Arachnid factory at
 `0x4e59b44847b379578588920cA78FbF26c0B4956C`, but factory, salt, and complete
@@ -223,7 +235,8 @@ complete, the repository must label the custom account unaudited.
 ## 11. Security References
 
 - Reference project: https://github.com/tn606024/defi-simplify
-- Simple7702Account v0.9 reading reference: https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/accounts/Simple7702Account.sol
+- Simple7702Account v0.9.0 pinned source: https://github.com/eth-infinitism/account-abstraction/blob/b36a1ed52ae00da6f8a4c8d50181e2877e4fa410/contracts/accounts/Simple7702Account.sol
+- Base EntryPoint v0.9.0 verification: https://basescan.org/address/0x433709009B8330FDa32311DF1C2AFA402eD8D009#code
 - EIP-7702 security considerations: https://eips.ethereum.org/EIPS/eip-7702#security-considerations
 - EIP-1153 security considerations: https://eips.ethereum.org/EIPS/eip-1153#security-considerations
 - Foundry `cast create2` default deployer: https://getfoundry.sh/cast/reference/cast-create2
