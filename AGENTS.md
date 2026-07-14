@@ -183,6 +183,7 @@ Every behavior change includes proportional tests. At minimum, run:
 export PATH="$HOME/.foundry/bin:$PATH"
 ./script/check-foundry-version.sh
 ./script/check-account-abstraction-revision.sh
+./script/check-forge-std-revision.sh
 forge fmt --check
 forge build --sizes
 ./script/check-minimal-account-surface.sh
@@ -213,6 +214,11 @@ Also run the test class relevant to the issue:
 RPC-dependent Base tests are separate from default CI and require `BASE_RPC_URL`.
 Use a pinned or documented fork block where reproducibility matters. Never weaken
 validation solely to reduce gas or make a test pass.
+
+Reuse `test/utils/DelegatedAccountFixture.sol` for local and Base fork EIP-7702
+tests. It uses Foundry's Prague delegation cheatcodes so `address(this)` is the
+delegated EOA. Do not use a direct implementation call or `vm.etch` as a
+substitute for delegated-account authorization or account-context tests.
 
 ## Documentation maintenance
 

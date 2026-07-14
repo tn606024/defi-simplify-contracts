@@ -29,7 +29,9 @@ jobs:
         run: ./script/check-foundry-version.sh
 
       - name: Verify dependency revisions
-        run: ./script/check-account-abstraction-revision.sh
+        run: |
+          ./script/check-account-abstraction-revision.sh
+          ./script/check-forge-std-revision.sh
 
       - name: Check formatting
         run: forge fmt --check
@@ -72,7 +74,9 @@ jobs:
           version: v1.7.1
 
       - name: Verify dependency revisions
-        run: ./script/check-account-abstraction-revision.sh
+        run: |
+          ./script/check-account-abstraction-revision.sh
+          ./script/check-forge-std-revision.sh
 
       - name: Install pinned Slither
         run: python -m pip install --disable-pip-version-check slither-analyzer==0.11.4
