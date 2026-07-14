@@ -34,12 +34,12 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
     }
 
     function test_DelegatedFixtureUsesEoaContextAndConfiguredEntryPoint() external {
-        _assertEq(
+        assertEq(
             _delegationTarget(pair.upstreamAccount), address(pair.upstreamImplementation), "upstream delegation target"
         );
-        _assertEq(_delegationTarget(pair.customAccount), address(pair.customImplementation), "custom delegation target");
-        _assertEq(address(_upstream().entryPoint()), address(this), "upstream EntryPoint");
-        _assertEq(address(_custom().entryPoint()), address(this), "custom EntryPoint");
+        assertEq(_delegationTarget(pair.customAccount), address(pair.customImplementation), "custom delegation target");
+        assertEq(address(_upstream().entryPoint()), address(this), "upstream EntryPoint");
+        assertEq(address(_custom().entryPoint()), address(this), "custom EntryPoint");
 
         bytes memory upstreamData = abi.encodeCall(StaticCompatibilityTarget.record, (11, bytes("delegated-self-call")));
         bytes memory customData = abi.encodeCall(StaticCompatibilityTarget.record, (11, bytes("delegated-self-call")));
@@ -50,8 +50,8 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         _custom().execute(address(customTarget), 0, customData);
 
         _assertEquivalentTargetState();
-        _assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream target caller");
-        _assertEq(customTarget.lastCaller(), pair.customAccount, "custom target caller");
+        assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream target caller");
+        assertEq(customTarget.lastCaller(), pair.customAccount, "custom target caller");
     }
 
     function test_DifferentialExecutePreservesValueAndFinalState() external {
@@ -64,10 +64,10 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         _custom().execute(address(customTarget), 0.4 ether, customData);
 
         _assertEquivalentTargetState();
-        _assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream execute caller");
-        _assertEq(customTarget.lastCaller(), pair.customAccount, "custom execute caller");
-        _assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "account balances");
-        _assertEq(address(upstreamTarget).balance, address(customTarget).balance, "target balances");
+        assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream execute caller");
+        assertEq(customTarget.lastCaller(), pair.customAccount, "custom execute caller");
+        assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "account balances");
+        assertEq(address(upstreamTarget).balance, address(customTarget).balance, "target balances");
     }
 
     function test_DifferentialExecuteBatchOneAndManyCalls() external {
@@ -91,10 +91,10 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         _custom().executeBatch(customMany);
 
         _assertEquivalentTargetState();
-        _assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream batch caller");
-        _assertEq(customTarget.lastCaller(), pair.customAccount, "custom batch caller");
-        _assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "batch account balances");
-        _assertEq(address(upstreamTarget).balance, address(customTarget).balance, "batch target balances");
+        assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream batch caller");
+        assertEq(customTarget.lastCaller(), pair.customAccount, "custom batch caller");
+        assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "batch account balances");
+        assertEq(address(upstreamTarget).balance, address(customTarget).balance, "batch target balances");
     }
 
     function test_DifferentialFailureReturndataAndAttribution() external {
@@ -107,10 +107,10 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
             _callExecute(pair.upstreamAccount, address(upstreamTarget), 0, upstreamFailCall);
         (bool customSuccess, bytes memory customReason) =
             _callExecute(pair.customAccount, address(customTarget), 0, customFailCall);
-        _assertFalse(upstreamSuccess, "upstream execute should fail");
-        _assertFalse(customSuccess, "custom execute should fail");
-        _assertEqBytes(upstreamReason, targetFailure, "upstream execute reason");
-        _assertEqBytes(customReason, targetFailure, "custom execute reason");
+        assertFalse(upstreamSuccess, "upstream execute should fail");
+        assertFalse(customSuccess, "custom execute should fail");
+        assertEq(upstreamReason, targetFailure, "upstream execute reason");
+        assertEq(customReason, targetFailure, "custom execute reason");
 
         BaseAccount.Call[] memory upstreamOne = new BaseAccount.Call[](1);
         BaseAccount.Call[] memory customOne = new BaseAccount.Call[](1);
@@ -118,10 +118,10 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         customOne[0] = BaseAccount.Call({target: address(customTarget), value: 0, data: customFailCall});
         (upstreamSuccess, upstreamReason) = _callBatch(pair.upstreamAccount, upstreamOne);
         (customSuccess, customReason) = _callBatch(pair.customAccount, customOne);
-        _assertFalse(upstreamSuccess, "upstream one-call batch should fail");
-        _assertFalse(customSuccess, "custom one-call batch should fail");
-        _assertEqBytes(upstreamReason, targetFailure, "upstream one-call batch reason");
-        _assertEqBytes(customReason, targetFailure, "custom one-call batch reason");
+        assertFalse(upstreamSuccess, "upstream one-call batch should fail");
+        assertFalse(customSuccess, "custom one-call batch should fail");
+        assertEq(upstreamReason, targetFailure, "upstream one-call batch reason");
+        assertEq(customReason, targetFailure, "custom one-call batch reason");
 
         BaseAccount.Call[] memory upstreamMany = new BaseAccount.Call[](2);
         BaseAccount.Call[] memory customMany = new BaseAccount.Call[](2);
@@ -132,12 +132,12 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         bytes memory wrappedFailure = abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 1, targetFailure);
         (upstreamSuccess, upstreamReason) = _callBatch(pair.upstreamAccount, upstreamMany);
         (customSuccess, customReason) = _callBatch(pair.customAccount, customMany);
-        _assertFalse(upstreamSuccess, "upstream many-call batch should fail");
-        _assertFalse(customSuccess, "custom many-call batch should fail");
-        _assertEqBytes(upstreamReason, wrappedFailure, "upstream wrapped reason");
-        _assertEqBytes(customReason, wrappedFailure, "custom wrapped reason");
-        _assertEq(upstreamTarget.count(), 0, "upstream state should roll back");
-        _assertEq(customTarget.count(), 0, "custom state should roll back");
+        assertFalse(upstreamSuccess, "upstream many-call batch should fail");
+        assertFalse(customSuccess, "custom many-call batch should fail");
+        assertEq(upstreamReason, wrappedFailure, "upstream wrapped reason");
+        assertEq(customReason, wrappedFailure, "custom wrapped reason");
+        assertEq(upstreamTarget.count(), 0, "upstream state should roll back");
+        assertEq(customTarget.count(), 0, "custom state should roll back");
     }
 
     function test_DifferentialValidateUserOpAndPrefund() external {
@@ -153,18 +153,18 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         uint256 upstreamValidation = IAccount(pair.upstreamAccount).validateUserOp(upstreamOp, userOpHash, 0.2 ether);
         uint256 customValidation = IAccount(pair.customAccount).validateUserOp(customOp, userOpHash, 0.2 ether);
 
-        _assertEq(upstreamValidation, 0, "upstream valid signature");
-        _assertEq(customValidation, 0, "custom valid signature");
-        _assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "prefund account balances");
-        _assertEq(address(this).balance, entryPointBalanceBefore + 0.4 ether, "EntryPoint prefund balance");
+        assertEq(upstreamValidation, 0, "upstream valid signature");
+        assertEq(customValidation, 0, "custom valid signature");
+        assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "prefund account balances");
+        assertEq(address(this).balance, entryPointBalanceBefore + 0.4 ether, "EntryPoint prefund balance");
 
         bytes memory wrongSignature = _signature(WRONG_SIGNER_KEY, userOpHash);
         upstreamOp.signature = wrongSignature;
         customOp.signature = wrongSignature;
         upstreamValidation = IAccount(pair.upstreamAccount).validateUserOp(upstreamOp, userOpHash, 0);
         customValidation = IAccount(pair.customAccount).validateUserOp(customOp, userOpHash, 0);
-        _assertEq(upstreamValidation, 1, "upstream invalid signature");
-        _assertEq(customValidation, 1, "custom invalid signature");
+        assertEq(upstreamValidation, 1, "upstream invalid signature");
+        assertEq(customValidation, 1, "custom invalid signature");
     }
 
     function test_DifferentialERC1271ValidAndInvalidSignatures() external view {
@@ -177,10 +177,10 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         bytes4 upstreamInvalid = IERC1271(pair.upstreamAccount).isValidSignature(digest, wrongSignature);
         bytes4 customInvalid = IERC1271(pair.customAccount).isValidSignature(digest, wrongSignature);
 
-        _assertEqBytes4(upstreamValid, IERC1271.isValidSignature.selector, "upstream ERC-1271 valid result");
-        _assertEqBytes4(customValid, IERC1271.isValidSignature.selector, "custom ERC-1271 valid result");
-        _assertEqBytes4(upstreamInvalid, bytes4(0xffffffff), "upstream ERC-1271 invalid result");
-        _assertEqBytes4(customInvalid, bytes4(0xffffffff), "custom ERC-1271 invalid result");
+        assertEq(bytes32(upstreamValid), bytes32(IERC1271.isValidSignature.selector), "upstream ERC-1271 valid result");
+        assertEq(bytes32(customValid), bytes32(IERC1271.isValidSignature.selector), "custom ERC-1271 valid result");
+        assertEq(bytes32(upstreamInvalid), bytes32(bytes4(0xffffffff)), "upstream ERC-1271 invalid result");
+        assertEq(bytes32(customInvalid), bytes32(bytes4(0xffffffff)), "custom ERC-1271 invalid result");
     }
 
     function test_DifferentialERC165AndReceiverBehavior() external {
@@ -195,8 +195,8 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         for (uint256 i = 0; i < ids.length; i++) {
             bool upstreamSupported = IERC165(pair.upstreamAccount).supportsInterface(ids[i]);
             bool customSupported = IERC165(pair.customAccount).supportsInterface(ids[i]);
-            _assertEq(upstreamSupported, customSupported, "ERC-165 differential result");
-            _assertEq(upstreamSupported, i < 5, "ERC-165 expected result");
+            assertEq(upstreamSupported, customSupported, "ERC-165 differential result");
+            assertEq(upstreamSupported, i < 5, "ERC-165 expected result");
         }
 
         uint256[] memory tokenIds = new uint256[](2);
@@ -206,21 +206,29 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         tokenValues[0] = 3;
         tokenValues[1] = 4;
 
-        _assertEqBytes4(
-            IERC721Receiver(pair.upstreamAccount).onERC721Received(address(this), address(1), 2, "receiver"),
-            IERC721Receiver(pair.customAccount).onERC721Received(address(this), address(1), 2, "receiver"),
+        assertEq(
+            bytes32(IERC721Receiver(pair.upstreamAccount).onERC721Received(address(this), address(1), 2, "receiver")),
+            bytes32(IERC721Receiver(pair.customAccount).onERC721Received(address(this), address(1), 2, "receiver")),
             "ERC-721 receiver result"
         );
-        _assertEqBytes4(
-            IERC1155Receiver(pair.upstreamAccount).onERC1155Received(address(this), address(1), 2, 3, "receiver"),
-            IERC1155Receiver(pair.customAccount).onERC1155Received(address(this), address(1), 2, 3, "receiver"),
+        assertEq(
+            bytes32(
+                IERC1155Receiver(pair.upstreamAccount).onERC1155Received(address(this), address(1), 2, 3, "receiver")
+            ),
+            bytes32(
+                IERC1155Receiver(pair.customAccount).onERC1155Received(address(this), address(1), 2, 3, "receiver")
+            ),
             "ERC-1155 receiver result"
         );
-        _assertEqBytes4(
-            IERC1155Receiver(pair.upstreamAccount)
-                .onERC1155BatchReceived(address(this), address(1), tokenIds, tokenValues, "receiver"),
-            IERC1155Receiver(pair.customAccount)
-                .onERC1155BatchReceived(address(this), address(1), tokenIds, tokenValues, "receiver"),
+        assertEq(
+            bytes32(
+                IERC1155Receiver(pair.upstreamAccount)
+                    .onERC1155BatchReceived(address(this), address(1), tokenIds, tokenValues, "receiver")
+            ),
+            bytes32(
+                IERC1155Receiver(pair.customAccount)
+                    .onERC1155BatchReceived(address(this), address(1), tokenIds, tokenValues, "receiver")
+            ),
             "ERC-1155 batch receiver result"
         );
     }
@@ -228,16 +236,16 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
     function test_DifferentialFallbackAndReceiveBehavior() external {
         (bool upstreamSuccess, bytes memory upstreamData) = pair.upstreamAccount.call{value: 0.1 ether}("");
         (bool customSuccess, bytes memory customData) = pair.customAccount.call{value: 0.1 ether}("");
-        _assertEq(upstreamSuccess, customSuccess, "receive success");
-        _assertTrue(upstreamSuccess, "receive should succeed");
-        _assertEqBytes(upstreamData, customData, "receive returndata");
+        assertEq(upstreamSuccess, customSuccess, "receive success");
+        assertTrue(upstreamSuccess, "receive should succeed");
+        assertEq(upstreamData, customData, "receive returndata");
 
         (upstreamSuccess, upstreamData) = pair.upstreamAccount.call{value: 0.2 ether}(hex"deadbeef0102");
         (customSuccess, customData) = pair.customAccount.call{value: 0.2 ether}(hex"deadbeef0102");
-        _assertEq(upstreamSuccess, customSuccess, "fallback success");
-        _assertTrue(upstreamSuccess, "fallback should succeed");
-        _assertEqBytes(upstreamData, customData, "fallback returndata");
-        _assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "fallback and receive balances");
+        assertEq(upstreamSuccess, customSuccess, "fallback success");
+        assertTrue(upstreamSuccess, "fallback should succeed");
+        assertEq(upstreamData, customData, "fallback returndata");
+        assertEq(pair.upstreamAccount.balance, pair.customAccount.balance, "fallback and receive balances");
     }
 
     function test_RandomCallerRejectedForCorrectReason() external {
@@ -250,16 +258,16 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         vm.prank(randomCaller);
         (bool customSuccess, bytes memory customReason) = pair.customAccount.call(executeData);
 
-        _assertFalse(upstreamSuccess, "random upstream caller should fail");
-        _assertFalse(customSuccess, "random custom caller should fail");
-        _assertEqBytes(
+        assertFalse(upstreamSuccess, "random upstream caller should fail");
+        assertFalse(customSuccess, "random custom caller should fail");
+        assertEq(
             upstreamReason,
             abi.encodeWithSelector(
                 BaseAccount.NotFromEntryPoint.selector, randomCaller, pair.upstreamAccount, address(this)
             ),
             "upstream random caller reason"
         );
-        _assertEqBytes(
+        assertEq(
             customReason,
             abi.encodeWithSelector(
                 BaseAccount.NotFromEntryPoint.selector, randomCaller, pair.customAccount, address(this)
@@ -278,16 +286,16 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
             _callExecute(pair.upstreamAccount, address(maliciousTarget), 0, upstreamAttack);
         (bool customSuccess, bytes memory customReason) =
             _callExecute(pair.customAccount, address(maliciousTarget), 0, customAttack);
-        _assertFalse(upstreamSuccess, "malicious upstream callback should fail");
-        _assertFalse(customSuccess, "malicious custom callback should fail");
-        _assertEqBytes(
+        assertFalse(upstreamSuccess, "malicious upstream callback should fail");
+        assertFalse(customSuccess, "malicious custom callback should fail");
+        assertEq(
             upstreamReason,
             abi.encodeWithSelector(
                 BaseAccount.NotFromEntryPoint.selector, address(maliciousTarget), pair.upstreamAccount, address(this)
             ),
             "upstream callback reason"
         );
-        _assertEqBytes(
+        assertEq(
             customReason,
             abi.encodeWithSelector(
                 BaseAccount.NotFromEntryPoint.selector, address(maliciousTarget), pair.customAccount, address(this)
@@ -309,16 +317,16 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
 
         (bool upstreamSuccess, bytes memory upstreamReason) = wrongPair.upstreamAccount.call(upstreamCall);
         (bool customSuccess, bytes memory customReason) = wrongPair.customAccount.call(customCall);
-        _assertFalse(upstreamSuccess, "wrong upstream EntryPoint should fail");
-        _assertFalse(customSuccess, "wrong custom EntryPoint should fail");
-        _assertEqBytes(
+        assertFalse(upstreamSuccess, "wrong upstream EntryPoint should fail");
+        assertFalse(customSuccess, "wrong custom EntryPoint should fail");
+        assertEq(
             upstreamReason,
             abi.encodeWithSelector(
                 BaseAccount.NotFromEntryPoint.selector, address(this), wrongPair.upstreamAccount, wrongEntryPoint
             ),
             "wrong upstream EntryPoint reason"
         );
-        _assertEqBytes(
+        assertEq(
             customReason,
             abi.encodeWithSelector(
                 BaseAccount.NotFromEntryPoint.selector, address(this), wrongPair.customAccount, wrongEntryPoint
@@ -338,12 +346,12 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         _custom().execute(address(customTarget), 0, customData);
         Vm.Log[] memory customLogs = vm.getRecordedLogs();
 
-        _assertEq(upstreamLogs.length, 1, "upstream log count");
-        _assertEq(customLogs.length, 1, "custom log count");
-        _assertEq(upstreamLogs[0].emitter, address(upstreamTarget), "upstream log emitter");
-        _assertEq(customLogs[0].emitter, address(customTarget), "custom log emitter");
-        _assertEqBytes(abi.encode(upstreamLogs[0].topics), abi.encode(customLogs[0].topics), "log topics");
-        _assertEqBytes(upstreamLogs[0].data, customLogs[0].data, "log data");
+        assertEq(upstreamLogs.length, 1, "upstream log count");
+        assertEq(customLogs.length, 1, "custom log count");
+        assertEq(upstreamLogs[0].emitter, address(upstreamTarget), "upstream log emitter");
+        assertEq(customLogs[0].emitter, address(customTarget), "custom log emitter");
+        assertEq(abi.encode(upstreamLogs[0].topics), abi.encode(customLogs[0].topics), "log topics");
+        assertEq(upstreamLogs[0].data, customLogs[0].data, "log data");
     }
 
     function _upstream() private view returns (Simple7702Account) {
@@ -388,41 +396,9 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
     }
 
     function _assertEquivalentTargetState() private view {
-        _assertEq(upstreamTarget.count(), customTarget.count(), "target count");
-        _assertEq(upstreamTarget.total(), customTarget.total(), "target total");
-        _assertEq(upstreamTarget.totalCallValue(), customTarget.totalCallValue(), "target call value");
-        _assertEqBytes32(upstreamTarget.lastPayloadHash(), customTarget.lastPayloadHash(), "target payload hash");
-    }
-
-    function _assertTrue(bool condition, string memory reason) private pure {
-        require(condition, reason);
-    }
-
-    function _assertFalse(bool condition, string memory reason) private pure {
-        require(!condition, reason);
-    }
-
-    function _assertEq(bool left, bool right, string memory reason) private pure {
-        require(left == right, reason);
-    }
-
-    function _assertEq(address left, address right, string memory reason) private pure {
-        require(left == right, reason);
-    }
-
-    function _assertEq(uint256 left, uint256 right, string memory reason) private pure {
-        require(left == right, reason);
-    }
-
-    function _assertEqBytes4(bytes4 left, bytes4 right, string memory reason) private pure {
-        require(left == right, reason);
-    }
-
-    function _assertEqBytes32(bytes32 left, bytes32 right, string memory reason) private pure {
-        require(left == right, reason);
-    }
-
-    function _assertEqBytes(bytes memory left, bytes memory right, string memory reason) private pure {
-        require(keccak256(left) == keccak256(right), reason);
+        assertEq(upstreamTarget.count(), customTarget.count(), "target count");
+        assertEq(upstreamTarget.total(), customTarget.total(), "target total");
+        assertEq(upstreamTarget.totalCallValue(), customTarget.totalCallValue(), "target call value");
+        assertEq(upstreamTarget.lastPayloadHash(), customTarget.lastPayloadHash(), "target payload hash");
     }
 }
