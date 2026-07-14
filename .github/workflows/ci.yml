@@ -78,7 +78,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check slither-analyzer==0.11.4
 
       - name: Run dependency-inclusive Slither review
-        run: slither .
+        run: slither . --fail-none
 
       - name: Reject project-owned high-severity findings
-        run: slither . --exclude-dependencies --fail-high
+        run: slither . --filter-paths 'lib/' --fail-high

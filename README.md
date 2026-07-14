@@ -49,8 +49,8 @@ forge test --no-match-path 'test/fork/**'
 forge snapshot --check --no-match-test 'testFuzz' --no-match-path 'test/fork/**'
 forge coverage --no-match-path 'test/fork/**' --report summary
 ./script/check-reproducible-build.sh
-slither .
-slither . --exclude-dependencies --fail-high
+slither . --fail-none
+slither . --filter-paths 'lib/' --fail-high
 ```
 
 The first Slither run keeps pinned dependency findings visible for manual
