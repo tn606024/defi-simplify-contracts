@@ -1,7 +1,7 @@
 # Architecture
 
 Status: implementation design
-Date: 2026-07-13
+Date: 2026-07-14
 
 ## 1. System Context
 
@@ -80,11 +80,18 @@ The custom account must not copy or edit upstream files. Inheritance preserves:
 The custom repository is responsible for the security of the resulting combined
 bytecode even when inherited code has previously been audited.
 
+The Phase 1 baseline at `src/DefiSimplify7702Account.sol` is a concrete,
+directly deployable constructor wrapper around the pinned account. It defines no
+custom storage or public surface: its ABI is required to match
+`Simple7702Account` exactly. Dynamic execution is added only by the later phase
+that owns that ABI and behavior.
+
 ## 4. Contract Components
 
 ### 4.1 DefiSimplify7702Account
 
-The custom account adds one capability:
+At the static compatibility baseline, the custom account contains only the
+inherited upstream behavior. The completed v1 account later adds one capability:
 
 ```solidity
 function executeBatchDynamic(DynamicCall[] calldata calls) external payable;

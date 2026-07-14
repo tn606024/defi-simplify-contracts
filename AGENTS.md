@@ -185,6 +185,7 @@ export PATH="$HOME/.foundry/bin:$PATH"
 ./script/check-account-abstraction-revision.sh
 forge fmt --check
 forge build --sizes
+./script/check-minimal-account-surface.sh
 forge test --no-match-path 'test/fork/**'
 forge snapshot --check --no-match-test 'testFuzz' --no-match-path 'test/fork/**'
 forge coverage --no-match-path 'test/fork/**' --report summary

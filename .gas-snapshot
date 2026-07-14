@@ -1,3 +1,7 @@
+DefiSimplify7702AccountTest:test_AccountSelfCallCanUseInheritedExecute() (gas: 679604)
+DefiSimplify7702AccountTest:test_ConfiguredEntryPointCanUseInheritedExecute() (gas: 678130)
+DefiSimplify7702AccountTest:test_ConfiguredEntryPointCanUseInheritedExecuteBatch() (gas: 679191)
+DefiSimplify7702AccountTest:test_DeploysDirectlyWithImmutableEntryPoint() (gas: 555692)
 ProjectBootstrapTest:test_BootstrapFixtureCompilesAndRuns() (gas: 56054)
 UpstreamCompatibilityTest:test_Simple7702AccountAcceptsPlainEthTransfers() (gas: 555097)
 UpstreamCompatibilityTest:test_Simple7702AccountFallbackAcceptsUnknownCalls() (gas: 555335)
