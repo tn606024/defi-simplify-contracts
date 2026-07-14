@@ -1,7 +1,7 @@
 # 架構
 
 狀態：實作設計
-日期：2026-07-13
+日期：2026-07-14
 
 ## 1. 系統脈絡
 
@@ -78,11 +78,17 @@ evidence，因此不把 v0.8.0 release 的 audit 說法延伸到此 baseline。
 
 即使 inherited code 曾經 audit，自家 repo 仍要對最後合併 bytecode 的安全負責。
 
+Phase 1 baseline `src/DefiSimplify7702Account.sol` 是 pinned account 的 concrete、
+可 direct deployment constructor wrapper。它不定義 custom storage 或 public
+surface；ABI 必須與 `Simple7702Account` 完全相同。dynamic execution 只由後續
+負責該 ABI 與 behavior 的 phase 加入。
+
 ## 4. 合約元件
 
 ### 4.1 DefiSimplify7702Account
 
-自家 account 只新增一項能力：
+在 static compatibility baseline，custom account 只有 inherited upstream
+behavior。完成版 v1 account 之後才新增一項能力：
 
 ```solidity
 function executeBatchDynamic(DynamicCall[] calldata calls) external payable;

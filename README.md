@@ -44,11 +44,18 @@ Install the pinned Foundry release, then run:
 ./script/check-account-abstraction-revision.sh
 forge fmt --check
 forge build
+./script/check-minimal-account-surface.sh
 forge test --no-match-path 'test/fork/**'
 forge snapshot --check --no-match-test 'testFuzz' --no-match-path 'test/fork/**'
 forge coverage --no-match-path 'test/fork/**' --report summary
 ./script/check-reproducible-build.sh
+slither . --fail-none
+slither . --filter-paths 'lib/' --fail-high
 ```
+
+The first Slither run keeps pinned dependency findings visible for manual
+review. The second run gates high-severity findings owned by this repository;
+it does not replace review of inherited risk.
 
 Base fork tests are intentionally separate from the default suite and require
 `BASE_RPC_URL`:

@@ -37,6 +37,9 @@ jobs:
       - name: Build contracts
         run: forge build --sizes
 
+      - name: Verify minimal account ABI and storage layout
+        run: ./script/check-minimal-account-surface.sh
+
       - name: Run non-fork tests
         run: forge test --no-match-path 'test/fork/**' -vvv
 
@@ -74,5 +77,8 @@ jobs:
       - name: Install pinned Slither
         run: python -m pip install --disable-pip-version-check slither-analyzer==0.11.4
 
-      - name: Run Slither
-        run: slither . --fail-high
+      - name: Run dependency-inclusive Slither review
+        run: slither . --fail-none
+
+      - name: Reject project-owned high-severity findings
+        run: slither . --filter-paths 'lib/' --fail-high
