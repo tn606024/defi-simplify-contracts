@@ -190,6 +190,8 @@ forge test --no-match-path 'test/fork/**'
 forge snapshot --check --no-match-test 'testFuzz' --no-match-path 'test/fork/**'
 forge coverage --no-match-path 'test/fork/**' --report summary
 ./script/check-reproducible-build.sh
+slither .
+slither . --exclude-dependencies --fail-high
 ```
 
 Also run the test class relevant to the issue:
@@ -202,7 +204,10 @@ Also run the test class relevant to the issue:
 - Base fork tests for claimed Aave compatibility and forced safety failures;
 - Go/Solidity byte-for-byte golden vectors whenever calldata offsets or error ABI
   cross the repository boundary;
-- Slither with findings manually reviewed rather than blindly suppressed.
+- Run dependency-inclusive Slither for manual review, then use
+  `--exclude-dependencies --fail-high` as the project-owned high-severity gate.
+  Do not treat the project-owned gate as a substitute for reviewing inherited
+  findings.
 
 RPC-dependent Base tests are separate from default CI and require `BASE_RPC_URL`.
 Use a pinned or documented fork block where reproducibility matters. Never weaken
