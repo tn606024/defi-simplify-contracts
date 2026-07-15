@@ -4,9 +4,8 @@ Minimal EIP-7702 execution primitives for the `defi-simplify` Go SDK.
 
 The v1 implementation targets Base, inherits the pinned account-abstraction
 v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
-provides independent post-condition assertions. Contract behavior is specified
-in [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md); the English documents are
-normative when translations differ.
+provides independent post-condition assertions. The public contract surface is
+defined by the checked-in Solidity interfaces and implementation.
 
 ## Pinned bootstrap toolchain
 
@@ -36,9 +35,7 @@ git submodule update --init
 ./script/check-forge-std-revision.sh
 ```
 
-See `docs/adr/ADR-001-account-abstraction-v0.9.0.md` for compiler, audit,
-license, inherited-risk, and update decisions. This project does not claim the
-v0.9.0 baseline is audited.
+This project does not claim the v0.9.0 baseline is audited.
 
 Install the pinned Foundry release, then run:
 
@@ -69,5 +66,5 @@ forge test --match-path 'test/fork/**/*.t.sol' --fork-url "$BASE_RPC_URL"
 ```
 
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
-documents, deployment manifests, compiler configuration, and dependency locks
-are expected to be committed.
+code, deployment manifests, compiler configuration, and dependency locks are
+expected to be committed.
