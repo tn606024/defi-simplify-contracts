@@ -1,7 +1,7 @@
 # Architecture
 
 Status: implementation design
-Date: 2026-07-14
+Date: 2026-07-15
 
 ## 1. System Context
 
@@ -196,6 +196,11 @@ the same call. If one consumer call spends 50% of a delta, a later consumer uses
 10,000 bps to spend the remaining 50%. Two patches resolved before the same
 target call both observe the same pre-call balance.
 
+The implementation may cache one pre-call balance per token across patch
+resolution and checkpoint creation for that call. Error attribution belongs to
+the first patch or checkpoint that triggers the read. The cache ends before the
+target `CALL`, so later calls observe updated chain state.
+
 `token` explicitly selects which ERC20 is read:
 
 ```solidity
@@ -204,22 +209,28 @@ IERC20(token).balanceOf(address(this))
 
 During EIP-7702 delegated execution, `address(this)` is the user's EOA.
 
-### 4.4 Transient State
+### 4.4 Function-Local and Transient State
 
-Checkpoint values, checkpoint-presence markers, and the dynamic execution lock
-use EIP-1153 transient storage. Keys are domain-separated and include token and
-checkpoint ID. A separate presence marker avoids overloading zero and avoids a
-`balance + 1` overflow sentinel.
+Account checkpoint records use function-local memory. The implementation first
+sums every `checkpointsBefore.length`, allocates a fixed-capacity record array,
+and tracks its populated length. Each record contains the opaque ID, token, and
+balance. Duplicate and lookup checks linearly scan only the populated prefix.
+For the v1 plan sizes, this is simpler and cheaper than hashing and accessing
+multiple transient slots per record.
 
-The account clears its execution lock on successful return. Reverts roll back
-transient writes in the reverting frame. The contract has no persistent state,
-which avoids collision with account state left by past or future delegate
-implementations.
+Function-local memory makes checkpoint isolation structural: an external target
+frame cannot query the records, a later dynamic invocation receives a fresh
+array, and a return or revert discards the records. The populated length is an
+unambiguous presence marker, including when the recorded balance is zero. The
+account therefore needs no checkpoint invocation counter, transient checkpoint
+keys, or cleanup list.
 
-Checkpoint state is isolated per dynamic invocation. A reference implementation
-may include a transient invocation counter in checkpoint key derivation so a
-later invocation in the same transaction cannot observe an earlier invocation's
-state without maintaining a cleanup list.
+The dynamic execution lock still uses a domain-separated EIP-1153 transient key.
+Unlike checkpoint records, the lock must be visible to a new call frame that
+tries to reenter the account. The account clears the lock on successful return;
+reverts roll back the transient write. FlowAssertions snapshots remain
+transaction-scoped transient state and are not changed by this account-specific
+decision. ADR-002 records the boundary and alternatives.
 
 ### 4.5 FlowAssertions
 
@@ -369,6 +380,7 @@ this account implementation.
 
 - EIP-7702: https://eips.ethereum.org/EIPS/eip-7702
 - EIP-1153: https://eips.ethereum.org/EIPS/eip-1153
+- Weiroll: https://github.com/weiroll/weiroll
 - Foundry `cast create2` default deployer: https://getfoundry.sh/cast/reference/cast-create2
 - Arachnid Deterministic Deployment Proxy: https://github.com/Arachnid/deterministic-deployment-proxy
 - Safe Singleton Factory: https://github.com/safe-fndn/safe-singleton-factory

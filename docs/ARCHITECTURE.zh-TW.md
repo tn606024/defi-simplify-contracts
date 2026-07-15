@@ -1,7 +1,7 @@
 # 架構
 
 狀態：實作設計
-日期：2026-07-14
+日期：2026-07-15
 
 ## 1. 系統脈絡
 
@@ -189,6 +189,11 @@ balance percentage 是跨 calls 依序組合，不是同一 call 內跨 patches 
 consumer call 若花掉 delta 的 50%，後一個 consumer 使用 10,000 bps 花剩餘
 50%。同一 target call 前 resolve 的兩個 patches 都看到相同 pre-call balance。
 
+implementation 可以在同一 call 的 patch resolution 與 checkpoint creation 間，
+依 token cache 一份 pre-call balance。error attribution 歸屬第一個觸發讀取的
+patch 或 checkpoint。cache 在 target `CALL` 前結束，後續 call 會看到更新後的
+chain state。
+
 `token` 明確指定要讀哪個 ERC20：
 
 ```solidity
@@ -197,20 +202,25 @@ IERC20(token).balanceOf(address(this))
 
 EIP-7702 delegated execution 中，`address(this)` 就是使用者 EOA。
 
-### 4.4 Transient State
+### 4.4 Function-Local 與 Transient State
 
-checkpoint value、checkpoint presence marker 與 dynamic execution lock 使用
-EIP-1153 transient storage。key 要做 domain separation，並包含 token 與
-checkpoint ID。presence 使用獨立 slot，不以 `balance + 1` 當 sentinel，避免
-zero ambiguity 與 overflow。
+account checkpoint records 使用 function-local memory。implementation 先加總
+所有 `checkpointsBefore.length`，配置 fixed-capacity record array，並追蹤已填入
+長度。每筆 record 包含 opaque ID、token、balance；duplicate 與 lookup 只 linear
+scan 已填入 prefix。對 v1 plan size 而言，這比每筆 record 做多次 hash 與
+transient slot access 更簡單也更便宜。
 
-account 成功 return 前清除 execution lock；revert 會回滾該 frame 的 transient
-write。合約沒有 persistent state，因此不會和過去或未來 delegate
-implementation 留下的 account storage 衝突。
+function-local memory 讓 checkpoint isolation 成為結構性保證：external target
+frame 無法查詢 records，後續 dynamic invocation 取得全新 array，return 或 revert
+後 records 直接消失。已填入長度是無歧義的 presence marker，即使記錄 balance
+為 zero 也成立。因此 account 不需要 checkpoint invocation counter、transient
+checkpoint keys 或 cleanup list。
 
-checkpoint state 以 dynamic invocation 隔離。reference implementation 可把
-transient invocation counter 放入 checkpoint key derivation，讓同一 transaction
-的後續 invocation 看不到前次 state，而不必維護 cleanup list。
+dynamic execution lock 仍使用具 domain separation 的 EIP-1153 transient key。
+checkpoint record 不同，lock 必須讓企圖 reenter account 的新 call frame 看見。
+account 在成功 return 前清除 lock；revert 會回滾 transient write。
+FlowAssertions snapshot 仍是 transaction-scoped transient state，不受此
+account-specific decision 影響。邊界與 alternatives 記錄於 ADR-002。
 
 ### 4.5 FlowAssertions
 
@@ -353,6 +363,7 @@ active delegate 唯一為本 account implementation 的專用 EOA。
 
 - EIP-7702: https://eips.ethereum.org/EIPS/eip-7702
 - EIP-1153: https://eips.ethereum.org/EIPS/eip-1153
+- Weiroll: https://github.com/weiroll/weiroll
 - Foundry `cast create2` default deployer: https://getfoundry.sh/cast/reference/cast-create2
 - Arachnid Deterministic Deployment Proxy: https://github.com/Arachnid/deterministic-deployment-proxy
 - Safe Singleton Factory: https://github.com/safe-fndn/safe-singleton-factory

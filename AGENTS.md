@@ -109,8 +109,8 @@ error decoding belong in `tn606024/defi-simplify`.
   registry, allowlist, session key, relayer authorization, secondary signature
   scheme, or custom nonce system.
 - No custom permanent storage variables. Constants and immutables are allowed.
-  Runtime locks, account checkpoints, and assertion snapshots use EIP-1153
-  transient storage with explicit domain-separated keys.
+  Account checkpoints use function-local memory. Runtime locks and assertion
+  snapshots use EIP-1153 transient storage with explicit domain-separated keys.
 - Every custom execution entrypoint calls inherited `_requireForExecute()` before
   reading or changing execution state.
 - Dynamic execution uses a transient reentrancy lock and rejects zero targets and
@@ -118,11 +118,15 @@ error decoding belong in `tn606024/defi-simplify`.
 - Account checkpoints are isolated per `executeBatchDynamic` invocation.
   Assertion snapshots are scoped to `(transaction, msg.sender)` and may be reused
   by multiple assertions in that transaction.
-- Store transient presence, token, and value separately. Never encode presence as
-  `balance + 1`.
+- For account checkpoints, pre-count capacity, allocate once in memory, and use
+  the populated prefix as presence. For transient assertion snapshots, store
+  presence, token, and value separately. Never encode presence as `balance + 1`.
 - Read ERC20 balances with checked low-level `STATICCALL balanceOf(address(this))`
   in the account and `balanceOf(msg.sender)` in assertions. Reject failed or short
   return data.
+- Balance-read errors in the account include complete call/checkpoint or
+  call/patch indices. If a same-call token balance is cached, attribute a failed
+  read to the first patch or checkpoint that triggered it.
 - Named checkpoints are created inside the flow immediately before producer
   calls. A single flow-start balance snapshot is not an acceptable substitute.
 - `CheckpointDelta` never includes inventory held before its checkpoint. Missing,
@@ -165,7 +169,7 @@ Unless the active issue says otherwise, preserve this dependency sequence:
 1. Reproducible repo and pinned toolchain.
 2. Exact upstream dependency and EntryPoint freeze.
 3. Minimal inherited static account and differential tests.
-4. Dynamic interface, transient checkpoint engine, patching, call execution, and
+4. Dynamic interface, memory checkpoint engine, patching, call execution, and
    adversarial coverage.
 5. FlowAssertions balance, Aave, and generic uint256 assertions.
 6. Base static and guarded dynamic Aave fork proofs.
@@ -199,8 +203,8 @@ Also run the test class relevant to the issue:
 
 - unit and indexed error-path tests for each new rule;
 - fuzz/property tests for patch byte isolation and full-precision amount math;
-- stateful invariants for transient isolation, stale checkpoints, locks, reverts,
-  and malicious callbacks;
+- stateful invariants for function-local checkpoint isolation, stale checkpoint
+  attempts, transient locks, reverts, and malicious callbacks;
 - differential tests against pinned upstream static behavior;
 - Base fork tests for claimed Aave compatibility and forced safety failures;
 - Go/Solidity byte-for-byte golden vectors whenever calldata offsets or error ABI

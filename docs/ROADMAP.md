@@ -1,7 +1,7 @@
 # Roadmap
 
 Status: implementation sequence
-Date: 2026-07-12
+Date: 2026-07-15
 
 ## Phase 0: Repository and Dependency Freeze
 
@@ -51,12 +51,17 @@ Deliverables:
 
 - `IDefiSimplify7702Account` ABI freeze;
 - `executeBatchDynamic` implementation;
-- checkpoint presence, token, value, and domain separation;
-- transient invocation isolation without requiring a checkpoint cleanup list;
+- fixed-capacity function-local memory checkpoint records with populated-prefix
+  presence and no invocation counter or cleanup list;
+- observable checkpoint isolation across external frames and later invocations;
 - current-balance and checkpoint-delta patch sources;
 - full-precision bps math;
-- indexed custom errors and nested revert preservation;
+- call/checkpoint- and call/patch-indexed balance errors, including deterministic
+  first-trigger attribution for cached same-call balance reads;
+- complete nested revert preservation plus large-returndata gas-risk
+  characterization;
 - reentrancy lock and self-target rejection;
+- separate real EntryPoint target and configured mock-EntryPoint reentry tests;
 - unit, fuzz, invariant, adversarial, and gas tests;
 - Solidity-side golden vectors exported for the Go SDK.
 
@@ -65,6 +70,8 @@ Critical exit tests:
 - existing WETH is spent before swap output is received, and only swap output is
   consumed by the next call;
 - multiple checkpoints for one token remain independent;
+- same-ID reuse across sequential invocations remains isolated by function-local
+  checkpoint lifetime;
 - Go-generated offsets patch exactly one intended ABI word;
 - malformed ERC20, offsets, source, bps, and checkpoint references revert.
 

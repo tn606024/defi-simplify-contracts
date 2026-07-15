@@ -1,7 +1,7 @@
 # Contract Specification
 
 Status: normative v1 draft
-Date: 2026-07-13
+Date: 2026-07-15
 
 The key words MUST, MUST NOT, REQUIRED, SHOULD, SHOULD NOT, and MAY are to be
 interpreted as normative requirements.
@@ -17,7 +17,8 @@ architecture:
   `b36a1ed52ae00da6f8a4c8d50181e2877e4fa410`.
 - Dependency and Base EntryPoint lock:
   `config/account-abstraction-v0.9.0.json`.
-- Architectural decision and audit evidence: ADR-001.
+- Architectural decisions: ADR-001 for the pinned upstream dependency and
+  ADR-002 for function-local account checkpoints.
 
 Implementations MUST use that exact unmodified upstream commit for
 `Simple7702Account.sol`, `BaseAccount.sol`, EntryPoint interfaces, compiler
@@ -68,6 +69,10 @@ part of the Solidity ABI freeze:
   `(transaction, account)` when composing multiple logical flows.
 - Protocol adapters MUST derive calldata, account-binding, and return offsets
   from structured ABIs and provide distinct-sentinel golden tests.
+- The SDK SHOULD offer an explicit approval-cleanup option that appends
+  `approve(spender, 0)` after a flow whose exact patched approval might not be
+  fully consumed. Adapters MUST preserve zero-first token requirements. This is
+  an SDK policy, not an account guarantee that no residual allowance remains.
 - The cross-repo integration suite MUST test universal-authorization rejection,
   custom manifest trust levels, both generic assertion modes, and exact
   Go/Solidity offset agreement.
@@ -123,8 +128,12 @@ constructor(IEntryPoint entryPoint) Simple7702Account(entryPoint) {}
 ```
 
 The implementation MUST NOT define permanent storage variables. Constants and
-immutables are allowed. Checkpoint state and the execution lock MUST use
-transient storage with domain-separated keys.
+immutables are allowed. Account checkpoint records MUST remain local to the
+current `executeBatchDynamic` invocation: an external target frame and a later
+invocation MUST NOT be able to observe them. The canonical implementation keeps
+those records in function-local memory. The execution lock MUST use transient
+storage with a domain-separated key because it must be visible to reentrant
+frames.
 
 The contract MUST NOT be upgradeable and MUST NOT have an owner, admin,
 withdrawal function, protocol registry, or protocol allowlist.
@@ -179,14 +188,17 @@ Requirements:
 - Duplicate IDs MUST revert `CheckpointAlreadyExists(callIndex, checkpointIndex, id)`.
 - The token balance MUST be read with `STATICCALL balanceOf(address(this))`.
 - A failed call or return value shorter than 32 bytes MUST revert
-  `BalanceReadFailed(token, reason)`.
-- The implementation MUST store checkpoint presence, token, and value in
-  separate domain-separated transient slots.
+  `CheckpointBalanceReadFailed(callIndex, checkpointIndex, token, reason)`.
+- Checkpoint records MUST remain private to the current function invocation and
+  MUST cease to exist when that invocation returns or reverts.
 - A later invocation in the same transaction MUST NOT be able to observe
-  checkpoint state from an earlier invocation. Implementations MAY clear
-  checkpoint slots or include a transient invocation counter in checkpoint key
-  derivation. This is an observable isolation requirement, not a required
-  cleanup mechanism.
+  checkpoint state from an earlier invocation, including when it reuses the
+  same ID.
+
+The canonical implementation first sums every `checkpointsBefore.length`,
+allocates one fixed-capacity memory array, and scans only the populated prefix
+for duplicate and lookup checks. The populated length is the presence marker, so
+zero balances require no sentinel and no invocation counter or cleanup list.
 
 Checkpoint IDs are opaque SDK-generated identifiers. They have no global or
 cross-transaction meaning.
@@ -233,12 +245,24 @@ consumer calls uses 5,000 bps for the first call and 10,000 bps for the second
 call's remaining delta. Multiple patches on the same call see the same
 pre-call balance because no token consumption occurs between patch resolutions.
 
+An implementation MAY cache the current balance once per token within one call
+and reuse it across patch resolution and checkpoint creation, because no
+external call occurs between those phases. If the first logical consumer that
+triggers a failed or short balance read is a patch, the implementation MUST
+revert `PatchBalanceReadFailed(callIndex, patchIndex, token, reason)`, where
+`patchIndex` is that first triggering patch index. If the first consumer is a
+checkpoint, it MUST use
+`CheckpointBalanceReadFailed(callIndex, checkpointIndex, token, reason)` with
+the same first-trigger rule. Caching MUST NOT cross target calls.
+
 ### 7.3 CurrentBalance
 
 For `CurrentBalance`:
 
 - `checkpointId` MUST be zero;
 - `base` is `IERC20(token).balanceOf(address(this))` at patch time.
+- a failed or short balance read MUST revert
+  `PatchBalanceReadFailed(callIndex, patchIndex, token, reason)`.
 
 This mode explicitly includes all pre-existing account inventory.
 
@@ -251,7 +275,7 @@ For `CheckpointDelta`:
 - the checkpoint token MUST equal `patch.token`;
 - `base` is `currentBalance - checkpointBalance`;
 - if current balance is lower than checkpoint balance, execution MUST revert
-  `BalanceBelowCheckpoint(token, checkpointId, current, checkpoint)`.
+  `BalanceBelowCheckpoint(callIndex, patchIndex, token, checkpointId, current, checkpoint)`.
 
 Missing or token-mismatched checkpoints MUST have distinct custom errors.
 The implementation MUST NOT silently clamp a negative delta to zero.
@@ -291,7 +315,12 @@ error DynamicCallFailed(uint256 index, address target, bytes reason);
 ```
 
 `reason` MUST contain the target's complete revert data. The wrapper is used
-even for a one-call dynamic batch so SDK decoding is consistent.
+even for a one-call dynamic batch so SDK decoding is consistent. v1 does not
+silently truncate revert data. A malicious target can return enough data to
+exhaust the caller while it is copied, in which case the transaction can run out
+of gas before `DynamicCallFailed` is encoded. This accepted gas-griefing limit
+does not weaken atomic rollback, but it means indexed attribution is not
+guaranteed under gas exhaustion.
 
 An empty batch MUST revert `EmptyDynamicBatch()`.
 
@@ -314,8 +343,9 @@ error InvalidPatchOffset(uint256 callIndex, uint256 patchIndex, uint256 offset, 
 error UnsortedPatchOffset(uint256 callIndex, uint256 patchIndex, uint256 previous, uint256 current);
 error InvalidBps(uint256 callIndex, uint256 patchIndex, uint256 bps);
 error UnexpectedCheckpointId(uint256 callIndex, uint256 patchIndex, bytes32 id);
-error BalanceReadFailed(address token, bytes reason);
-error BalanceBelowCheckpoint(address token, bytes32 id, uint256 current, uint256 checkpoint);
+error CheckpointBalanceReadFailed(uint256 callIndex, uint256 checkpointIndex, address token, bytes reason);
+error PatchBalanceReadFailed(uint256 callIndex, uint256 patchIndex, address token, bytes reason);
+error BalanceBelowCheckpoint(uint256 callIndex, uint256 patchIndex, address token, bytes32 id, uint256 current, uint256 checkpoint);
 error DynamicCallFailed(uint256 index, address target, bytes reason);
 ```
 
@@ -545,14 +575,23 @@ At minimum, the implementation MUST pass:
 - call failure index and nested revert decode tests;
 - checkpoint create, consume, duplicate, missing, token mismatch, invocation
   isolation, and same-token multi-checkpoint tests;
+- sequential same-transaction invocations proving checkpoint records are
+  function-local and same-ID reuse is isolated;
 - same-call checkpoint references failing before target execution;
 - existing-inventory tests where a token is spent before being received again;
 - current-balance explicit sweep tests;
 - bps boundary and `mulDiv` property tests;
 - offset lower-bound, alignment, upper-bound, sorting, and byte-for-byte golden
   tests against Go-generated calldata;
-- malformed and reverting ERC20 `balanceOf` tests;
-- self-target and dynamic reentrancy tests;
+- malformed and reverting ERC20 `balanceOf` tests, including complete
+  call/checkpoint or call/patch index attribution and first-trigger attribution
+  when a same-call balance read is cached;
+- self-target and dynamic reentrancy tests, including a configured mock
+  EntryPoint that reenters the account and reaches the transient lock;
+- real pinned EntryPoint target tests proving `depositTo` remains allowed and a
+  nested `handleOps` attempt is rejected by EntryPoint's own `Reentrancy()` guard
+  before it can reenter the account;
+- bounded large-revert-data preservation and out-of-gas characterization tests;
 - FlowAssertions success and forced-failure tests;
 - assertion snapshot zero, duplicate, missing, and token-mismatch tests;
 - two logical assertion flows in one transaction using namespaced snapshot IDs;

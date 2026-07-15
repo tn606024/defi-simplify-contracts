@@ -1,7 +1,7 @@
 # 路線圖
 
 狀態：實作順序
-日期：2026-07-12
+日期：2026-07-15
 
 ## Phase 0：Repo 與 Dependency Freeze
 
@@ -49,12 +49,16 @@
 
 - freeze `IDefiSimplify7702Account` ABI；
 - 實作 `executeBatchDynamic`；
-- checkpoint presence、token、value、domain separation；
-- transient invocation isolation，不要求 checkpoint cleanup list；
+- fixed-capacity function-local memory checkpoint records，以 populated prefix
+  表示 presence，不使用 invocation counter 或 cleanup list；
+- external frame 與後續 invocation 間的 observable checkpoint isolation；
 - current-balance 與 checkpoint-delta sources；
 - full-precision bps math；
-- indexed custom errors 與 nested revert preservation；
+- balance error 帶完整 call/checkpoint 或 call/patch index，same-call cache 使用
+  deterministic first-trigger attribution；
+- 完整 nested revert preservation 與 large-returndata gas-risk characterization；
 - reentrancy lock 與 self-target rejection；
+- 分開驗證真實 EntryPoint target 與 configured mock-EntryPoint reentry；
 - unit、fuzz、invariant、adversarial、gas tests；
 - 輸出供 Go SDK 使用的 Solidity golden vectors。
 
@@ -62,6 +66,8 @@
 
 - 先花 existing WETH，再收到 swap output，下一步只消耗 swap output；
 - 同 token 多個 checkpoint 互不干擾；
+- sequential invocations 重用相同 ID 時，function-local checkpoint lifetime 仍
+  保證 isolation；
 - Go-generated offset 只 patch 預期 ABI word；
 - malformed ERC20、offset、source、bps、checkpoint reference 都 revert。
 

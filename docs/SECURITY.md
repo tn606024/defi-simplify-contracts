@@ -1,7 +1,7 @@
 # Security Model
 
 Status: pre-implementation threat model
-Date: 2026-07-13
+Date: 2026-07-15
 
 ## 1. Security Boundary
 
@@ -31,6 +31,8 @@ The implementation must preserve these invariants:
    by the execution portion.
 7. The custom account and checker write no permanent storage.
 8. Static inherited behavior remains compatible with pinned upstream behavior.
+9. Account checkpoint records remain function-local and cannot be observed by
+   external target frames or later dynamic invocations.
 
 ## 3. Important Non-Guarantees
 
@@ -57,6 +59,17 @@ behave differently under unusual environment conditions.
 
 Critical economic bounds must be enforced by protocol-native limits and final
 on-chain assertions, not only simulation output.
+
+### Failure Attribution Is Not Guaranteed Under Gas Exhaustion
+
+`DynamicCallFailed` preserves complete target revert data and v1 does not
+silently truncate it. A malicious target can return enough data to make copying
+and wrapping it exhaust the caller's remaining gas. Atomic rollback still
+holds, but the transaction may fail without the indexed wrapper. This is an
+accepted v1 gas-griefing risk because authorized target code and calldata can
+already consume forwarded gas. A future cap must use an explicit truncated-data
+error with original length metadata; it must not silently change the current
+ABI promise.
 
 ### Assertions Inherit Protocol Trust
 
@@ -90,11 +103,13 @@ active chain ID.
 | Patch writes selector, pointer, length, or unrelated bytes | Selector-relative alignment, bounds, sorted offsets, Go/Solidity golden tests |
 | Same token spent then received gives wrong delta | Named checkpoints placed immediately before the producer call |
 | Existing inventory is swept | CheckpointDelta as safe SDK default; CurrentBalance requires explicit API |
-| Checkpoint ID collision or overwrite | Invocation-unique nonzero IDs, presence marker, duplicate rejection, invocation isolation |
+| Checkpoint ID collision or overwrite | Invocation-unique nonzero IDs, populated-memory-prefix presence, duplicate rejection, function-local isolation |
 | ERC20 returns malformed balance data | Low-level staticcall with success and returndata-length validation |
 | Multiplication overflow | Full-precision `mulDiv` |
 | Underflow hidden as zero | `BalanceBelowCheckpoint` revert |
 | Target revert loses attribution | `DynamicCallFailed(index, target, reason)` |
+| Huge target revert data exhausts wrapper gas | Accepted v1 non-guarantee; bounded preservation and OOG characterization tests; no silent truncation |
+| Router pulls less than an exact patched approval | SDK option appends `approve(spender, 0)` cleanup; adapters preserve zero-first token sequencing |
 | Upstream storage layout changes | No permanent custom storage; pin and review every upstream revision |
 | Implementation address is replaced in SDK config | Verify delegation target and runtime code hash against signed/reviewed manifest |
 | Proxy code hash stays stable while logic changes | Official manifests bind to reproducible direct immutable artifacts; proxies and upgrade admins are forbidden |
@@ -119,7 +134,11 @@ a blanket compatibility guarantee.
 Protocol adapters must document token assumptions and add fork tests before a
 token or market is presented as supported. The SDK should generate zero-first
 approval sequences for tokens that require them and should avoid unlimited
-approval by default.
+approval by default. An exact patched approval can still leave residual
+allowance when a router pulls less than the approved amount. The SDK should
+offer an explicit cleanup option that appends `approve(spender, 0)` after the
+flow and handles zero-first tokens correctly. The contract itself does not
+guarantee allowance cleanup.
 
 ## 6. Calldata Patching Risk
 
@@ -137,16 +156,20 @@ Safety depends on four layers:
 
 Any adapter that hand-codes an offset without a golden test is incomplete.
 
-## 7. Transient Storage Risk
+## 7. Ephemeral State Risk
 
-Transient storage belongs to the executing account context under delegated
-execution. Keys must be domain-separated from both upstream and future custom
-features. A later invocation must not observe earlier checkpoint state. A
-transient invocation namespace is preferred over a required cleanup loop, while
-the execution lock is still cleared on successful return.
+Account checkpoints are function-local memory records. External targets cannot
+observe them, and later invocations receive fresh memory even within the same
+transaction. Tests must retain sequential invocations, same-ID reuse, reverted
+targets, duplicate IDs, and stale-checkpoint attempts as regression coverage of
+this observable isolation.
 
-The test suite must include sequential invocations, reverted inner calls,
-duplicate IDs, and attempts to observe stale checkpoint or lock state.
+The execution lock and FlowAssertions snapshots have different lifecycles and
+remain in transient storage. Their keys must be domain-separated from upstream
+and future custom features. The lock is cleared on successful return, and revert
+semantics roll it back on failure. Tests must prove authorized reentrant frames
+see the lock and that neither successful nor reverted execution leaves a stale
+lock. See ADR-002.
 
 ## 8. EntryPoint and Signature Risk
 
@@ -164,6 +187,14 @@ The Base fork suite must fail if the address has no code, the chain ID is not
 The custom contract must not alter upstream signature validation. Changes to
 the pinned account-abstraction release require a new review and deployment, not
 an automatic dependency update.
+
+The EntryPoint address is not prohibited as a dynamic target: inherited
+`depositTo` is a valid account-funding operation. A dynamic call from the
+delegated account to the pinned v0.9 EntryPoint's `handleOps` is rejected first
+by EntryPoint's own `Reentrancy()` modifier because the caller is a code-bearing
+delegated account. That real-path test does not exercise the account lock. A
+separate configured mock EntryPoint must reenter through the authorized path to
+prove the account's transient lock returns `DynamicExecutionReentered()`.
 
 The March 2025 Spearbit report in the pinned repository predates the v0.9
 implementation commit. No v0.9-specific audit evidence was found, and BaseScan
