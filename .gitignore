@@ -22,3 +22,7 @@ coverage/
 # Local analysis output
 slither.db.json
 crytic-export/
+
+# Maintainer-only agent rules, design, security, roadmap, and ADR documents
+AGENTS.md
+docs/
