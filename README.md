@@ -2,10 +2,16 @@
 
 Minimal EIP-7702 execution primitives for the `defi-simplify` Go SDK.
 
-The v1 implementation targets Base, inherits the pinned account-abstraction
-v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
-provides independent post-condition assertions. The public contract surface is
-defined by the checked-in Solidity interfaces and implementation.
+The planned v1 implementation targets Base, inherits the pinned
+account-abstraction v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20
+amount patching, and provides independent post-condition assertions. The public
+contract surface is defined by the checked-in Solidity interfaces and
+implementation.
+
+The current implementation is an intermediate, non-production dynamic-execution
+scaffold. It creates invocation-local ERC20 balance checkpoints, but
+`BalancePatch` entries are not yet applied to target calldata and post-condition
+assertions are not yet implemented.
 
 ## Pinned bootstrap toolchain
 

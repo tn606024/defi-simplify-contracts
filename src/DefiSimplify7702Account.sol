@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Simple7702Account} from "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {Exec} from "@account-abstraction/contracts/utils/Exec.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import {IDefiSimplify7702Account} from "./interfaces/IDefiSimplify7702Account.sol";
 
@@ -18,6 +19,12 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
 
     bytes32 private constant _DYNAMIC_EXECUTION_LOCK_SLOT =
         keccak256("DefiSimplify7702Account.dynamicExecutionLock.v1");
+
+    struct CheckpointRecord {
+        bytes32 id;
+        address token;
+        uint256 balance;
+    }
 
     constructor(IEntryPoint anEntryPoint) Simple7702Account(anEntryPoint) {}
 
@@ -36,6 +43,14 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             revert EmptyDynamicBatch();
         }
 
+        uint256 checkpointCapacity = 0;
+        for (uint256 i = 0; i < callsLength; ++i) {
+            checkpointCapacity += calls[i].checkpointsBefore.length;
+        }
+
+        CheckpointRecord[] memory checkpointRecords = new CheckpointRecord[](checkpointCapacity);
+        uint256 populatedCheckpoints = 0;
+
         for (uint256 i = 0; i < callsLength; ++i) {
             DynamicCall calldata dynamicCall = calls[i];
             address target = dynamicCall.target;
@@ -43,9 +58,12 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
                 revert InvalidTarget(i, target);
             }
 
-            // IAN-48 and IAN-49 fill in checkpoint creation and calldata patching
-            // between target validation and this CALL without changing the frozen ABI.
+            // IAN-49 resolves patches into this memory copy before same-call checkpoints
+            // are created, without changing the frozen ABI or checkpoint lifecycle.
             bytes memory data = dynamicCall.data;
+            populatedCheckpoints =
+                _createCheckpoints(i, dynamicCall.checkpointsBefore, checkpointRecords, populatedCheckpoints);
+
             bool success = Exec.call(target, dynamicCall.value, data, gasleft());
             if (!success) {
                 revert DynamicCallFailed(i, target, Exec.getReturnData(0));
@@ -53,6 +71,54 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
 
         lockSlot.tstore(false);
+    }
+
+    function _createCheckpoints(
+        uint256 callIndex,
+        BalanceCheckpoint[] calldata checkpoints,
+        CheckpointRecord[] memory records,
+        uint256 populatedLength
+    ) internal view returns (uint256) {
+        uint256 checkpointsLength = checkpoints.length;
+        for (uint256 checkpointIndex = 0; checkpointIndex < checkpointsLength; ++checkpointIndex) {
+            BalanceCheckpoint calldata checkpoint = checkpoints[checkpointIndex];
+            address token = checkpoint.token;
+            if (token == address(0)) {
+                revert InvalidCheckpointToken(callIndex, checkpointIndex);
+            }
+
+            bytes32 id = checkpoint.id;
+            if (id == bytes32(0)) {
+                revert InvalidCheckpointId(callIndex, checkpointIndex);
+            }
+
+            for (uint256 recordIndex = 0; recordIndex < populatedLength; ++recordIndex) {
+                if (records[recordIndex].id == id) {
+                    revert CheckpointAlreadyExists(callIndex, checkpointIndex, id);
+                }
+            }
+
+            uint256 balance = _readCheckpointBalance(callIndex, checkpointIndex, token);
+            records[populatedLength] = CheckpointRecord({id: id, token: token, balance: balance});
+            ++populatedLength;
+        }
+
+        return populatedLength;
+    }
+
+    function _readCheckpointBalance(uint256 callIndex, uint256 checkpointIndex, address token)
+        internal
+        view
+        returns (uint256 tokenBalance)
+    {
+        (bool success, bytes memory returnData) = token.staticcall(abi.encodeCall(IERC20.balanceOf, (address(this))));
+        if (!success || returnData.length < 32) {
+            revert CheckpointBalanceReadFailed(callIndex, checkpointIndex, token, returnData);
+        }
+
+        assembly ("memory-safe") {
+            tokenBalance := mload(add(returnData, 32))
+        }
     }
 
     /// @inheritdoc Simple7702Account
