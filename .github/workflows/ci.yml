@@ -39,8 +39,10 @@ jobs:
       - name: Build contracts
         run: forge build --sizes
 
-      - name: Verify minimal account ABI and storage layout
-        run: ./script/check-minimal-account-surface.sh
+      - name: Verify account ABI and storage layout
+        run: |
+          ./script/check-minimal-account-surface.sh
+          ./script/check-abi-fixtures.sh
 
       - name: Run non-fork tests
         run: forge test --no-match-path 'test/fork/**' -vvv
