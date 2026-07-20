@@ -7,6 +7,11 @@ v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
 provides independent post-condition assertions. The public contract surface is
 defined by the checked-in Solidity interfaces and implementation.
 
+The current implementation includes the frozen dynamic ABI and invocation-
+scoped transient checkpoint creation. Dynamic calldata patch consumption is
+implemented separately in IAN-49; the intermediate account is not production-
+ready until that work and the later security gates are complete.
+
 ## Pinned bootstrap toolchain
 
 - Foundry: `v1.7.1`
