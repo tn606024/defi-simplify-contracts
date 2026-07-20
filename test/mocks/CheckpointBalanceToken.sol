@@ -19,6 +19,39 @@ contract CheckpointBalanceToken {
     }
 }
 
+contract PatchBalanceToken {
+    mapping(address account => uint256 balance) private _balances;
+
+    function setBalance(address account, uint256 balance) external {
+        _balances[account] = balance;
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return _balances[account];
+    }
+
+    function produce(uint256 amount) external {
+        _balances[msg.sender] += amount;
+    }
+
+    function consume(uint256 amount) external {
+        _balances[msg.sender] -= amount;
+    }
+}
+
+contract DynamicPatchTarget {
+    bytes private _observedData;
+
+    fallback(bytes calldata data) external returns (bytes memory) {
+        _observedData = msg.data;
+        return data;
+    }
+
+    function observedData() external view returns (bytes memory) {
+        return _observedData;
+    }
+}
+
 contract PreCallCheckpointToken {
     error UnexpectedBalanceAccount(address actual, address expected);
     error UnexpectedTargetCount(uint256 actual, uint256 expected);
