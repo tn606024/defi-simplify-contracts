@@ -10,7 +10,7 @@ defined by the checked-in Solidity interfaces and implementation.
 ## Pinned bootstrap toolchain
 
 - Foundry: `v1.7.1`
-- Solidity: `0.8.28`
+- Solidity: `0.8.36`
 - EVM: `prague`
 - optimizer: enabled, 200 runs
 - IR pipeline: enabled

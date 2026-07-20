@@ -29,7 +29,7 @@
     "viaIR": true
   },
   "localCompatibilityBuild": {
-    "solidity": "0.8.28",
+    "solidity": "0.8.36",
     "evmVersion": "prague",
     "optimizer": true,
     "optimizerRuns": 200,

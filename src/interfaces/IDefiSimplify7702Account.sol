@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.36;
 
 /// @title IDefiSimplify7702Account
 /// @notice Frozen v1 ABI for checkpoint-based dynamic account execution.

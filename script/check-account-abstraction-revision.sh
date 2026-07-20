@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly lock_file="config/account-abstraction-v0.9.0.json"
 readonly base_test="test/fork/BaseEntryPoint.t.sol"
+readonly foundry_config="foundry.toml"
 
 check_dependency() {
   local key="$1"
@@ -44,6 +45,23 @@ command -v jq >/dev/null || {
 
 check_dependency "accountAbstraction"
 check_dependency "openzeppelinContracts"
+
+readonly local_solidity="$(jq -r '.localCompatibilityBuild.solidity' "$lock_file")"
+readonly foundry_solidity="$(sed -n 's/^solc_version = "\([^"]*\)"$/\1/p' "$foundry_config")"
+
+if [[ "$foundry_solidity" != "$local_solidity" ]]; then
+  echo "Local Solidity mismatch: lock requires $local_solidity, foundry.toml pins ${foundry_solidity:-missing}" >&2
+  exit 1
+fi
+
+while IFS= read -r source_file; do
+  if ! grep -Fq "pragma solidity $local_solidity;" "$source_file"; then
+    echo "Repository source $source_file does not use exact Solidity $local_solidity" >&2
+    exit 1
+  fi
+done < <(find src test -type f -name '*.sol' -print)
+
+echo "Verified local Solidity $local_solidity across foundry.toml and repository sources"
 
 readonly entry_point="$(jq -r '.base.entryPointAddress' "$lock_file")"
 readonly runtime_hash="$(jq -r '.base.entryPointRuntimeCodeHash' "$lock_file")"
