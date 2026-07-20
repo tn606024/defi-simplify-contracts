@@ -89,14 +89,16 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
 
             bytes32 recordRoot = _checkpointRecordRoot(invocationId, checkpointId);
             TransientSlot.BooleanSlot presenceSlot = recordRoot.asBoolean();
+            TransientSlot.AddressSlot tokenSlot = recordRoot.offset(1).asAddress();
+            TransientSlot.Uint256Slot balanceSlot = recordRoot.offset(2).asUint256();
             if (presenceSlot.tload()) {
                 revert CheckpointAlreadyExists(callIndex, checkpointIndex, checkpointId);
             }
 
             uint256 balance = _readCheckpointBalance(callIndex, checkpointIndex, token);
             presenceSlot.tstore(true);
-            recordRoot.offset(1).asAddress().tstore(token);
-            recordRoot.offset(2).asUint256().tstore(balance);
+            tokenSlot.tstore(token);
+            balanceSlot.tstore(balance);
         }
     }
 
