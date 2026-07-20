@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.36;
 
 /// @dev Deterministic fixture used only to verify the bootstrapped toolchain.
 contract ProjectBootstrap {

@@ -3,7 +3,9 @@
 - `check-foundry-version.sh` rejects an unpinned local Foundry toolchain.
 - `check-account-abstraction-revision.sh` verifies the account-abstraction and
   OpenZeppelin submodule checkouts, committed gitlinks, and clean upstream
-  working trees against `config/account-abstraction-v0.9.0.json`.
+  working trees against `config/account-abstraction-v0.9.0.json`. It also
+  requires `foundry.toml` and every repository-owned Solidity source under
+  `src/` and `test/` to use the exact local compiler recorded by that lock.
 - `check-forge-std-revision.sh` verifies the forge-std tag, checkout, committed
   gitlink, and clean working tree against `foundry.lock`.
 - `check-minimal-account-surface.sh` requires the custom account ABI to be the

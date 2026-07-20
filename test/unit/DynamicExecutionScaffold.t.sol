@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.36;
 
 import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
