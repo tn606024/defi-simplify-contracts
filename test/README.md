@@ -16,10 +16,3 @@ runs semantically identical operations through both delegated EOAs. Keep that
 suite unchanged as a regression gate when dynamic execution is introduced; add
 new cases only when the inherited upstream surface or a documented static
 invariant expands.
-
-`mocks/CheckpointBalanceToken.sol` includes the test-only delegated checkpoint
-harness. Its authorization-protected inspectors verify transient slot layout,
-invocation isolation, rollback, and lookup cost without adding a getter to the
-production account ABI. `unit/CheckpointEntryPointBundle.t.sol` uses the real
-pinned EntryPoint source to prove that multiple same-account UserOperations in
-one bundle receive isolated invocation scopes.
