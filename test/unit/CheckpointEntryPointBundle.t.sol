@@ -4,7 +4,7 @@ pragma solidity 0.8.36;
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 import {EntryPoint} from "@account-abstraction/contracts/core/EntryPoint.sol";
 import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/PackedUserOperation.sol";
-import {CheckpointBalanceToken, CheckpointTableHarness} from "../mocks/CheckpointBalanceToken.sol";
+import {CheckpointTableHarness, PatchBalanceToken} from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
@@ -17,7 +17,7 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
     EntryPoint private entryPoint;
     CheckpointTableHarness private implementation;
     address payable private account;
-    CheckpointBalanceToken private token;
+    PatchBalanceToken private token;
     DynamicExecutionTarget private target;
 
     function setUp() external {
@@ -28,7 +28,7 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         vm.signAndAttachDelegation(address(implementation), ACCOUNT_AUTHORITY_KEY);
         require(_delegationTarget(account) == address(implementation), "wrong delegation target");
 
-        token = new CheckpointBalanceToken();
+        token = new PatchBalanceToken();
         target = new DynamicExecutionTarget();
         token.setBalance(account, 211);
     }
@@ -79,6 +79,35 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         assertFalse(thirdPresent, "failed operation left an extra scope");
     }
 
+    function test_PatchesConsumeOnlyTheirOwnCheckpointScopeAcrossBundledUserOperations() external {
+        PackedUserOperation[] memory operations = new PackedUserOperation[](2);
+        operations[0] = _signedPatchedOperation(0, 10, false);
+        operations[1] = _signedPatchedOperation(1, 20, false);
+
+        vm.prank(BUNDLER, BUNDLER);
+        entryPoint.handleOps(operations, BENEFICIARY);
+
+        assertEq(target.count(), 2, "both patched UserOperations must execute");
+        assertEq(target.total(), 30, "each patch must use its invocation-local delta");
+        assertEq(token.balanceOf(account), 241, "both producers must commit");
+    }
+
+    function test_RevertedPatchedUserOperationRollsBackScopeAndBalanceBeforeNextPatch() external {
+        PackedUserOperation[] memory operations = new PackedUserOperation[](3);
+        operations[0] = _signedPatchedOperation(0, 10, false);
+        operations[1] = _signedPatchedOperation(1, 90, true);
+        operations[2] = _signedPatchedOperation(2, 20, false);
+
+        vm.prank(BUNDLER, BUNDLER);
+        entryPoint.handleOps(operations, BENEFICIARY);
+
+        assertEq(target.count(), 2, "failed patched operation must not stop bundle");
+        assertEq(target.total(), 30, "post-revert patch consumed stale or rolled-back delta");
+        assertEq(token.balanceOf(account), 241, "failed producer balance survived rollback");
+        vm.prank(account);
+        assertEq(CheckpointTableHarness(account).invocationCounter(), 2, "failed patched scope consumed counter");
+    }
+
     function _signedOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall memory dynamicCall)
         private
         view
@@ -87,6 +116,14 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = dynamicCall;
 
+        return _signedOperation(nonce, calls);
+    }
+
+    function _signedOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall[] memory calls)
+        private
+        view
+        returns (PackedUserOperation memory operation)
+    {
         operation.sender = account;
         operation.nonce = nonce;
         operation.callData = abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls));
@@ -94,6 +131,36 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         operation.preVerificationGas = 100_000;
         operation.gasFees = bytes32(0);
         operation.signature = _signature(ACCOUNT_AUTHORITY_KEY, entryPoint.getUserOpHash(operation));
+    }
+
+    function _signedPatchedOperation(uint256 nonce, uint256 producedAmount, bool mustFail)
+        private
+        view
+        returns (PackedUserOperation memory operation)
+    {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0].target = address(token);
+        calls[0].data = abi.encodeCall(PatchBalanceToken.produce, (producedAmount));
+        calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
+        calls[0].checkpointsBefore[0] =
+            IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: REUSED_CHECKPOINT_ID});
+        calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
+
+        calls[1].target = address(target);
+        calls[1].data = mustFail
+            ? abi.encodeCall(DynamicExecutionTarget.fail, (uint256(0), bytes("patched-revert")))
+            : abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("patched-success")));
+        calls[1].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
+        calls[1].patches = new IDefiSimplify7702Account.BalancePatch[](1);
+        calls[1].patches[0] = IDefiSimplify7702Account.BalancePatch({
+            token: address(token),
+            checkpointId: REUSED_CHECKPOINT_ID,
+            offset: 4,
+            bps: 10_000,
+            source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
+        });
+
+        return _signedOperation(nonce, calls);
     }
 
     function _successCall(uint256 amount, bytes memory payload)
