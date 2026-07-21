@@ -8,19 +8,24 @@ import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DynamicExecutionAdversary} from "../mocks/DynamicExecutionAdversary.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
     uint256 private constant REENTRANT_UPSTREAM_AUTHORITY_KEY = 0xD1A0;
     uint256 private constant REENTRANT_CUSTOM_AUTHORITY_KEY = 0xD1A1;
+    uint256 private constant RETURNDATA_BOMB_SIZE = 2 * 1024 * 1024;
+    uint256 private constant RETURNDATA_BOMB_GAS = 30_000_000;
 
     DelegatedPair private pair;
     DynamicExecutionTarget private target;
+    DynamicExecutionAdversary private adversary;
 
     function setUp() external {
         pair = _deployDelegatedPair(IEntryPoint(address(this)));
         target = new DynamicExecutionTarget();
+        adversary = new DynamicExecutionAdversary();
         vm.deal(pair.customAccount, 10 ether);
     }
 
@@ -97,6 +102,40 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         _custom().executeBatchDynamic(calls);
     }
 
+    function test_MaliciousCallbackCannotEnterInheritedExecute() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
+        calls[0] = _emptyDynamicCall(
+            address(adversary), abi.encodeCall(DynamicExecutionAdversary.callAccountExecute, (pair.customAccount))
+        );
+        bytes memory authorizationReason = abi.encodeWithSelector(
+            BaseAccount.NotFromEntryPoint.selector, address(adversary), pair.customAccount, address(this)
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(adversary), authorizationReason
+            )
+        );
+        _custom().executeBatchDynamic(calls);
+    }
+
+    function test_MaliciousCallbackCannotEnterInheritedExecuteBatch() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
+        calls[0] = _emptyDynamicCall(
+            address(adversary), abi.encodeCall(DynamicExecutionAdversary.callAccountExecuteBatch, (pair.customAccount))
+        );
+        bytes memory authorizationReason = abi.encodeWithSelector(
+            BaseAccount.NotFromEntryPoint.selector, address(adversary), pair.customAccount, address(this)
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(adversary), authorizationReason
+            )
+        );
+        _custom().executeBatchDynamic(calls);
+    }
+
     function test_EmptyBatchReverts() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](0);
 
@@ -138,6 +177,119 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         _custom().executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier target state should roll back");
+    }
+
+    function test_BoundedLargeRevertDataIsPreservedExactly() external {
+        bytes memory payload = new bytes(8_192);
+        payload[0] = 0x11;
+        payload[4_095] = 0x22;
+        payload[8_191] = 0x33;
+        bytes memory targetReason = abi.encodeWithSelector(DynamicExecutionTarget.TargetFailure.selector, 61, payload);
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0] = _recordCall(67, 0.2 ether, "rolled-back-large-revert");
+        calls[1] = _emptyDynamicCall(address(target), abi.encodeCall(DynamicExecutionTarget.fail, (61, payload)));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), targetReason
+            )
+        );
+        _custom().executeBatchDynamic(calls);
+
+        assertEq(target.count(), 0, "earlier target state should roll back");
+        assertEq(address(target).balance, 0, "earlier target value should roll back");
+    }
+
+    function test_ReturndataBombCanExhaustGasBeforeIndexedWrapping() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0] = _recordCall(71, 0.2 ether, "rolled-back-returndata-bomb");
+        calls[1] = _emptyDynamicCall(
+            address(adversary), abi.encodeCall(DynamicExecutionAdversary.failWithReturnDataSize, (RETURNDATA_BOMB_SIZE))
+        );
+
+        (bool success, bytes memory reason) = pair.customAccount.call{gas: RETURNDATA_BOMB_GAS}(
+            abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls))
+        );
+
+        assertFalse(success, "returndata bomb should fail execution");
+        assertEq(reason.length, 0, "out-of-gas path should lose indexed attribution");
+        assertEq(target.count(), 0, "returndata bomb should roll back earlier state");
+        assertEq(address(target).balance, 0, "returndata bomb should roll back earlier value");
+    }
+
+    function test_InsufficientNativeBalanceWrapsEmptyReasonAndRollsBackBatch() external {
+        vm.deal(pair.customAccount, 1 ether);
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0] = _recordCall(73, 0.4 ether, "rolled-back-insufficient-balance");
+        calls[1] = _recordCall(79, 0.7 ether, "insufficient-balance");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), bytes(""))
+        );
+        _custom().executeBatchDynamic(calls);
+
+        assertEq(pair.customAccount.balance, 1 ether, "account value should roll back");
+        assertEq(address(target).balance, 0, "target value should roll back");
+        assertEq(target.count(), 0, "target state should roll back");
+    }
+
+    function test_LaterAssertionFailureRollsBackEarlierStateAndValue() external {
+        bytes memory payload = bytes("post-condition-failed");
+        bytes memory targetReason =
+            abi.encodeWithSelector(DynamicExecutionAdversary.TargetAssertionFailed.selector, payload);
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0] = _recordCall(83, 0.3 ether, "rolled-back-assertion");
+        calls[1] = _emptyDynamicCall(
+            address(adversary), abi.encodeCall(DynamicExecutionAdversary.assertCondition, (false, payload))
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(adversary), targetReason
+            )
+        );
+        _custom().executeBatchDynamic(calls);
+
+        assertEq(pair.customAccount.balance, 10 ether, "account value should roll back");
+        assertEq(address(target).balance, 0, "target value should roll back");
+        assertEq(target.count(), 0, "target state should roll back");
+    }
+
+    function test_InvalidLaterPatchRollsBackEarlierCall() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0] = _recordCall(89, 0.1 ether, "rolled-back-invalid-patch");
+        calls[1] = _recordCall(97, 0, "invalid-patch");
+        calls[1].patches = new IDefiSimplify7702Account.BalancePatch[](1);
+        calls[1].patches[0] = IDefiSimplify7702Account.BalancePatch({
+            token: address(target),
+            checkpointId: bytes32(0),
+            offset: 5,
+            bps: 10_000,
+            source: IDefiSimplify7702Account.BalanceSource.CurrentBalance
+        });
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IDefiSimplify7702Account.InvalidPatchOffset.selector, 1, 0, 5, calls[1].data.length)
+        );
+        _custom().executeBatchDynamic(calls);
+
+        assertEq(target.count(), 0, "earlier target state should roll back");
+        assertEq(address(target).balance, 0, "earlier target value should roll back");
+    }
+
+    function test_SuccessfulReturnDataIsDiscardedAndLaterCallContinues() external {
+        bytes memory payload = new bytes(8_192);
+        payload[0] = 0xA1;
+        payload[8_191] = 0xB2;
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
+        calls[0] =
+            _emptyDynamicCall(address(adversary), abi.encodeCall(DynamicExecutionAdversary.returnPayload, (payload)));
+        calls[1] = _recordCall(101, 0, "after-return-data");
+
+        _custom().executeBatchDynamic(calls);
+
+        assertEq(target.count(), 1, "later call should execute");
+        assertEq(target.total(), 101, "success returndata should not affect execution");
     }
 
     function test_AuthorizedCrossFrameReentrySeesTransientLock() external {
