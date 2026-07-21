@@ -196,6 +196,9 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
     }
 
+    /// @dev Derives the root slot of the transient checkpoint record scoped by
+    ///      `(invocationId, checkpointId)`. The logical record layout is:
+    ///      offset 0 = presence, offset 1 = token, offset 2 = checkpoint balance.
     function _checkpointRecordRoot(uint256 invocationId, bytes32 checkpointId) internal pure returns (bytes32) {
         return _CHECKPOINT_TABLE_NAMESPACE.deriveMapping(invocationId).deriveMapping(checkpointId);
     }
