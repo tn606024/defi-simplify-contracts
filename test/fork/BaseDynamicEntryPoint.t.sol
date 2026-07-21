@@ -10,6 +10,12 @@ import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 contract BaseDynamicEntryPointForkTest is DelegatedAccountFixture {
     uint256 private constant BASE_CHAIN_ID = 8453;
+    /// @dev Test-only authority keys use suite-specific domains so the derived
+    ///      accounts do not collide with common development accounts on Base.
+    uint256 private constant BASE_FORK_UPSTREAM_AUTHORITY_KEY =
+        0xedc0c69afb57629d576c93fd23e9b36a954b891876a6906c21b0e8c758f4f33b;
+    uint256 private constant BASE_FORK_CUSTOM_AUTHORITY_KEY =
+        0xf02eb8a746dc967763d82ad8e58c03473bfb5be2c00599bde2f77b31e525bb39;
     IEntryPoint private constant ENTRY_POINT = IEntryPoint(0x433709009B8330FDa32311DF1C2AFA402eD8D009);
     address payable private constant BENEFICIARY = payable(address(0xBEEF));
 
@@ -17,7 +23,7 @@ contract BaseDynamicEntryPointForkTest is DelegatedAccountFixture {
 
     function setUp() external {
         require(block.chainid == BASE_CHAIN_ID, "fork is not Base mainnet");
-        pair = _deployDelegatedPair(ENTRY_POINT);
+        pair = _deployDelegatedPair(ENTRY_POINT, BASE_FORK_UPSTREAM_AUTHORITY_KEY, BASE_FORK_CUSTOM_AUTHORITY_KEY);
         vm.deal(pair.customAccount, 1 ether);
     }
 
