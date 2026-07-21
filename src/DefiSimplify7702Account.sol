@@ -172,7 +172,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             checkpointBalance = _loadCheckpointBalance(invocationId, callIndex, patchIndex, token, checkpointId);
         }
 
-        uint256 currentBalance = _patchBalance(callIndex, patchIndex, token, cache);
+        uint256 currentBalance = _currentBalanceForPatch(callIndex, patchIndex, token, cache);
         uint256 base;
         if (patch.source == BalanceSource.CurrentBalance) {
             base = currentBalance;
@@ -230,7 +230,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
                 revert CheckpointAlreadyExists(callIndex, checkpointIndex, checkpointId);
             }
 
-            uint256 balance = _checkpointBalance(callIndex, checkpointIndex, token, cache);
+            uint256 balance = _currentBalanceForCheckpoint(callIndex, checkpointIndex, token, cache);
             presenceSlot.tstore(true);
             tokenSlot.tstore(token);
             balanceSlot.tstore(balance);
@@ -288,7 +288,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     /// @param token ERC20 whose delegated-account balance is requested.
     /// @param cache Per-call token-balance cache.
     /// @return tokenBalance Current balance observed before the target call.
-    function _patchBalance(uint256 callIndex, uint256 patchIndex, address token, BalanceCache memory cache)
+    function _currentBalanceForPatch(uint256 callIndex, uint256 patchIndex, address token, BalanceCache memory cache)
         private
         view
         returns (uint256 tokenBalance)
@@ -302,7 +302,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         if (!success || returnData.length < 32) {
             revert PatchBalanceReadFailed(callIndex, patchIndex, token, returnData);
         }
-        _cacheBalance(token, balance, cache);
+        _storeCachedBalance(token, balance, cache);
         return balance;
     }
 
@@ -312,11 +312,12 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     /// @param token ERC20 whose delegated-account balance is requested.
     /// @param cache Per-call token-balance cache.
     /// @return tokenBalance Current balance observed before the target call.
-    function _checkpointBalance(uint256 callIndex, uint256 checkpointIndex, address token, BalanceCache memory cache)
-        private
-        view
-        returns (uint256 tokenBalance)
-    {
+    function _currentBalanceForCheckpoint(
+        uint256 callIndex,
+        uint256 checkpointIndex,
+        address token,
+        BalanceCache memory cache
+    ) private view returns (uint256 tokenBalance) {
         (bool found, uint256 cachedBalance) = _findCachedBalance(token, cache);
         if (found) {
             return cachedBalance;
@@ -326,7 +327,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         if (!success || returnData.length < 32) {
             revert CheckpointBalanceReadFailed(callIndex, checkpointIndex, token, returnData);
         }
-        _cacheBalance(token, balance, cache);
+        _storeCachedBalance(token, balance, cache);
         return balance;
     }
 
@@ -352,7 +353,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     /// @param token ERC20 address to cache.
     /// @param balance Balance observed for the token.
     /// @param cache Per-call token-balance cache.
-    function _cacheBalance(address token, uint256 balance, BalanceCache memory cache) private pure {
+    function _storeCachedBalance(address token, uint256 balance, BalanceCache memory cache) private pure {
         uint256 cacheIndex = cache.length;
         cache.tokens[cacheIndex] = token;
         cache.balances[cacheIndex] = balance;
