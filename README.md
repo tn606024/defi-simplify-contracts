@@ -71,6 +71,11 @@ Base fork tests are intentionally separate from the default suite and require
 forge test --match-path 'test/fork/**/*.t.sol' --fork-url "$BASE_RPC_URL"
 ```
 
+GitHub Actions runs the separate Base fork workflow automatically for pull
+requests whose head branch belongs to this repository, using the repository
+`BASE_RPC_URL` secret. The workflow remains manually dispatchable; pull requests
+from external forks skip it because repository secrets are not exposed to them.
+
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are
 expected to be committed.
