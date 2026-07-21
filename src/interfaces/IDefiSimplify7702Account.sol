@@ -3,6 +3,9 @@ pragma solidity 0.8.36;
 
 /// @title IDefiSimplify7702Account
 /// @notice Frozen v1 ABI for checkpoint-based dynamic account execution.
+/// @dev Token addresses are supplied by the plan and trusted to implement ERC20
+///      `balanceOf(address)` semantics. The account accepts a successful balance read
+///      with at least 32 bytes and interprets its first word as the unsigned balance.
 interface IDefiSimplify7702Account {
     /// @notice Selects the token-balance base used to resolve a calldata patch.
     enum BalanceSource {
@@ -21,8 +24,13 @@ interface IDefiSimplify7702Account {
     }
 
     /// @notice Describes one ABI word to replace with a balance-derived amount.
+    /// @dev The account validates selector-relative alignment, bounds, and ordering,
+    ///      but cannot determine whether an aligned word is semantically an amount,
+    ///      pointer, length, receiver, or another field. The SDK must derive offsets
+    ///      from structured ABIs and verify them with golden calldata vectors.
     /// @param token ERC20 whose delegated-account balance determines the amount.
-    /// @param checkpointId Zero for `CurrentBalance`; an earlier checkpoint ID for `CheckpointDelta`.
+    /// @param checkpointId Zero for `CurrentBalance`; an earlier call's checkpoint ID for `CheckpointDelta`.
+    ///        A checkpoint declared by the same `DynamicCall` is not yet visible and causes `CheckpointNotFound`.
     /// @param offset Byte offset from the start of `DynamicCall.data`, including its four-byte selector.
     /// @param bps Portion of the selected balance source, from 1 through 10,000 basis points.
     /// @param source Balance source used to calculate the replacement amount.
