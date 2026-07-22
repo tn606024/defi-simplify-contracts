@@ -8,9 +8,11 @@ provides independent post-condition assertions. The public contract surface is
 defined by the checked-in Solidity interfaces and implementation.
 
 The current implementation includes the frozen dynamic account engine and the
-independent `FlowAssertions` ERC20 balance snapshot and threshold primitives.
-The contracts remain pre-release and are not production-ready until the
-remaining assertion, fork-proof, and security review gates are complete.
+independent `FlowAssertions` ERC20 balance and Aave V3 health-factor primitives.
+The Aave V3 assertion trusts the supplied Pool and its oracle/accounting view;
+the SDK remains responsible for verifying the official Base Pool address. The
+contracts remain pre-release and are not production-ready until the remaining
+generic assertion, fork-proof, and security review gates are complete.
 
 ## Pinned bootstrap toolchain
 
