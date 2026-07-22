@@ -170,6 +170,46 @@ Run the focused DSC-76 suite with:
 forge test --match-path 'test/unit/TransientTokenBalanceRecord.t.sol' -vvv
 ```
 
+## DSC-55 Aave V3 health-factor assertion
+
+`FlowAssertions.assertAaveV3HealthFactorAtLeast` is deliberately versioned and
+implemented directly on the immutable checker. It low-level `STATICCALL`s the
+supplied Aave V3-compatible Pool with `getUserAccountData(msg.sender)`, requires
+the complete six-word static return tuple, and reads only the sixth word as the
+health factor. Failed calls and short successful responses preserve their
+complete returned bytes. The checker trusts the supplied Pool and its
+oracle/accounting view; the SDK remains responsible for target verification.
+
+`unit/FlowAssertionsAaveV3.t.sol` covers equality and threshold failure,
+zero/no-position values, caller binding, full revert-data preservation,
+malformed and no-code targets, the fake-Pool trust assumption, and the no-event
+policy. `integration/FlowAssertionsAaveV3BatchIntegration.t.sol` proves success
+at the end of inherited static and custom dynamic batches and proves a failed
+final health-factor assertion rolls back earlier token state in both paths.
+
+`fork/BaseAaveV3FlowAssertions.t.sol` uses Base block `48,961,870` and the
+official Aave V3 Base Pool
+`0xA238Dd80C259a72e81d7e4664a9801593F98d1c5`. It verifies the Pool's canonical
+maximum no-position health factor for a suite-specific delegated EOA and checks
+that exact value through an inherited static batch.
+
+The DSC-55 suite contains 182 non-fork tests plus the pinned Base fork test.
+Both production contracts retain 100% line, statement, branch, and function
+coverage. `FlowAssertions` runtime size is 1,445 bytes, an increase of 211
+bytes; the account remains 5,398 bytes and byte-for-byte unchanged. The new
+FlowAssertions runtime code hash is
+`0x9c5201f0b2f068db3ec15ce42b72500c17eeae9e4470a0df469d699a0ccf43fd`.
+The reproducible artifact tree is
+`d3751dd891e7ce3e4b6d9585e80d5fd52670a24083535752d71a7479000c0337`.
+
+Run the focused DSC-55 suites with:
+
+```sh
+forge test --match-path 'test/unit/FlowAssertionsAaveV3.t.sol' -vvv
+forge test --match-path 'test/integration/FlowAssertionsAaveV3BatchIntegration.t.sol' -vvv
+forge test --match-path 'test/fork/BaseAaveV3FlowAssertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
+```
+
 ### Validation commands
 
 Run the focused verification layers with:
