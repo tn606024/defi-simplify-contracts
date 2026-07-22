@@ -11,8 +11,11 @@
 - `check-minimal-account-surface.sh` requires the custom account ABI to be the
   exact union of pinned `Simple7702Account` and the frozen dynamic interface,
   and rejects custom permanent storage.
-- `check-abi-fixtures.sh` verifies the committed dynamic interface ABI used by
-  the Go SDK remains byte-for-byte synchronized with Solidity.
+- `check-flow-assertions-surface.sh` requires `FlowAssertions` to expose exactly
+  `IFlowAssertions` and rejects permanent storage.
+- `check-abi-fixtures.sh` verifies the committed account and assertion
+  interface ABIs used by the Go SDK remain byte-for-byte synchronized with
+  Solidity.
 - `check-reproducible-build.sh` performs two clean builds and compares the
   SHA-256 digest of every generated JSON artifact.
 

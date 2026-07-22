@@ -100,11 +100,45 @@ The Solidity fixture is directly consumable as JSON by the Go repository. A
 cross-repository test that imports it belongs to the SDK integration issues; no
 claim is made here that the Go consumer has already shipped.
 
-The completed local suite contains 130 non-fork tests. The production account
-retains 100% line, statement, branch, and function coverage. The reproducible
-repository artifact tree is
+The DSC-51 local suite contained 130 non-fork tests. The production account
+retained 100% line, statement, branch, and function coverage. Its reproducible
+repository artifact tree was
 `9bb6a848a89b356c8e8d42cc0943da2ca723a373240d24f22c3b731a049561e9`;
 DSC-51 changes test artifacts only.
+
+## DSC-53 balance assertions
+
+`unit/FlowAssertions.t.sol` proves caller-scoped transaction-lifetime snapshots,
+duplicate and cross-sender identity, reusable snapshots, validation order,
+saturating increase/decrease semantics, malformed ERC20 handling, and the
+zero-event policy. A dedicated setup-to-test boundary case proves transient
+records do not survive the top-level transaction.
+
+`integration/FlowAssertionsBatchIntegration.t.sol` appends the real checker to
+inherited static and custom dynamic delegated-account batches. Its failure cases
+prove the final assertion atomically rolls back earlier token changes and
+snapshot writes. `integration/TransientNamespaceSeparation.t.sol` keeps the
+account and assertion namespace and record-layout checks at the cross-component
+boundary rather than mixing them into either contract's unit suite.
+`fuzz/FlowAssertionsFuzz.t.sol` checks all three unsigned threshold relations
+against independent arithmetic models.
+
+The completed DSC-53 suite contains 164 non-fork tests. Both production
+contracts retain 100% line, statement, branch, and function coverage. The
+reproducible artifact tree is
+`44d9c6c37cac58e8d82c8e24f59defcfed48384cb6b59b69c7bd03ac73d6700c`.
+Dependency-inclusive Slither reports 60 findings for review; six remain after
+filtering pinned libraries, with zero project-owned high-severity findings. The
+two new findings are the intentional checked low-level ERC20 `STATICCALL` and
+the reviewed assembly word read in `FlowAssertions._readBalance`.
+
+Run the focused DSC-53 suites with:
+
+```sh
+forge test --match-path 'test/unit/FlowAssertions*.t.sol' -vvv
+forge test --match-path 'test/fuzz/FlowAssertionsFuzz.t.sol' -vvv
+forge test --match-path 'test/integration/**/*.t.sol' -vvv
+```
 
 ### Validation commands
 
@@ -113,6 +147,8 @@ Run the focused verification layers with:
 ```sh
 forge test --match-path 'test/fuzz/**/*.t.sol' -vvv
 FOUNDRY_PROFILE=ci forge test --match-path 'test/fuzz/**/*.t.sol' -vvv
+forge test --match-path 'test/integration/**/*.t.sol' -vvv
+FOUNDRY_PROFILE=ci forge test --match-path 'test/integration/**/*.t.sol' -vvv
 forge test --match-path 'test/invariant/**/*.t.sol' -vvv
 FOUNDRY_PROFILE=ci forge test --match-path 'test/invariant/**/*.t.sol' -vvv
 forge test --match-path 'test/unit/DynamicGoldenVectors.t.sol' -vvv

@@ -7,10 +7,10 @@ v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
 provides independent post-condition assertions. The public contract surface is
 defined by the checked-in Solidity interfaces and implementation.
 
-The current implementation includes the frozen dynamic ABI, invocation-scoped
-transient checkpoints, and safe dynamic calldata amount patching. The account
-remains pre-release and is not production-ready until the remaining dynamic
-execution, assertion, fork-proof, and security review gates are complete.
+The current implementation includes the frozen dynamic account engine and the
+independent `FlowAssertions` ERC20 balance snapshot and threshold primitives.
+The contracts remain pre-release and are not production-ready until the
+remaining assertion, fork-proof, and security review gates are complete.
 
 ## Pinned bootstrap toolchain
 
@@ -51,6 +51,7 @@ Install the pinned Foundry release, then run:
 forge fmt --check
 forge build
 ./script/check-minimal-account-surface.sh
+./script/check-flow-assertions-surface.sh
 ./script/check-abi-fixtures.sh
 forge test --no-match-path 'test/fork/**'
 forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
