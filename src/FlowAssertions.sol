@@ -3,8 +3,8 @@ pragma solidity 0.8.36;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import {IFlowAssertions} from "./interfaces/IFlowAssertions.sol";
+import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceRecord.sol";
 
 /// @title FlowAssertions
 /// @notice Permissionless post-condition checker for transaction-scoped ERC20 balance flows.
@@ -12,7 +12,7 @@ import {IFlowAssertions} from "./interfaces/IFlowAssertions.sol";
 ///      Snapshot records live only for the current transaction and are scoped to `msg.sender`.
 contract FlowAssertions is IFlowAssertions {
     using SlotDerivation for bytes32;
-    using TransientSlot for *;
+    using TransientTokenBalanceRecord for bytes32;
 
     /// @dev Domain-separated root of the sender- and checkpoint-keyed transient snapshot table.
     bytes32 internal constant _BALANCE_SNAPSHOT_TABLE_NAMESPACE = keccak256("FlowAssertions.balanceSnapshotTable.v1");
@@ -26,15 +26,12 @@ contract FlowAssertions is IFlowAssertions {
 
         address account = msg.sender;
         bytes32 recordRoot = _snapshotRecordRoot(account, checkpointId);
-        TransientSlot.BooleanSlot presenceSlot = recordRoot.asBoolean();
-        if (presenceSlot.tload()) {
+        if (recordRoot.isPresent()) {
             revert AssertionCheckpointAlreadyExists(account, checkpointId);
         }
 
         uint256 balance = _readBalance(token);
-        presenceSlot.tstore(true);
-        recordRoot.offset(1).asAddress().tstore(token);
-        recordRoot.offset(2).asUint256().tstore(balance);
+        recordRoot.store(token, balance);
     }
 
     /// @inheritdoc IFlowAssertions
@@ -86,16 +83,16 @@ contract FlowAssertions is IFlowAssertions {
     function _loadSnapshot(address token, bytes32 checkpointId) private view returns (uint256 checkpointBalance) {
         address account = msg.sender;
         bytes32 recordRoot = _snapshotRecordRoot(account, checkpointId);
-        if (!recordRoot.asBoolean().tload()) {
+        if (!recordRoot.isPresent()) {
             revert AssertionCheckpointNotFound(account, checkpointId);
         }
 
-        address checkpointToken = recordRoot.offset(1).asAddress().tload();
+        address checkpointToken = recordRoot.token();
         if (checkpointToken != token) {
             revert AssertionCheckpointTokenMismatch(account, checkpointId, token, checkpointToken);
         }
 
-        return recordRoot.offset(2).asUint256().tload();
+        return recordRoot.balance();
     }
 
     /// @dev Rejects the zero token before any snapshot lookup or external balance read.
