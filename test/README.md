@@ -140,6 +140,36 @@ forge test --match-path 'test/fuzz/FlowAssertionsFuzz.t.sol' -vvv
 forge test --match-path 'test/integration/**/*.t.sol' -vvv
 ```
 
+## DSC-76 shared transient token-balance records
+
+`src/libraries/TransientTokenBalanceRecord.sol` is the canonical production
+accessor for the shared physical record shape used by account checkpoints and
+assertion snapshots: presence at offset zero, token at offset one, and balance
+at offset two. The internal-only library is compiler-inlined and introduces no
+creation-time or runtime link references. Each consumer continues to own its
+record-root derivation, scope, lifecycle, validation order, balance reads, and
+custom errors.
+
+`unit/TransientTokenBalanceRecord.t.sol` independently verifies the three slot
+offsets through raw transient reads, distinguishes a present zero balance from
+an absent record, and checks adjacent-slot and independent-root isolation. The
+existing account, assertion, integration, golden-vector, fuzz, and invariant
+suites remain the behavioral regression gates for both consumers.
+
+The completed DSC-76 suite contains 168 non-fork tests. Both production
+contracts and the shared library retain 100% line, statement, and function
+coverage; both production contracts retain 100% branch coverage. The public ABI
+fixtures are unchanged. Runtime size increases by two bytes for each production
+contract because the shared internal accessor is inlined: the account is 5,398
+bytes and `FlowAssertions` is 1,234 bytes. The reproducible artifact tree is
+`87655d1f2d69122b9b069bf2c6fa6537b0d5cc9e671957f42a32329a9509479e`.
+
+Run the focused DSC-76 suite with:
+
+```sh
+forge test --match-path 'test/unit/TransientTokenBalanceRecord.t.sol' -vvv
+```
+
 ### Validation commands
 
 Run the focused verification layers with:
