@@ -9,6 +9,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import {IDefiSimplify7702Account} from "./interfaces/IDefiSimplify7702Account.sol";
+import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceRecord.sol";
 
 /// @title DefiSimplify7702Account
 /// @notice EIP-7702 delegated account with inherited static execution and dynamic batch execution.
@@ -19,6 +20,7 @@ import {IDefiSimplify7702Account} from "./interfaces/IDefiSimplify7702Account.so
 contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account {
     using SlotDerivation for bytes32;
     using TransientSlot for *;
+    using TransientTokenBalanceRecord for bytes32;
 
     /// @dev Transient reentrancy-lock slot shared by every dynamic execution frame of this account.
     bytes32 internal constant _DYNAMIC_EXECUTION_LOCK_SLOT =
@@ -223,17 +225,12 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             }
 
             bytes32 recordRoot = _checkpointRecordRoot(invocationId, checkpointId);
-            TransientSlot.BooleanSlot presenceSlot = recordRoot.asBoolean();
-            TransientSlot.AddressSlot tokenSlot = recordRoot.offset(1).asAddress();
-            TransientSlot.Uint256Slot balanceSlot = recordRoot.offset(2).asUint256();
-            if (presenceSlot.tload()) {
+            if (recordRoot.isPresent()) {
                 revert CheckpointAlreadyExists(callIndex, checkpointIndex, checkpointId);
             }
 
             uint256 balance = _currentBalanceForCheckpoint(callIndex, checkpointIndex, token, cache);
-            presenceSlot.tstore(true);
-            tokenSlot.tstore(token);
-            balanceSlot.tstore(balance);
+            recordRoot.store(token, balance);
         }
     }
 
@@ -262,16 +259,16 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         bytes32 checkpointId
     ) private view returns (uint256 checkpointBalance) {
         bytes32 recordRoot = _checkpointRecordRoot(invocationId, checkpointId);
-        if (!recordRoot.asBoolean().tload()) {
+        if (!recordRoot.isPresent()) {
             revert CheckpointNotFound(callIndex, patchIndex, checkpointId);
         }
 
-        address checkpointToken = recordRoot.offset(1).asAddress().tload();
+        address checkpointToken = recordRoot.token();
         if (checkpointToken != token) {
             revert CheckpointTokenMismatch(callIndex, patchIndex, checkpointId, token, checkpointToken);
         }
 
-        return recordRoot.offset(2).asUint256().tload();
+        return recordRoot.balance();
     }
 
     /// @dev Preallocates a zero-length per-call balance cache with the requested capacity.
