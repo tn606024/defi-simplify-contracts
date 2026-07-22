@@ -53,7 +53,7 @@ forge build
 ./script/check-minimal-account-surface.sh
 ./script/check-abi-fixtures.sh
 forge test --no-match-path 'test/fork/**'
-forge snapshot --check --no-match-test 'testFuzz' --no-match-path 'test/fork/**'
+forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
 forge coverage --no-match-path 'test/fork/**' --report summary
 ./script/check-reproducible-build.sh
 slither . --fail-none
