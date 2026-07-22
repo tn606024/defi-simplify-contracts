@@ -3,11 +3,12 @@ pragma solidity 0.8.36;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
+import {IAaveV3Pool} from "./interfaces/IAaveV3Pool.sol";
 import {IFlowAssertions} from "./interfaces/IFlowAssertions.sol";
 import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceRecord.sol";
 
 /// @title FlowAssertions
-/// @notice Permissionless post-condition checker for transaction-scoped ERC20 balance flows.
+/// @notice Permissionless post-condition checker for delegated-account DeFi flows.
 /// @dev This direct immutable contract has no owner, asset-moving method, or permanent storage.
 ///      Snapshot records live only for the current transaction and are scoped to `msg.sender`.
 contract FlowAssertions is IFlowAssertions {
@@ -16,6 +17,9 @@ contract FlowAssertions is IFlowAssertions {
 
     /// @dev Domain-separated root of the sender- and checkpoint-keyed transient snapshot table.
     bytes32 internal constant _BALANCE_SNAPSHOT_TABLE_NAMESPACE = keccak256("FlowAssertions.balanceSnapshotTable.v1");
+
+    /// @dev Aave V3 `getUserAccountData` returns six statically encoded words.
+    uint256 private constant _AAVE_V3_ACCOUNT_DATA_RETURN_LENGTH = 6 * 32;
 
     /// @inheritdoc IFlowAssertions
     function snapshotBalance(address token, bytes32 checkpointId) external {
@@ -65,6 +69,14 @@ contract FlowAssertions is IFlowAssertions {
         }
     }
 
+    /// @inheritdoc IFlowAssertions
+    function assertAaveV3HealthFactorAtLeast(address pool, uint256 minimumHealthFactor) external view {
+        uint256 healthFactor = _readAaveV3HealthFactor(pool);
+        if (healthFactor < minimumHealthFactor) {
+            revert AaveV3HealthFactorTooLow(pool, healthFactor, minimumHealthFactor);
+        }
+    }
+
     /// @dev Derives the root slot of the transient snapshot record scoped by
     ///      `(account, checkpointId)`. The logical record layout is:
     ///      offset 0 = presence, offset 1 = token, offset 2 = checkpoint balance.
@@ -100,6 +112,23 @@ contract FlowAssertions is IFlowAssertions {
     function _requireValidToken(address token) private pure {
         if (token == address(0)) {
             revert InvalidAssertionToken(token);
+        }
+    }
+
+    /// @dev Reads the sixth word of Aave V3 `getUserAccountData(msg.sender)` only after validating
+    ///      the complete six-word static tuple. Failed calls and short successful responses preserve
+    ///      their complete returned bytes for target-specific attribution.
+    /// @param pool Aave V3-compatible Pool selected and verified by the caller's SDK.
+    /// @return healthFactor Health factor reported by the supplied Pool for `msg.sender`.
+    function _readAaveV3HealthFactor(address pool) private view returns (uint256 healthFactor) {
+        (bool success, bytes memory returnData) =
+            pool.staticcall(abi.encodeCall(IAaveV3Pool.getUserAccountData, (msg.sender)));
+        if (!success || returnData.length < _AAVE_V3_ACCOUNT_DATA_RETURN_LENGTH) {
+            revert AaveV3AccountDataReadFailed(pool, returnData);
+        }
+
+        assembly ("memory-safe") {
+            healthFactor := mload(add(returnData, 192))
         }
     }
 
