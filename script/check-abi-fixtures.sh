@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly fixture="abi/IDefiSimplify7702Account.json"
-readonly generated="$(mktemp)"
+readonly account_fixture="abi/IDefiSimplify7702Account.json"
+readonly assertions_fixture="abi/IFlowAssertions.json"
+readonly generated_account="$(mktemp)"
+readonly generated_assertions="$(mktemp)"
 
 cleanup() {
-  rm -f "$generated"
+  rm -f "$generated_account" "$generated_assertions"
 }
 trap cleanup EXIT
 
@@ -16,11 +18,20 @@ command -v jq >/dev/null || {
 
 forge inspect IDefiSimplify7702Account abi --json \
   | jq -cS 'sort_by(.type + ":" + (.name // "") + ":" + ((.inputs // []) | map(.type) | join(",")))' \
-  > "$generated"
+  > "$generated_account"
 
-if ! diff -u "$fixture" "$generated"; then
+if ! diff -u "$account_fixture" "$generated_account"; then
   echo "IDefiSimplify7702Account ABI fixture is stale" >&2
   exit 1
 fi
 
-echo "Frozen dynamic account ABI fixture matches the Solidity interface"
+forge inspect IFlowAssertions abi --json \
+  | jq -cS 'sort_by(.type + ":" + (.name // "") + ":" + ((.inputs // []) | map(.type) | join(",")))' \
+  > "$generated_assertions"
+
+if ! diff -u "$assertions_fixture" "$generated_assertions"; then
+  echo "IFlowAssertions ABI fixture is stale" >&2
+  exit 1
+fi
+
+echo "Checked-in account and flow-assertion ABI fixtures match their Solidity interfaces"
