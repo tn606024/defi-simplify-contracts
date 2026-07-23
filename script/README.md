@@ -13,9 +13,13 @@
   and rejects custom permanent storage.
 - `check-flow-assertions-surface.sh` requires `FlowAssertions` to expose exactly
   `IFlowAssertions` and rejects permanent storage.
-- `check-abi-fixtures.sh` verifies the committed account and assertion
-  interface ABIs used by the Go SDK remain byte-for-byte synchronized with
-  Solidity.
+- `check-static-call-uint256-assertions-surface.sh` requires the independent
+  generic checker to expose exactly `IStaticCallUint256Assertions`, rejects
+  permanent and transient storage access, and rejects events, payable paths,
+  asset-moving calls, delegated execution, contract creation, and destruction.
+- `check-abi-fixtures.sh` verifies the committed account, typed-assertion, and
+  generic-assertion interface ABIs used by the Go SDK remain byte-for-byte
+  synchronized with Solidity.
 - `check-reproducible-build.sh` performs two clean builds and compares the
   SHA-256 digest of every generated JSON artifact.
 

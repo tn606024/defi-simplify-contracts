@@ -46,7 +46,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(11, "one", _singleCheckpoint(address(preCallToken), CHECKPOINT_A));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 1, "target call count");
         assertEq(target.total(), 11, "target amount");
@@ -60,7 +60,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         calls[0] = _recordCall(13, "first", _singleCheckpoint(address(firstToken), CHECKPOINT_A));
         calls[1] = _recordCall(17, "second", _singleCheckpoint(address(secondToken), CHECKPOINT_B));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 2, "target call count");
         assertEq(target.total(), 30, "target amount");
@@ -88,7 +88,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         calls[1] = _recordCall(29, "invalid", checkpoints);
 
         vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.InvalidCheckpointToken.selector, 1, 1));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier call must roll back");
     }
@@ -102,7 +102,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         calls[0] = _recordCall(31, "invalid", checkpoints);
 
         vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.InvalidCheckpointId.selector, 0, 1));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "target must not execute");
     }
@@ -118,7 +118,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointAlreadyExists.selector, 0, 1, CHECKPOINT_A)
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_DuplicateIdAcrossDifferentTokensAndCallsRevertsInActiveScope() external {
@@ -130,7 +130,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointAlreadyExists.selector, 1, 0, CHECKPOINT_A)
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier call must roll back");
     }
@@ -144,7 +144,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(47, "same-token", checkpoints);
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), 47, "target amount");
     }
@@ -312,7 +312,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.CheckpointBalanceReadFailed.selector, 1, 1, address(revertingToken), reason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
         assertEq(target.count(), 0, "earlier target state must roll back");
     }
 
@@ -326,7 +326,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.CheckpointBalanceReadFailed.selector, 0, 0, address(shortToken), hex"1234"
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_EmptySuccessfulBalanceReadFailsWithEmptyReason() external {
@@ -339,7 +339,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.CheckpointBalanceReadFailed.selector, 0, 0, address(emptyToken), bytes("")
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_UnauthorizedCallerFailsBeforeCounterOrBalanceRead() external {
@@ -354,7 +354,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
             )
         );
         vm.prank(randomCaller);
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_Gas_CreateOneCheckpoint() external {
@@ -423,10 +423,6 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         require(account.code.length == 0, "harness authority already has code");
         vm.signAndAttachDelegation(implementation, authorityKey);
         require(_delegationTarget(account) == implementation, "wrong harness delegation target");
-    }
-
-    function _custom() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
     }
 
     function _harness() private view returns (CheckpointTableHarness) {

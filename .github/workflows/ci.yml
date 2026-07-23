@@ -43,6 +43,7 @@ jobs:
         run: |
           ./script/check-minimal-account-surface.sh
           ./script/check-flow-assertions-surface.sh
+          ./script/check-static-call-uint256-assertions-surface.sh
           ./script/check-abi-fixtures.sh
 
       - name: Run non-fork tests

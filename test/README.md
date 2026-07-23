@@ -10,6 +10,9 @@ context: `address(this)` is the EOA and inherited self-or-EntryPoint
 authorization observes that EOA. Direct calls to an implementation contract and
 `vm.etch` do not model delegation processing and must not replace this fixture
 for authorization, signature, receiver, fallback, or protocol-accounting tests.
+Use the fixture's `_upstreamAccount(pair)`, `_customAccount(pair)`, and
+`_dynamicAccount(pair)` accessors instead of repeating delegated-address casts
+or defining suite-local wrappers.
 
 The static differential suite in `unit/UpstreamCompatibility.t.sol` intentionally
 runs semantically identical operations through both delegated EOAs. Keep that
@@ -208,6 +211,50 @@ Run the focused DSC-55 suites with:
 forge test --match-path 'test/unit/FlowAssertionsAaveV3.t.sol' -vvv
 forge test --match-path 'test/integration/FlowAssertionsAaveV3BatchIntegration.t.sol' -vvv
 forge test --match-path 'test/fork/BaseAaveV3FlowAssertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
+```
+
+## DSC-54 independent generic uint256 staticcall checker
+
+`StaticCallUint256Assertions` is deployed and reviewed independently from the
+typed `FlowAssertions` checker. It supports an account-binding mode that
+replaces exactly one selector-relative ABI word with `msg.sender`, and an
+explicit `type(uint32).max` global-read mode that leaves calldata unchanged.
+Both paths select one aligned fixed-width returndata word and apply either a
+minimum or maximum uint256 bound.
+
+`unit/StaticCallUint256Assertions.t.sol` covers validation order, account-word
+byte isolation, account-binding evidence, both comparison directions, adjacent
+return sentinels, malformed return data, complete target revert data, the
+documented trailing-padding bypass, direct immutable identity, and the no-event
+policy. `fuzz/StaticCallUint256AssertionsFuzz.t.sol` checks offset models,
+unsigned comparisons, and independently reconstructed patched calldata across
+512 default cases per property. The language-neutral
+`abi/StaticCallUint256Assertions.golden.json` and checked-in interface ABI are
+verified from Solidity for SDK consumption.
+
+`integration/StaticCallUint256AssertionsBatchIntegration.t.sol` runs the
+checker through real delegated EOAs as the final inherited static and custom
+dynamic batch step. Forced failures prove that earlier token changes roll back
+atomically. `fork/BaseStaticCallUint256Assertions.t.sol` uses Base block
+`48,961,870`, account-binds the real Aave V3 Base Pool health-factor read, and
+uses the global sentinel for Base WETH `totalSupply()`.
+
+The DSC-54 suite brings the repository to 210 non-fork tests. All three
+production contracts retain 100% line, statement, branch, and function
+coverage. The independent checker runtime is 1,082 bytes with runtime code hash
+`0xc26f9f8ce08cbeb069a32ac005b6a6c26dd878cb085295381f52e8de0f7e10d8`.
+The reproducible artifact tree is
+`8552f847e4c0fe8849649d531bba31030f32acdd4fba99e042033226ee642e1f`.
+The tracked `FlowAssertions` source, interface, and ABI fixture remain
+byte-for-byte unchanged.
+
+Run the focused DSC-54 suites with:
+
+```sh
+forge test --match-path 'test/unit/StaticCallUint256Assertions*.t.sol' -vvv
+forge test --match-path 'test/fuzz/StaticCallUint256AssertionsFuzz.t.sol' -vvv
+forge test --match-path 'test/integration/StaticCallUint256AssertionsBatchIntegration.t.sol' -vvv
+forge test --match-path 'test/fork/BaseStaticCallUint256Assertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
 ```
 
 ### Validation commands

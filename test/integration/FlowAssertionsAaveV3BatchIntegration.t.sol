@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 import {IFlowAssertions} from "../../src/interfaces/IFlowAssertions.sol";
-import {Simple7702Account} from "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {AaveV3PoolMock} from "../mocks/AaveV3PoolMocks.sol";
@@ -29,8 +27,8 @@ contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
         pool.setHealthFactor(pair.upstreamAccount, 1.5e18);
         pool.setHealthFactor(pair.customAccount, 1.6e18);
 
-        _upstream().executeBatch(_staticPlan(31, 1.5e18));
-        _custom().executeBatch(_staticPlan(37, 1.6e18));
+        _upstreamAccount(pair).executeBatch(_staticPlan(31, 1.5e18));
+        _customAccount(pair).executeBatch(_staticPlan(37, 1.6e18));
 
         assertEq(token.balanceOf(pair.upstreamAccount), 31, "upstream producer");
         assertEq(token.balanceOf(pair.customAccount), 37, "custom producer");
@@ -42,7 +40,7 @@ contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
             abi.encodeWithSelector(IFlowAssertions.AaveV3HealthFactorTooLow.selector, address(pool), 1.2e18, 1.3e18);
 
         vm.expectRevert(abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 1, assertionReason));
-        _custom().executeBatch(_staticPlan(41, 1.3e18));
+        _customAccount(pair).executeBatch(_staticPlan(41, 1.3e18));
 
         assertEq(token.balanceOf(pair.customAccount), 0, "failed static producer survived");
     }
@@ -50,7 +48,7 @@ contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
     function test_AaveV3AssertionWorksAsFinalStepOfDynamicBatch() external {
         pool.setHealthFactor(pair.customAccount, 1.4e18);
 
-        _dynamic().executeBatchDynamic(_dynamicPlan(43, 1.4e18));
+        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(43, 1.4e18));
 
         assertEq(token.balanceOf(pair.customAccount), 43, "dynamic producer");
     }
@@ -65,7 +63,7 @@ contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(assertions), assertionReason
             )
         );
-        _dynamic().executeBatchDynamic(_dynamicPlan(47, 1.2e18));
+        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(47, 1.2e18));
 
         assertEq(token.balanceOf(pair.customAccount), 0, "failed dynamic producer survived");
     }
@@ -108,17 +106,5 @@ contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
         dynamicCall.data = data;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-    }
-
-    function _upstream() private view returns (Simple7702Account) {
-        return Simple7702Account(pair.upstreamAccount);
-    }
-
-    function _custom() private view returns (DefiSimplify7702Account) {
-        return DefiSimplify7702Account(pair.customAccount);
-    }
-
-    function _dynamic() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
     }
 }

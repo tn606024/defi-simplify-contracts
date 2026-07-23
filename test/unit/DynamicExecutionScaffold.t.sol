@@ -47,12 +47,12 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
     function test_ConfiguredEntryPointCanExecuteOneAndManyCallsWithValue() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(11, 0.25 ether, "one");
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         calls = new IDefiSimplify7702Account.DynamicCall[](2);
         calls[0] = _recordCall(13, 0, "many-a");
         calls[1] = _recordCall(17, 0.5 ether, "many-b");
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.lastCaller(), pair.customAccount, "target caller");
         assertEq(target.count(), 3, "target call count");
@@ -66,7 +66,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         calls[0] = _recordCall(23, 0, "self");
 
         vm.prank(pair.customAccount);
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.lastCaller(), pair.customAccount, "self path target caller");
         assertEq(target.total(), 23, "self path target total");
@@ -82,7 +82,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
             )
         );
         vm.prank(randomCaller);
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_MaliciousCallbackFailsAuthorizationBeforeReadingActiveDynamicLock() external {
@@ -99,7 +99,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(target), authorizationReason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_MaliciousCallbackCannotEnterInheritedExecute() external {
@@ -116,7 +116,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(adversary), authorizationReason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_MaliciousCallbackCannotEnterInheritedExecuteBatch() external {
@@ -133,14 +133,14 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(adversary), authorizationReason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_EmptyBatchReverts() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](0);
 
         vm.expectRevert(IDefiSimplify7702Account.EmptyDynamicBatch.selector);
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_ZeroTargetRevertsWithCallIndex() external {
@@ -149,7 +149,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         calls[1] = _emptyDynamicCall(address(0), "");
 
         vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 1, address(0)));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier target state should roll back");
     }
@@ -159,7 +159,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         calls[0] = _emptyDynamicCall(pair.customAccount, "");
 
         vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 0, pair.customAccount));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_FailedCallWrapsIndexTargetAndCompleteReason() external {
@@ -174,7 +174,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), targetReason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier target state should roll back");
     }
@@ -194,7 +194,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), targetReason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier target state should roll back");
         assertEq(address(target).balance, 0, "earlier target value should roll back");
@@ -226,7 +226,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), bytes(""))
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(pair.customAccount.balance, 1 ether, "account value should roll back");
         assertEq(address(target).balance, 0, "target value should roll back");
@@ -248,7 +248,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(adversary), targetReason
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(pair.customAccount.balance, 10 ether, "account value should roll back");
         assertEq(address(target).balance, 0, "target value should roll back");
@@ -271,7 +271,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidPatchOffset.selector, 1, 0, 5, calls[1].data.length)
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier target state should roll back");
         assertEq(address(target).balance, 0, "earlier target value should roll back");
@@ -286,7 +286,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
             _emptyDynamicCall(address(adversary), abi.encodeCall(DynamicExecutionAdversary.returnPayload, (payload)));
         calls[1] = _recordCall(101, 0, "after-return-data");
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 1, "later call should execute");
         assertEq(target.total(), 101, "success returndata should not affect execution");
@@ -308,16 +308,16 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
             )
         );
         vm.prank(reentrantPair.customAccount);
-        IDefiSimplify7702Account(reentrantPair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(reentrantPair.customAccount).executeBatchDynamic(calls);
     }
 
     function test_SuccessfulReturnClearsTransientLock() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(41, 0, "first");
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         calls[0] = _recordCall(43, 0, "second");
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 2, "second invocation should not see stale lock");
         assertEq(target.total(), 84, "both invocations should execute");
@@ -331,7 +331,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         assertFalse(success, "first invocation should fail");
 
         calls[0] = _recordCall(53, 0, "after-revert");
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), 53, "reverted invocation should not leave stale lock");
     }
@@ -341,15 +341,11 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         calls[0] = _recordCall(59, 0, "event");
 
         vm.recordLogs();
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(logs.length, 1, "unexpected custom account event");
         assertEq(logs[0].emitter, address(target), "event emitter");
-    }
-
-    function _custom() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
     }
 
     function _recordCall(uint256 amount, uint256 value, bytes memory payload)

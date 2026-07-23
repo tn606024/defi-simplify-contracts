@@ -2,6 +2,7 @@
 pragma solidity 0.8.36;
 
 import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
+import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 import {Simple7702Account} from "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {Test} from "forge-std/Test.sol";
@@ -55,6 +56,26 @@ abstract contract DelegatedAccountFixture is Test {
             implementation := shr(96, mload(add(code, 35)))
         }
         require(prefix == 0xef0100, "invalid delegation indicator prefix");
+    }
+
+    /// @dev Returns the upstream delegated EOA through its inherited static-account ABI.
+    function _upstreamAccount(DelegatedPair storage pair) internal view returns (Simple7702Account) {
+        return Simple7702Account(pair.upstreamAccount);
+    }
+
+    /// @dev Returns the custom delegated EOA through its concrete account ABI.
+    function _customAccount(DelegatedPair storage pair) internal view returns (DefiSimplify7702Account) {
+        return DefiSimplify7702Account(pair.customAccount);
+    }
+
+    /// @dev Returns the custom delegated EOA through the frozen dynamic interface.
+    function _dynamicAccount(DelegatedPair storage pair) internal view returns (IDefiSimplify7702Account) {
+        return IDefiSimplify7702Account(pair.customAccount);
+    }
+
+    /// @dev Returns a delegated EOA address through the frozen dynamic interface.
+    function _dynamicAccount(address payable account) internal pure returns (IDefiSimplify7702Account) {
+        return IDefiSimplify7702Account(account);
     }
 
     function _signature(uint256 privateKey, bytes32 digest) internal pure returns (bytes memory signature) {

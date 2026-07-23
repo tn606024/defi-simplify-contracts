@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 import {IFlowAssertions} from "../../src/interfaces/IFlowAssertions.sol";
-import {Simple7702Account} from "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {AssertionBalanceToken, FlowAssertionsHarness} from "../mocks/FlowAssertionsMocks.sol";
@@ -28,8 +26,8 @@ contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
         token.setBalance(pair.upstreamAccount, 251);
         token.setBalance(pair.customAccount, 257);
 
-        _upstream().executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 11, 11));
-        _custom().executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 13, 13));
+        _upstreamAccount(pair).executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 11, 11));
+        _customAccount(pair).executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 13, 13));
 
         assertEq(token.balanceOf(pair.upstreamAccount), 262, "upstream static balance");
         assertEq(token.balanceOf(pair.customAccount), 270, "custom static balance");
@@ -51,7 +49,7 @@ contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
         );
 
         vm.expectRevert(abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 2, assertionReason));
-        _custom().executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 17, 18));
+        _customAccount(pair).executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 17, 18));
 
         assertEq(token.balanceOf(pair.customAccount), 271, "failed static producer survived");
         (bool present,,) = assertions.snapshotRecord(pair.customAccount, STATIC_CHECKPOINT);
@@ -61,7 +59,7 @@ contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
     function test_AssertionsWorkAsFinalStepsOfDynamicBatch() external {
         token.setBalance(pair.customAccount, 277);
 
-        _dynamic().executeBatchDynamic(_dynamicIncreasePlan(DYNAMIC_CHECKPOINT, 19, 19));
+        _dynamicAccount(pair).executeBatchDynamic(_dynamicIncreasePlan(DYNAMIC_CHECKPOINT, 19, 19));
 
         assertEq(token.balanceOf(pair.customAccount), 296, "dynamic balance");
         (bool present, address snapshotToken, uint256 snapshotBalance) =
@@ -82,7 +80,7 @@ contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 2, address(assertions), assertionReason
             )
         );
-        _dynamic().executeBatchDynamic(_dynamicIncreasePlan(DYNAMIC_CHECKPOINT, 23, 24));
+        _dynamicAccount(pair).executeBatchDynamic(_dynamicIncreasePlan(DYNAMIC_CHECKPOINT, 23, 24));
 
         assertEq(token.balanceOf(pair.customAccount), 281, "failed dynamic producer survived");
         (bool present,,) = assertions.snapshotRecord(pair.customAccount, DYNAMIC_CHECKPOINT);
@@ -137,17 +135,5 @@ contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
         dynamicCall.data = data;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-    }
-
-    function _upstream() private view returns (Simple7702Account) {
-        return Simple7702Account(pair.upstreamAccount);
-    }
-
-    function _custom() private view returns (DefiSimplify7702Account) {
-        return DefiSimplify7702Account(pair.customAccount);
-    }
-
-    function _dynamic() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
     }
 }
