@@ -225,6 +225,12 @@ interface IDefiSimplify7702Account {
     /// @param required Principal-plus-premium repayment balance required.
     error FlashLoanRepaymentBalanceInsufficient(uint256 callIndex, address asset, uint256 actual, uint256 required);
 
+    /// @notice Raised when the flash asset balance read fails or returns malformed data.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash-loaned ERC20 repayment asset.
+    /// @param reason Complete failed or malformed balance-read returndata.
+    error FlashLoanRepaymentBalanceReadFailed(uint256 callIndex, address asset, bytes reason);
+
     /// @notice Raised when installing the exact Aave Pool repayment allowance fails.
     /// @param callIndex Index of the callback-enabled outer call.
     /// @param asset Flash-loaned ERC20 repayment asset.
@@ -255,15 +261,14 @@ interface IDefiSimplify7702Account {
 
     /// @notice Executes an authorized, atomic sequence of balance-patched external calls.
     /// @dev Each call resolves patches, creates checkpoints, and then executes its target in array order.
-    ///      At most one outer call may request a callback; callback execution remains disabled until
-    ///      the authenticated commitment engine is installed. Successful target returndata is discarded;
-    ///      a failure reverts the entire batch.
+    ///      At most one outer call may request the authenticated Aave V3 callback. Successful target
+    ///      returndata is discarded; a failure reverts the entire batch.
     /// @param calls Ordered dynamic calls to execute from the delegated account.
     function executeBatchDynamic(DynamicCall[] calldata calls) external payable;
 
     /// @notice Receives the authenticated callback for one direct Aave V3 `flashLoanSimple` call.
     /// @dev This is not a user execution entrypoint. It authenticates an already-authorized outer
-    ///      invocation and remains fail-closed until the callback commitment engine is installed.
+    ///      invocation, executes its callback plan, and installs exact Pool repayment approval.
     /// @param asset ERC20 asset supplied by the Aave V3 Pool.
     /// @param amount Flash-loan principal supplied by the Pool.
     /// @param premium Premium charged by the Pool.

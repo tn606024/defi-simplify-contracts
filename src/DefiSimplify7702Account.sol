@@ -8,11 +8,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
+import {IAaveV3FlashLoanSimplePool} from "./interfaces/IAaveV3FlashLoanSimplePool.sol";
 import {IDefiSimplify7702Account} from "./interfaces/IDefiSimplify7702Account.sol";
 import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceRecord.sol";
 
 /// @title DefiSimplify7702Account
-/// @notice EIP-7702 delegated account with inherited static execution and dynamic batch execution.
+/// @notice EIP-7702 delegated account with inherited static execution, dynamic batches, and one Aave V3 callback.
 /// @dev This implementation is deployed directly and used as an EIP-7702 delegation target.
 ///      During delegated execution, `address(this)` is the delegated EOA, not this implementation's
 ///      deployment address. The immutable EntryPoint and all account behavior are inherited from
@@ -30,6 +31,26 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         keccak256("DefiSimplify7702Account.dynamicInvocationCounter.v1");
     /// @dev Domain-separated root of the invocation- and checkpoint-keyed transient record table.
     bytes32 internal constant _CHECKPOINT_TABLE_NAMESPACE = keccak256("DefiSimplify7702Account.checkpointTable.v1");
+    /// @dev Transient callback-state slot. Ordinals are frozen as Idle=0, Awaiting=1, Executing=2, Consumed=3.
+    bytes32 internal constant _CALLBACK_STATE_SLOT = keccak256("DefiSimplify7702Account.callbackState.v1");
+    /// @dev Direct outer target that is permitted to call back exactly once.
+    bytes32 internal constant _CALLBACK_TARGET_SLOT = keccak256("DefiSimplify7702Account.callbackTarget.v1");
+    /// @dev Hash of the fully patched outer calldata actually sent to the committed target.
+    bytes32 internal constant _CALLBACK_CALLDATA_HASH_SLOT =
+        keccak256("DefiSimplify7702Account.callbackCalldataHash.v1");
+    /// @dev Outer call index used for callback authentication and error attribution.
+    bytes32 internal constant _CALLBACK_CALL_INDEX_SLOT = keccak256("DefiSimplify7702Account.callbackCallIndex.v1");
+    /// @dev Flash asset whose Pool allowance must be zero after the outer target returns.
+    bytes32 internal constant _CALLBACK_REPAYMENT_TOKEN_SLOT =
+        keccak256("DefiSimplify7702Account.callbackRepaymentToken.v1");
+
+    /// @dev Single-use callback lifecycle shared by the outer executor and Aave receiver.
+    enum CallbackState {
+        Idle,
+        AwaitingCallback,
+        ExecutingCallback,
+        Consumed
+    }
 
     /// @dev Per-call memory cache shared by patch resolution and checkpoint creation.
     /// @param tokens ERC20 addresses stored in insertion order.
@@ -49,42 +70,21 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     function executeBatchDynamic(DynamicCall[] calldata calls) external payable override {
         _requireForExecute();
 
+        uint256 callsLength = calls.length;
+        if (callsLength == 0) {
+            revert EmptyDynamicBatch();
+        }
         TransientSlot.BooleanSlot lockSlot = _DYNAMIC_EXECUTION_LOCK_SLOT.asBoolean();
         if (lockSlot.tload()) {
             revert DynamicExecutionReentered();
         }
         lockSlot.tstore(true);
 
+        _validateOuterCallbackCount(calls);
         uint256 invocationId = _allocateInvocationId();
 
-        uint256 callsLength = calls.length;
-        if (callsLength == 0) {
-            revert EmptyDynamicBatch();
-        }
-
-        (bool callbackExpected, uint256 callbackCallIndex) = _findExpectedCallback(calls);
-        if (callbackExpected) {
-            DynamicCall calldata callbackCall = calls[callbackCallIndex];
-            revert CallbackNotConsumed(callbackCallIndex, callbackCall.target, 0);
-        }
-
         for (uint256 i = 0; i < callsLength; ++i) {
-            DynamicCall calldata dynamicCall = calls[i];
-            address target = dynamicCall.target;
-            if (target == address(0) || target == address(this)) {
-                revert InvalidTarget(i, target);
-            }
-
-            bytes memory data = dynamicCall.data;
-            BalanceCache memory cache =
-                _newBalanceCache(dynamicCall.patches.length + dynamicCall.checkpointsBefore.length);
-            _applyPatches(invocationId, i, dynamicCall.patches, data, cache);
-            _createCheckpoints(invocationId, i, dynamicCall.checkpointsBefore, cache);
-
-            bool success = Exec.call(target, dynamicCall.value, data, gasleft());
-            if (!success) {
-                revert DynamicCallFailed(i, target, Exec.getReturnData(0));
-            }
+            _executeDynamicCall(invocationId, i, calls[i], false, 0);
         }
 
         lockSlot.tstore(false);
@@ -96,37 +96,273 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         override
         returns (bool success)
     {
-        asset;
-        amount;
-        premium;
-        initiator;
-        params;
-        success = false;
-        revert CallbackOutsideDynamicExecution();
+        uint256 outerCallIndex = _authenticateAaveV3Callback(asset, amount, initiator, params);
+
+        CallbackEnvelope memory envelope = abi.decode(params, (CallbackEnvelope));
+        if (premium > envelope.maxPremium) {
+            revert FlashLoanPremiumTooHigh(outerCallIndex, premium, envelope.maxPremium);
+        }
+        _validateCallbackPlan(outerCallIndex, envelope.callbackCalls);
+        _executeCallbackPlan(outerCallIndex, envelope.callbackCalls);
+        _prepareFlashLoanRepayment(outerCallIndex, asset, amount, premium, msg.sender);
+        return true;
+    }
+
+    /// @dev Authenticates one callback against the active direct Pool and canonical patched origin.
+    ///      Envelope decoding deliberately occurs only after this helper returns.
+    /// @param asset ERC20 asset reported by the callback sender.
+    /// @param amount Principal amount reported by the callback sender.
+    /// @param initiator Initiator reported by the callback sender.
+    /// @param params Opaque callback bytes included in canonical origin reconstruction.
+    /// @return outerCallIndex Committed outer call index used for later validation and errors.
+    function _authenticateAaveV3Callback(address asset, uint256 amount, address initiator, bytes calldata params)
+        private
+        view
+        returns (uint256 outerCallIndex)
+    {
+        if (!_DYNAMIC_EXECUTION_LOCK_SLOT.asBoolean().tload()) {
+            revert CallbackOutsideDynamicExecution();
+        }
+
+        outerCallIndex = _CALLBACK_CALL_INDEX_SLOT.asUint256().tload();
+        CallbackState state = _callbackState();
+        if (state != CallbackState.AwaitingCallback) {
+            revert CallbackNotAwaiting(outerCallIndex, uint8(state));
+        }
+
+        address expectedTarget = _CALLBACK_TARGET_SLOT.asAddress().tload();
+        if (msg.sender != expectedTarget) {
+            revert UnexpectedCallbackSender(outerCallIndex, expectedTarget, msg.sender);
+        }
+        if (initiator != address(this)) {
+            revert UnexpectedCallbackInitiator(outerCallIndex, address(this), initiator);
+        }
+
+        bytes32 expectedCalldataHash = _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tload();
+        bytes32 actualCalldataHash = keccak256(
+            abi.encodeCall(
+                IAaveV3FlashLoanSimplePool.flashLoanSimple, (address(this), asset, amount, params, uint16(0))
+            )
+        );
+        if (actualCalldataHash != expectedCalldataHash) {
+            revert CallbackOriginMismatch(outerCallIndex, expectedCalldataHash, actualCalldataHash);
+        }
+    }
+
+    /// @dev Runs a prevalidated callback plan under a fresh checkpoint invocation scope.
+    /// @param outerCallIndex Callback-enabled outer call index used for dual-index errors.
+    /// @param callbackCalls Prevalidated ordinary dynamic calls decoded from the envelope.
+    function _executeCallbackPlan(uint256 outerCallIndex, DynamicCall[] memory callbackCalls) private {
+        _setCallbackState(CallbackState.ExecutingCallback);
+        uint256 callbackInvocationId = _allocateInvocationId();
+        uint256 callbackCallsLength = callbackCalls.length;
+        for (uint256 callbackCallIndex = 0; callbackCallIndex < callbackCallsLength; ++callbackCallIndex) {
+            _executeDynamicCall(
+                callbackInvocationId, callbackCallIndex, callbackCalls[callbackCallIndex], true, outerCallIndex
+            );
+        }
+    }
+
+    /// @dev Checks principal-plus-premium coverage and installs the exact Pool repayment allowance.
+    /// @param outerCallIndex Callback-enabled outer call index used for repayment errors.
+    /// @param asset Flash-loaned ERC20 repayment asset.
+    /// @param amount Flash-loan principal.
+    /// @param premium Pool premium bounded by the decoded envelope.
+    /// @param pool Authenticated direct Pool receiving repayment authority.
+    function _prepareFlashLoanRepayment(
+        uint256 outerCallIndex,
+        address asset,
+        uint256 amount,
+        uint256 premium,
+        address pool
+    ) private {
+        uint256 requiredRepayment = amount + premium;
+        (bool balanceReadSuccess, bytes memory balanceReturnData, uint256 assetBalance) = _readBalance(asset);
+        if (!balanceReadSuccess || balanceReturnData.length < 32) {
+            revert FlashLoanRepaymentBalanceReadFailed(outerCallIndex, asset, balanceReturnData);
+        }
+        if (assetBalance < requiredRepayment) {
+            revert FlashLoanRepaymentBalanceInsufficient(outerCallIndex, asset, assetBalance, requiredRepayment);
+        }
+
+        _approveFlashLoanRepayment(outerCallIndex, asset, pool, requiredRepayment);
+        _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tstore(asset);
+        _setCallbackState(CallbackState.Consumed);
     }
 
     /// @dev Prevalidates that an outer batch requests at most one callback window.
-    ///      DSC-78 intentionally remains fail-closed: the returned callback index is rejected
-    ///      before any target call until the transient commitment engine is implemented.
     /// @param calls Ordered outer dynamic calls.
-    /// @return callbackExpected Whether one call requests a callback.
-    /// @return callbackCallIndex Index of that call when `callbackExpected` is true.
-    function _findExpectedCallback(DynamicCall[] calldata calls)
-        private
-        pure
-        returns (bool callbackExpected, uint256 callbackCallIndex)
-    {
+    function _validateOuterCallbackCount(DynamicCall[] calldata calls) private pure {
+        bool callbackExpected = false;
+        uint256 firstCallbackCallIndex = 0;
         uint256 callsLength = calls.length;
         for (uint256 i = 0; i < callsLength; ++i) {
             if (!calls[i].expectsCallback) {
                 continue;
             }
             if (callbackExpected) {
-                revert MultipleExpectedCallbacks(callbackCallIndex, i);
+                revert MultipleExpectedCallbacks(firstCallbackCallIndex, i);
             }
             callbackExpected = true;
-            callbackCallIndex = i;
+            firstCallbackCallIndex = i;
         }
+    }
+
+    /// @dev Executes one outer or callback-plan call through the shared patch/checkpoint/CALL engine.
+    /// @param invocationId Checkpoint namespace retained by the active outer or callback frame.
+    /// @param callIndex Index within the active outer or callback call array.
+    /// @param dynamicCall Call descriptor copied to memory so decoded callback plans share this path.
+    /// @param isCallbackCall Whether failures require dual outer/callback index attribution.
+    /// @param outerCallIndex Active outer callback-enabled call index when `isCallbackCall` is true.
+    function _executeDynamicCall(
+        uint256 invocationId,
+        uint256 callIndex,
+        DynamicCall memory dynamicCall,
+        bool isCallbackCall,
+        uint256 outerCallIndex
+    ) private {
+        address target = dynamicCall.target;
+        if (target == address(0) || target == address(this)) {
+            revert InvalidTarget(callIndex, target);
+        }
+        bytes memory data = dynamicCall.data;
+        BalanceCache memory cache = _newBalanceCache(dynamicCall.patches.length + dynamicCall.checkpointsBefore.length);
+        _applyPatches(invocationId, callIndex, dynamicCall.patches, data, cache);
+        _createCheckpoints(invocationId, callIndex, dynamicCall.checkpointsBefore, cache);
+
+        if (dynamicCall.expectsCallback) {
+            _openCallbackCommitment(callIndex, target, keccak256(data));
+        }
+
+        bool callSucceeded = Exec.call(target, dynamicCall.value, data, gasleft());
+        if (!callSucceeded) {
+            bytes memory reason = Exec.getReturnData(0);
+            if (isCallbackCall) {
+                revert CallbackDynamicCallFailed(outerCallIndex, callIndex, target, reason);
+            }
+            revert DynamicCallFailed(callIndex, target, reason);
+        }
+
+        if (dynamicCall.expectsCallback) {
+            _finalizeCallbackCommitment(callIndex, target);
+        }
+    }
+
+    /// @dev Rejects nested callback flags before the first callback-plan target call.
+    /// @param outerCallIndex Callback-enabled outer call index.
+    /// @param callbackCalls Entire decoded callback plan.
+    function _validateCallbackPlan(uint256 outerCallIndex, DynamicCall[] memory callbackCalls) private pure {
+        uint256 callbackCallsLength = callbackCalls.length;
+        for (uint256 i = 0; i < callbackCallsLength; ++i) {
+            if (callbackCalls[i].expectsCallback) {
+                revert NestedCallbackNotSupported(outerCallIndex, i);
+            }
+        }
+    }
+
+    /// @dev Commits the exact direct target and fully patched calldata immediately before its CALL.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param target Direct target that must later be the callback sender.
+    /// @param calldataHash Hash of the fully patched bytes passed to the target.
+    function _openCallbackCommitment(uint256 callIndex, address target, bytes32 calldataHash) private {
+        _CALLBACK_TARGET_SLOT.asAddress().tstore(target);
+        _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tstore(calldataHash);
+        _CALLBACK_CALL_INDEX_SLOT.asUint256().tstore(callIndex);
+        _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tstore(address(0));
+        _setCallbackState(CallbackState.AwaitingCallback);
+    }
+
+    /// @dev Requires one consumed callback, proves exact allowance consumption, and clears its commitment.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param target Committed Pool whose repayment allowance must be zero.
+    function _finalizeCallbackCommitment(uint256 callIndex, address target) private {
+        CallbackState state = _callbackState();
+        if (state != CallbackState.Consumed) {
+            revert CallbackNotConsumed(callIndex, target, uint8(state));
+        }
+
+        address repaymentToken = _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tload();
+        (bool allowanceReadSuccess, bytes memory allowanceReturnData, uint256 remainingAllowance) =
+            _readAllowance(repaymentToken, target);
+        if (!allowanceReadSuccess || allowanceReturnData.length < 32) {
+            revert FlashLoanAllowanceReadFailed(callIndex, repaymentToken, target, allowanceReturnData);
+        }
+        if (remainingAllowance != 0) {
+            revert ResidualFlashLoanAllowance(callIndex, repaymentToken, target, remainingAllowance);
+        }
+
+        _CALLBACK_TARGET_SLOT.asAddress().tstore(address(0));
+        _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tstore(bytes32(0));
+        _CALLBACK_CALL_INDEX_SLOT.asUint256().tstore(0);
+        _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tstore(address(0));
+        _setCallbackState(CallbackState.Idle);
+    }
+
+    /// @dev Installs an exact repayment allowance with an explicit zero-first sequence.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash asset whose allowance is installed.
+    /// @param pool Committed Pool receiving repayment authority.
+    /// @param requiredRepayment Exact principal-plus-premium allowance.
+    function _approveFlashLoanRepayment(uint256 callIndex, address asset, address pool, uint256 requiredRepayment)
+        private
+    {
+        _callApprove(callIndex, asset, pool, 0);
+        if (requiredRepayment != 0) {
+            _callApprove(callIndex, asset, pool, requiredRepayment);
+        }
+    }
+
+    /// @dev Calls `approve` and accepts empty return data or a first ABI word equal to one.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash asset being approved.
+    /// @param pool Committed Pool receiving the allowance.
+    /// @param allowanceAmount Exact allowance requested by this approval step.
+    function _callApprove(uint256 callIndex, address asset, address pool, uint256 allowanceAmount) private {
+        (bool approvalSucceeded, bytes memory approvalReturnData) =
+            asset.call(abi.encodeCall(IERC20.approve, (pool, allowanceAmount)));
+
+        bool approvalAccepted = approvalReturnData.length == 0;
+        if (approvalReturnData.length >= 32) {
+            uint256 returnedWord;
+            assembly ("memory-safe") {
+                returnedWord := mload(add(approvalReturnData, 32))
+            }
+            approvalAccepted = returnedWord == 1;
+        }
+        if (!approvalSucceeded || !approvalAccepted) {
+            revert FlashLoanRepaymentApprovalFailed(callIndex, asset, pool, approvalReturnData);
+        }
+    }
+
+    /// @dev Reads the account-to-Pool allowance while preserving raw returndata for indexed errors.
+    /// @param asset Flash asset whose allowance is queried.
+    /// @param pool Committed Pool whose allowance is queried.
+    /// @return success Whether the low-level allowance call succeeded.
+    /// @return returnData Complete token returndata.
+    /// @return allowanceAmount First returned word when at least 32 bytes are available.
+    function _readAllowance(address asset, address pool)
+        private
+        view
+        returns (bool success, bytes memory returnData, uint256 allowanceAmount)
+    {
+        (success, returnData) = asset.staticcall(abi.encodeCall(IERC20.allowance, (address(this), pool)));
+        if (returnData.length >= 32) {
+            assembly ("memory-safe") {
+                allowanceAmount := mload(add(returnData, 32))
+            }
+        }
+    }
+
+    /// @dev Returns the current transient callback-state ordinal.
+    /// @return state Current callback lifecycle state.
+    function _callbackState() private view returns (CallbackState) {
+        return CallbackState(_CALLBACK_STATE_SLOT.asUint256().tload());
+    }
+
+    /// @dev Stores one reviewed callback-state transition.
+    /// @param state New callback lifecycle state.
+    function _setCallbackState(CallbackState state) private {
+        _CALLBACK_STATE_SLOT.asUint256().tstore(uint256(state));
     }
 
     /// @dev Increments the transaction-scoped transient counter and returns this frame's checkpoint scope.
@@ -147,7 +383,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     function _applyPatches(
         uint256 invocationId,
         uint256 callIndex,
-        BalancePatch[] calldata patches,
+        BalancePatch[] memory patches,
         bytes memory data,
         BalanceCache memory cache
     ) internal view {
@@ -155,7 +391,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         uint256 previousOffset = 0;
 
         for (uint256 patchIndex = 0; patchIndex < patchesLength; ++patchIndex) {
-            BalancePatch calldata patch = patches[patchIndex];
+            BalancePatch memory patch = patches[patchIndex];
             uint256 offset = _validatePatch(callIndex, patchIndex, patch, data.length, previousOffset);
             previousOffset = offset;
             _writePatch(data, offset, _resolvePatchAmount(invocationId, callIndex, patchIndex, patch, cache));
@@ -172,7 +408,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     function _validatePatch(
         uint256 callIndex,
         uint256 patchIndex,
-        BalancePatch calldata patch,
+        BalancePatch memory patch,
         uint256 dataLength,
         uint256 previousOffset
     ) private pure returns (uint256 offset) {
@@ -205,7 +441,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         uint256 invocationId,
         uint256 callIndex,
         uint256 patchIndex,
-        BalancePatch calldata patch,
+        BalancePatch memory patch,
         BalanceCache memory cache
     ) private view returns (uint256 amount) {
         address token = patch.token;
@@ -253,12 +489,12 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     function _createCheckpoints(
         uint256 invocationId,
         uint256 callIndex,
-        BalanceCheckpoint[] calldata checkpoints,
+        BalanceCheckpoint[] memory checkpoints,
         BalanceCache memory cache
     ) internal {
         uint256 checkpointsLength = checkpoints.length;
         for (uint256 checkpointIndex = 0; checkpointIndex < checkpointsLength; ++checkpointIndex) {
-            BalanceCheckpoint calldata checkpoint = checkpoints[checkpointIndex];
+            BalanceCheckpoint memory checkpoint = checkpoints[checkpointIndex];
             address token = checkpoint.token;
             if (token == address(0)) {
                 revert InvalidCheckpointToken(callIndex, checkpointIndex);

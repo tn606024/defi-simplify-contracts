@@ -6,7 +6,7 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
-/// @dev Proves the final callback-enabled ABI and DSC-78's fail-closed transition.
+/// @dev Proves the final callback-enabled ABI independently from provider behavior.
 contract CallbackAbiTest is DelegatedAccountFixture {
     bytes4 private constant CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR = 0xecadebe3;
 
@@ -33,18 +33,6 @@ contract CallbackAbiTest is DelegatedAccountFixture {
 
         assertEq(recordingTarget.count(), 3, "every ordinary target should execute");
         assertEq(recordingTarget.total(), 60, "ordinary calls should preserve order and values");
-    }
-
-    function test_CallbackFlagAtFirstIndexFailsBeforeAnyTargetExecutes() external {
-        _assertSingleCallbackFlagFailsBeforeAnyTarget(0);
-    }
-
-    function test_CallbackFlagAtMiddleIndexFailsBeforeAnyTargetExecutes() external {
-        _assertSingleCallbackFlagFailsBeforeAnyTarget(1);
-    }
-
-    function test_CallbackFlagAtLastIndexFailsBeforeAnyTargetExecutes() external {
-        _assertSingleCallbackFlagFailsBeforeAnyTarget(2);
     }
 
     function test_MultipleCallbackFlagsReportBothIndicesBeforeAnyTargetExecutes() external {
@@ -105,23 +93,6 @@ contract CallbackAbiTest is DelegatedAccountFixture {
             abi.decode(abi.encode(manyCallEnvelope), (IDefiSimplify7702Account.CallbackEnvelope));
         assertEq(decodedMany.callbackCalls.length, 2);
         assertTrue(decodedMany.callbackCalls[1].expectsCallback, "nested callback flag must remain ABI-visible");
-    }
-
-    function _assertSingleCallbackFlagFailsBeforeAnyTarget(uint256 callbackCallIndex) private {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildThreeRecordingCalls();
-        calls[callbackCallIndex].expectsCallback = true;
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IDefiSimplify7702Account.CallbackNotConsumed.selector,
-                callbackCallIndex,
-                address(recordingTarget),
-                uint8(0)
-            )
-        );
-        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
-
-        assertEq(recordingTarget.count(), 0, "callback transition must fail before every target");
     }
 
     function _buildThreeRecordingCalls() private view returns (IDefiSimplify7702Account.DynamicCall[] memory calls) {
