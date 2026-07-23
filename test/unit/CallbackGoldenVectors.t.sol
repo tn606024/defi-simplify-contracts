@@ -144,6 +144,13 @@ contract CallbackGoldenVectorsTest is Test {
         );
         _assertGoldenError(
             fixture,
+            "FlashLoanRepaymentBalanceReadFailed",
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.FlashLoanRepaymentBalanceReadFailed.selector, 1, FIRST_ADDRESS, reason
+            )
+        );
+        _assertGoldenError(
+            fixture,
             "FlashLoanRepaymentApprovalFailed",
             abi.encodeWithSelector(
                 IDefiSimplify7702Account.FlashLoanRepaymentApprovalFailed.selector, 1, FIRST_ADDRESS, TARGET, reason
