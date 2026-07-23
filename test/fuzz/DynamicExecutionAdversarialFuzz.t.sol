@@ -8,13 +8,13 @@ import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 /// @dev Adversarial nested-revert coverage for dynamic call atomicity and error wrapping.
 contract DynamicExecutionAdversarialFuzzTest is DelegatedAccountFixture {
-    DelegatedPair private pair;
-    DynamicExecutionTarget private target;
+    DelegatedDefiSimplifyAccount private accountUnderTest;
+    DynamicExecutionTarget private recordingTarget;
 
     /// @dev Installs the delegated account fixture and target used by each fuzz case.
     function setUp() external {
-        pair = _deployDelegatedPair(IEntryPoint(address(this)));
-        target = new DynamicExecutionTarget();
+        accountUnderTest = _deployDelegatedDefiSimplifyAccount(IEntryPoint(address(this)));
+        recordingTarget = new DynamicExecutionTarget();
     }
 
     /// @dev Fuzzes complete nested revert payload preservation and prior-call rollback.
@@ -27,24 +27,28 @@ contract DynamicExecutionAdversarialFuzzTest is DelegatedAccountFixture {
         bytes calldata payload
     ) external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _call(abi.encodeCall(DynamicExecutionTarget.record, (uint256(amount), bytes("rollback"))));
-        calls[1] = _call(abi.encodeCall(DynamicExecutionTarget.fail, (code, payload)));
+        calls[0] = _buildTargetCall(abi.encodeCall(DynamicExecutionTarget.record, (uint256(amount), bytes("rollback"))));
+        calls[1] = _buildTargetCall(abi.encodeCall(DynamicExecutionTarget.fail, (code, payload)));
         bytes memory targetReason = abi.encodeWithSelector(DynamicExecutionTarget.TargetFailure.selector, code, payload);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), targetReason
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(recordingTarget), targetReason
             )
         );
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        assertEq(target.count(), 0, "earlier target state survived nested revert");
-        assertEq(target.total(), 0, "earlier target total survived nested revert");
+        assertEq(recordingTarget.count(), 0, "earlier target state survived nested revert");
+        assertEq(recordingTarget.total(), 0, "earlier target total survived nested revert");
     }
 
-    function _call(bytes memory data) private view returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall.target = address(target);
-        dynamicCall.data = data;
+    function _buildTargetCall(bytes memory callData)
+        private
+        view
+        returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
+    {
+        dynamicCall.target = address(recordingTarget);
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }

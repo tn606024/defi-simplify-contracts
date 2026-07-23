@@ -12,52 +12,53 @@ contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
     address payable private constant BENEFICIARY = payable(address(0xBEEF));
 
     EntryPoint private entryPoint;
-    DelegatedPair private pair;
+    DelegatedDefiSimplifyAccount private accountUnderTest;
 
     function setUp() external {
         entryPoint = new EntryPoint();
-        pair = _deployDelegatedPair(entryPoint);
-        vm.deal(pair.customAccount, 1 ether);
+        accountUnderTest = _deployDelegatedDefiSimplifyAccount(entryPoint);
+        vm.deal(accountUnderTest.delegatedEoa, 1 ether);
     }
 
     function test_EntryPointDepositToIsAValidDynamicTarget() external {
         uint256 deposit = 0.25 ether;
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _emptyDynamicCall(
-            address(entryPoint), abi.encodeCall(IStakeManager.depositTo, (pair.customAccount)), deposit
+        calls[0] = _buildUnpatchedDynamicCall(
+            address(entryPoint), abi.encodeCall(IStakeManager.depositTo, (accountUnderTest.delegatedEoa)), deposit
         );
 
-        vm.prank(pair.customAccount, pair.customAccount);
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        vm.prank(accountUnderTest.delegatedEoa, accountUnderTest.delegatedEoa);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        assertEq(entryPoint.balanceOf(pair.customAccount), deposit, "EntryPoint deposit");
-        assertEq(pair.customAccount.balance, 0.75 ether, "account native balance");
+        assertEq(entryPoint.balanceOf(accountUnderTest.delegatedEoa), deposit, "EntryPoint deposit");
+        assertEq(accountUnderTest.delegatedEoa.balance, 0.75 ether, "account native balance");
     }
 
     function test_EntryPointHandleOpsTargetFailsWithEntryPointReentrancy() external {
         PackedUserOperation[] memory operations = new PackedUserOperation[](0);
         bytes memory targetReason = abi.encodeWithSelector(EntryPoint.Reentrancy.selector);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] =
-            _emptyDynamicCall(address(entryPoint), abi.encodeCall(IEntryPoint.handleOps, (operations, BENEFICIARY)), 0);
+        calls[0] = _buildUnpatchedDynamicCall(
+            address(entryPoint), abi.encodeCall(IEntryPoint.handleOps, (operations, BENEFICIARY)), 0
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(entryPoint), targetReason
             )
         );
-        vm.prank(pair.customAccount, pair.customAccount);
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        vm.prank(accountUnderTest.delegatedEoa, accountUnderTest.delegatedEoa);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
     }
 
-    function _emptyDynamicCall(address target, bytes memory data, uint256 value)
+    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData, uint256 callValue)
         private
         pure
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = target;
-        dynamicCall.value = value;
-        dynamicCall.data = data;
+        dynamicCall.target = callTarget;
+        dynamicCall.value = callValue;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }

@@ -8,37 +8,37 @@ import {Test} from "forge-std/Test.sol";
 /// @dev Verifies language-neutral dynamic execution fixtures against Solidity ABI encoding.
 contract DynamicGoldenVectorsTest is Test {
     string private constant FIXTURE_PATH = "abi/DynamicExecution.golden.json";
-    address private constant TOKEN = 0x1111111111111111111111111111111111111111;
-    address private constant OTHER_TOKEN = 0x2222222222222222222222222222222222222222;
-    address private constant TARGET = 0x3333333333333333333333333333333333333333;
+    address private constant FIXTURE_TOKEN = 0x1111111111111111111111111111111111111111;
+    address private constant FIXTURE_OTHER_TOKEN = 0x2222222222222222222222222222222222222222;
+    address private constant FIXTURE_TARGET = 0x3333333333333333333333333333333333333333;
     bytes32 private constant CHECKPOINT_ID = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
     bytes4 private constant CAPTURE_SELECTOR = bytes4(keccak256("capture(uint256,uint256,uint256)"));
     uint256 private constant INVOCATION_ID = 7;
     uint256 private constant PRODUCER_OUTPUT = 123_456_789;
-    uint16 private constant BPS = 3_750;
+    uint16 private constant FIXTURE_BPS = 3_750;
 
     /// @dev Verifies struct/function encoding, patch isolation, and full-precision amount math.
     function test_GoldenPlanEncodingPatchingAndAmountMatchFixture() external view {
         string memory fixture = vm.readFile(FIXTURE_PATH);
         bytes memory original =
             abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(0x1111), uint256(0x2222), uint256(0x3333));
-        uint256 resolvedAmount = Math.mulDiv(PRODUCER_OUTPUT, BPS, 10_000);
+        uint256 resolvedAmount = Math.mulDiv(PRODUCER_OUTPUT, FIXTURE_BPS, 10_000);
         bytes memory patched =
             abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(0x1111), uint256(0x2222), uint256(0x3333));
         assembly ("memory-safe") {
             mstore(add(add(patched, 32), 36), resolvedAmount)
         }
 
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _goldenCalls(original);
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildGoldenDynamicCalls(original);
 
         assertEq(vm.parseJsonUint(fixture, ".version"), 1, "fixture version");
-        assertEq(vm.parseJsonAddress(fixture, ".token"), TOKEN, "fixture token");
-        assertEq(vm.parseJsonAddress(fixture, ".otherToken"), OTHER_TOKEN, "fixture other token");
-        assertEq(vm.parseJsonAddress(fixture, ".target"), TARGET, "fixture target");
+        assertEq(vm.parseJsonAddress(fixture, ".token"), FIXTURE_TOKEN, "fixture token");
+        assertEq(vm.parseJsonAddress(fixture, ".otherToken"), FIXTURE_OTHER_TOKEN, "fixture other token");
+        assertEq(vm.parseJsonAddress(fixture, ".target"), FIXTURE_TARGET, "fixture target");
         assertEq(vm.parseJsonBytes32(fixture, ".checkpointId"), CHECKPOINT_ID, "fixture checkpoint id");
         assertEq(vm.parseJsonUint(fixture, ".invocationId"), INVOCATION_ID, "fixture invocation id");
         assertEq(vm.parseJsonUint(fixture, ".patchOffset"), 36, "fixture patch offset");
-        assertEq(vm.parseJsonUint(fixture, ".bps"), BPS, "fixture bps");
+        assertEq(vm.parseJsonUint(fixture, ".bps"), FIXTURE_BPS, "fixture bps");
         assertEq(vm.parseJsonUint(fixture, ".producerOutput"), PRODUCER_OUTPUT, "fixture producer output");
         assertEq(vm.parseJsonUint(fixture, ".resolvedAmount"), resolvedAmount, "fixture resolved amount");
         assertEq(vm.parseJsonBytes(fixture, ".originalCalldata"), original, "fixture original calldata");
@@ -76,88 +76,99 @@ contract DynamicGoldenVectorsTest is Test {
         string memory fixture = vm.readFile(FIXTURE_PATH);
         bytes memory reason = hex"deadbeef";
 
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture, "EmptyDynamicBatch", abi.encodeWithSelector(IDefiSimplify7702Account.EmptyDynamicBatch.selector)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "DynamicExecutionReentered",
             abi.encodeWithSelector(IDefiSimplify7702Account.DynamicExecutionReentered.selector)
         );
-        _assertError(
-            fixture, "InvalidTarget", abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 1, TARGET)
+        _assertGoldenErrorEncoding(
+            fixture,
+            "InvalidTarget",
+            abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 1, FIXTURE_TARGET)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidCheckpointToken",
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidCheckpointToken.selector, 1, 2)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidCheckpointId",
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidCheckpointId.selector, 1, 2)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "CheckpointAlreadyExists",
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointAlreadyExists.selector, 1, 2, CHECKPOINT_ID)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "CheckpointNotFound",
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointNotFound.selector, 1, 2, CHECKPOINT_ID)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "CheckpointTokenMismatch",
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.CheckpointTokenMismatch.selector, 1, 2, CHECKPOINT_ID, TOKEN, OTHER_TOKEN
+                IDefiSimplify7702Account.CheckpointTokenMismatch.selector,
+                1,
+                2,
+                CHECKPOINT_ID,
+                FIXTURE_TOKEN,
+                FIXTURE_OTHER_TOKEN
             )
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidPatchToken",
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidPatchToken.selector, 1, 2)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidPatchOffset",
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidPatchOffset.selector, 1, 2, 5, 100)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "UnsortedPatchOffset",
             abi.encodeWithSelector(IDefiSimplify7702Account.UnsortedPatchOffset.selector, 1, 2, 68, 36)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture, "InvalidBps", abi.encodeWithSelector(IDefiSimplify7702Account.InvalidBps.selector, 1, 2, 10_001)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "UnexpectedCheckpointId",
             abi.encodeWithSelector(IDefiSimplify7702Account.UnexpectedCheckpointId.selector, 1, 2, CHECKPOINT_ID)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "CheckpointBalanceReadFailed",
-            abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointBalanceReadFailed.selector, 1, 2, TOKEN, reason)
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.CheckpointBalanceReadFailed.selector, 1, 2, FIXTURE_TOKEN, reason
+            )
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "PatchBalanceReadFailed",
-            abi.encodeWithSelector(IDefiSimplify7702Account.PatchBalanceReadFailed.selector, 1, 2, TOKEN, reason)
+            abi.encodeWithSelector(
+                IDefiSimplify7702Account.PatchBalanceReadFailed.selector, 1, 2, FIXTURE_TOKEN, reason
+            )
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "BalanceBelowCheckpoint",
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.BalanceBelowCheckpoint.selector, 1, 2, TOKEN, CHECKPOINT_ID, 900, 1_000
+                IDefiSimplify7702Account.BalanceBelowCheckpoint.selector, 1, 2, FIXTURE_TOKEN, CHECKPOINT_ID, 900, 1_000
             )
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "DynamicCallFailed",
-            abi.encodeWithSelector(IDefiSimplify7702Account.DynamicCallFailed.selector, 1, TARGET, reason)
+            abi.encodeWithSelector(IDefiSimplify7702Account.DynamicCallFailed.selector, 1, FIXTURE_TARGET, reason)
         );
     }
 
@@ -186,28 +197,32 @@ contract DynamicGoldenVectorsTest is Test {
         );
     }
 
-    function _goldenCalls(bytes memory original)
+    function _buildGoldenDynamicCalls(bytes memory originalCalldata)
         private
         pure
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0].target = TARGET;
+        calls[0].target = FIXTURE_TARGET;
         calls[0].value = 12_345;
-        calls[0].data = original;
+        calls[0].data = originalCalldata;
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        calls[0].checkpointsBefore[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: TOKEN, id: CHECKPOINT_ID});
+        calls[0].checkpointsBefore[0] =
+            IDefiSimplify7702Account.BalanceCheckpoint({token: FIXTURE_TOKEN, id: CHECKPOINT_ID});
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](1);
         calls[0].patches[0] = IDefiSimplify7702Account.BalancePatch({
-            token: TOKEN,
+            token: FIXTURE_TOKEN,
             checkpointId: CHECKPOINT_ID,
             offset: 36,
-            bps: BPS,
+            bps: FIXTURE_BPS,
             source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
         });
     }
 
-    function _assertError(string memory fixture, string memory errorName, bytes memory actual) private pure {
+    function _assertGoldenErrorEncoding(string memory fixture, string memory errorName, bytes memory actual)
+        private
+        pure
+    {
         assertEq(vm.parseJsonBytes(fixture, string.concat(".errors.", errorName)), actual, errorName);
     }
 }

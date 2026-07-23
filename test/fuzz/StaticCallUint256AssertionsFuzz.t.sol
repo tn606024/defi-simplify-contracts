@@ -10,12 +10,12 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
     uint32 private constant NO_ACCOUNT_BINDING = type(uint32).max;
     uint32 private constant ACCOUNT_ARGUMENT_OFFSET = 36;
 
-    StaticCallUint256Assertions private uint256Assertions;
-    StaticCallUint256TargetMock private readTarget;
+    StaticCallUint256Assertions private genericAssertions;
+    StaticCallUint256TargetMock private tupleReadTarget;
 
     function setUp() external {
-        uint256Assertions = new StaticCallUint256Assertions();
-        readTarget = new StaticCallUint256TargetMock();
+        genericAssertions = new StaticCallUint256Assertions();
+        tupleReadTarget = new StaticCallUint256TargetMock();
     }
 
     function testFuzz_AccountBindingChangesOnlyConfiguredCalldataWord(
@@ -31,11 +31,11 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
         );
         uint256 expectedHash = uint256(keccak256(expected));
 
-        uint256Assertions.assertStaticCallUint256AtLeast(
-            address(readTarget), original, ACCOUNT_ARGUMENT_OFFSET, 0, expectedHash
+        genericAssertions.assertStaticCallUint256AtLeast(
+            address(tupleReadTarget), original, ACCOUNT_ARGUMENT_OFFSET, 0, expectedHash
         );
-        uint256Assertions.assertStaticCallUint256AtMost(
-            address(readTarget), original, ACCOUNT_ARGUMENT_OFFSET, 0, expectedHash
+        genericAssertions.assertStaticCallUint256AtMost(
+            address(tupleReadTarget), original, ACCOUNT_ARGUMENT_OFFSET, 0, expectedHash
         );
     }
 
@@ -43,14 +43,14 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
         bytes memory globalReadCall = abi.encodeCall(StaticCallUint256TargetMock.exactReturn, (actual));
 
         if (actual >= bound) {
-            uint256Assertions.assertStaticCallUint256AtLeast(
-                address(readTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
+            genericAssertions.assertStaticCallUint256AtLeast(
+                address(tupleReadTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
             );
         } else {
             vm.expectRevert(
                 abi.encodeWithSelector(
                     IStaticCallUint256Assertions.StaticCallUint256BelowMinimum.selector,
-                    address(readTarget),
+                    address(tupleReadTarget),
                     StaticCallUint256TargetMock.exactReturn.selector,
                     uint256(NO_ACCOUNT_BINDING),
                     0,
@@ -58,20 +58,20 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
                     bound
                 )
             );
-            uint256Assertions.assertStaticCallUint256AtLeast(
-                address(readTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
+            genericAssertions.assertStaticCallUint256AtLeast(
+                address(tupleReadTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
             );
         }
 
         if (actual <= bound) {
-            uint256Assertions.assertStaticCallUint256AtMost(
-                address(readTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
+            genericAssertions.assertStaticCallUint256AtMost(
+                address(tupleReadTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
             );
         } else {
             vm.expectRevert(
                 abi.encodeWithSelector(
                     IStaticCallUint256Assertions.StaticCallUint256AboveMaximum.selector,
-                    address(readTarget),
+                    address(tupleReadTarget),
                     StaticCallUint256TargetMock.exactReturn.selector,
                     uint256(NO_ACCOUNT_BINDING),
                     0,
@@ -79,8 +79,8 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
                     bound
                 )
             );
-            uint256Assertions.assertStaticCallUint256AtMost(
-                address(readTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
+            genericAssertions.assertStaticCallUint256AtMost(
+                address(tupleReadTarget), globalReadCall, NO_ACCOUNT_BINDING, 0, bound
             );
         }
     }
@@ -100,7 +100,9 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
                 )
             );
         }
-        uint256Assertions.assertStaticCallUint256AtLeast(address(readTarget), accountValueCall, accountOffset, 0, 0);
+        genericAssertions.assertStaticCallUint256AtLeast(
+            address(tupleReadTarget), accountValueCall, accountOffset, 0, 0
+        );
     }
 
     function testFuzz_ReturnOffsetValidationMatchesFixedWordModel(uint32 returnOffset) external {
@@ -114,8 +116,8 @@ contract StaticCallUint256AssertionsFuzzTest is Test {
                 abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, offset, 96)
             );
         }
-        uint256Assertions.assertStaticCallUint256AtLeast(
-            address(readTarget), threeWordReturnCall, NO_ACCOUNT_BINDING, returnOffset, 0
+        genericAssertions.assertStaticCallUint256AtLeast(
+            address(tupleReadTarget), threeWordReturnCall, NO_ACCOUNT_BINDING, returnOffset, 0
         );
     }
 }

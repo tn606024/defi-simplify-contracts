@@ -89,22 +89,22 @@ contract StaticCallUint256AssertionsGoldenVectorsTest is Test {
     function test_GoldenIndexedErrorsMatchFixture() external view {
         string memory fixture = vm.readFile(FIXTURE_PATH);
 
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidAssertionTarget",
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionTarget.selector, READ_TARGET)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidAssertionAccountOffset",
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionAccountOffset.selector, 5, 100)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "InvalidAssertionReturnOffset",
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, 96, 96)
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "StaticCallUint256BelowMinimum",
             abi.encodeWithSelector(
@@ -117,7 +117,7 @@ contract StaticCallUint256AssertionsGoldenVectorsTest is Test {
                 uint256(700)
             )
         );
-        _assertError(
+        _assertGoldenErrorEncoding(
             fixture,
             "StaticCallUint256AboveMaximum",
             abi.encodeWithSelector(
@@ -132,7 +132,10 @@ contract StaticCallUint256AssertionsGoldenVectorsTest is Test {
         );
     }
 
-    function _assertError(string memory fixture, string memory errorName, bytes memory actual) private pure {
+    function _assertGoldenErrorEncoding(string memory fixture, string memory errorName, bytes memory actual)
+        private
+        pure
+    {
         assertEq(vm.parseJsonBytes(fixture, string.concat(".errors.", errorName)), actual, errorName);
     }
 }

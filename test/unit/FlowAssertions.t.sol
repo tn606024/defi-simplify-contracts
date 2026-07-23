@@ -14,87 +14,87 @@ import {
 } from "../mocks/FlowAssertionsMocks.sol";
 
 contract FlowAssertionsTest is Test {
-    bytes32 private constant CHECKPOINT_A = keccak256("flow-assertion-a");
-    bytes32 private constant CHECKPOINT_B = keccak256("flow-assertion-b");
+    bytes32 private constant CHECKPOINT_A_ID = keccak256("flow-assertion-a");
+    bytes32 private constant CHECKPOINT_B_ID = keccak256("flow-assertion-b");
 
-    FlowAssertionsHarness private assertions;
-    AssertionBalanceToken private token;
+    FlowAssertionsHarness private flowAssertions;
+    AssertionBalanceToken private balanceToken;
 
     function setUp() external {
-        assertions = new FlowAssertionsHarness();
-        token = new AssertionBalanceToken();
+        flowAssertions = new FlowAssertionsHarness();
+        balanceToken = new AssertionBalanceToken();
     }
 
     function test_SnapshotStoresIndependentPresenceTokenAndBalanceFields() external {
-        token.setBalance(address(this), 101);
+        balanceToken.setBalance(address(this), 101);
 
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
 
         (bool present, address snapshotToken, uint256 snapshotBalance) =
-            assertions.snapshotRecord(address(this), CHECKPOINT_A);
+            flowAssertions.snapshotRecord(address(this), CHECKPOINT_A_ID);
         assertTrue(present, "snapshot presence");
-        assertEq(snapshotToken, address(token), "snapshot token");
+        assertEq(snapshotToken, address(balanceToken), "snapshot token");
         assertEq(snapshotBalance, 101, "snapshot balance");
     }
 
     function test_ZeroBalanceStillCreatesPresentSnapshot() external {
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
 
         (bool present, address snapshotToken, uint256 snapshotBalance) =
-            assertions.snapshotRecord(address(this), CHECKPOINT_A);
+            flowAssertions.snapshotRecord(address(this), CHECKPOINT_A_ID);
         assertTrue(present, "zero-balance presence");
-        assertEq(snapshotToken, address(token), "zero-balance token");
+        assertEq(snapshotToken, address(balanceToken), "zero-balance token");
         assertEq(snapshotBalance, 0, "zero-balance value");
     }
 
     function test_ZeroTokenIsRejectedBeforeAnySnapshotLookupOrBalanceRead() external {
         vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.InvalidAssertionToken.selector, address(0)));
-        assertions.snapshotBalance(address(0), CHECKPOINT_A);
+        flowAssertions.snapshotBalance(address(0), CHECKPOINT_A_ID);
 
         vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.InvalidAssertionToken.selector, address(0)));
-        assertions.assertBalanceAtLeast(address(0), 0);
+        flowAssertions.assertBalanceAtLeast(address(0), 0);
 
         vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.InvalidAssertionToken.selector, address(0)));
-        assertions.assertBalanceIncreaseAtLeast(address(0), CHECKPOINT_A, 0);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(0), CHECKPOINT_A_ID, 0);
 
         vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.InvalidAssertionToken.selector, address(0)));
-        assertions.assertBalanceDecreaseAtMost(address(0), CHECKPOINT_A, 0);
+        flowAssertions.assertBalanceDecreaseAtMost(address(0), CHECKPOINT_A_ID, 0);
     }
 
     function test_ZeroCheckpointIdIsRejectedWhenSnapshotIsCreated() external {
         vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.InvalidAssertionCheckpointId.selector, bytes32(0)));
-        assertions.snapshotBalance(address(token), bytes32(0));
+        flowAssertions.snapshotBalance(address(balanceToken), bytes32(0));
     }
 
     function test_DuplicateIdForSameSenderRevertsBeforeSecondBalanceRead() external {
         RevertingAssertionBalanceToken revertingToken = new RevertingAssertionBalanceToken(7, "unread");
-        token.setBalance(address(this), 103);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
+        balanceToken.setBalance(address(this), 103);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IFlowAssertions.AssertionCheckpointAlreadyExists.selector, address(this), CHECKPOINT_A
+                IFlowAssertions.AssertionCheckpointAlreadyExists.selector, address(this), CHECKPOINT_A_ID
             )
         );
-        assertions.snapshotBalance(address(revertingToken), CHECKPOINT_A);
+        flowAssertions.snapshotBalance(address(revertingToken), CHECKPOINT_A_ID);
     }
 
     function test_DifferentSendersMayReuseTheSameCheckpointId() external {
         AssertionCaller first = new AssertionCaller();
         AssertionCaller second = new AssertionCaller();
-        token.setBalance(address(first), 107);
-        token.setBalance(address(second), 109);
+        balanceToken.setBalance(address(first), 107);
+        balanceToken.setBalance(address(second), 109);
 
-        first.snapshot(assertions, address(token), CHECKPOINT_A);
-        second.snapshot(assertions, address(token), CHECKPOINT_A);
+        first.snapshot(flowAssertions, address(balanceToken), CHECKPOINT_A_ID);
+        second.snapshot(flowAssertions, address(balanceToken), CHECKPOINT_A_ID);
 
         (bool firstPresent, address firstToken, uint256 firstBalance) =
-            assertions.snapshotRecord(address(first), CHECKPOINT_A);
+            flowAssertions.snapshotRecord(address(first), CHECKPOINT_A_ID);
         (bool secondPresent, address secondToken, uint256 secondBalance) =
-            assertions.snapshotRecord(address(second), CHECKPOINT_A);
+            flowAssertions.snapshotRecord(address(second), CHECKPOINT_A_ID);
         assertTrue(firstPresent && secondPresent, "sender-scoped snapshots");
-        assertEq(firstToken, address(token), "first token");
-        assertEq(secondToken, address(token), "second token");
+        assertEq(firstToken, address(balanceToken), "first token");
+        assertEq(secondToken, address(balanceToken), "second token");
         assertEq(firstBalance, 107, "first balance");
         assertEq(secondBalance, 109, "second balance");
     }
@@ -102,129 +102,135 @@ contract FlowAssertionsTest is Test {
     function test_OneSenderCannotConsumeAnotherSendersSnapshot() external {
         AssertionCaller first = new AssertionCaller();
         AssertionCaller second = new AssertionCaller();
-        first.snapshot(assertions, address(token), CHECKPOINT_A);
+        first.snapshot(flowAssertions, address(balanceToken), CHECKPOINT_A_ID);
 
         vm.expectRevert(
-            abi.encodeWithSelector(IFlowAssertions.AssertionCheckpointNotFound.selector, address(second), CHECKPOINT_A)
+            abi.encodeWithSelector(
+                IFlowAssertions.AssertionCheckpointNotFound.selector, address(second), CHECKPOINT_A_ID
+            )
         );
-        second.assertIncrease(assertions, address(token), CHECKPOINT_A, 0);
+        second.assertIncrease(flowAssertions, address(balanceToken), CHECKPOINT_A_ID, 0);
     }
 
     function test_DistinctCheckpointIdsForOneSenderRemainIndependent() external {
-        token.setBalance(address(this), 113);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        token.setBalance(address(this), 127);
-        assertions.snapshotBalance(address(token), CHECKPOINT_B);
+        balanceToken.setBalance(address(this), 113);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        balanceToken.setBalance(address(this), 127);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_B_ID);
 
-        (, address tokenA, uint256 balanceA) = assertions.snapshotRecord(address(this), CHECKPOINT_A);
-        (, address tokenB, uint256 balanceB) = assertions.snapshotRecord(address(this), CHECKPOINT_B);
-        assertEq(tokenA, address(token), "checkpoint A token");
-        assertEq(tokenB, address(token), "checkpoint B token");
+        (, address tokenA, uint256 balanceA) = flowAssertions.snapshotRecord(address(this), CHECKPOINT_A_ID);
+        (, address tokenB, uint256 balanceB) = flowAssertions.snapshotRecord(address(this), CHECKPOINT_B_ID);
+        assertEq(tokenA, address(balanceToken), "checkpoint A token");
+        assertEq(tokenB, address(balanceToken), "checkpoint B token");
         assertEq(balanceA, 113, "checkpoint A balance");
         assertEq(balanceB, 127, "checkpoint B balance");
     }
 
     function test_BalanceAtLeastPassesAtEqualityAndAboveIncludingZero() external {
-        token.setBalance(address(this), 233);
+        balanceToken.setBalance(address(this), 233);
 
-        assertions.assertBalanceAtLeast(address(token), 0);
-        assertions.assertBalanceAtLeast(address(token), 232);
-        assertions.assertBalanceAtLeast(address(token), 233);
+        flowAssertions.assertBalanceAtLeast(address(balanceToken), 0);
+        flowAssertions.assertBalanceAtLeast(address(balanceToken), 232);
+        flowAssertions.assertBalanceAtLeast(address(balanceToken), 233);
     }
 
     function test_BalanceAtLeastReadsTheDirectCaller() external {
         AssertionCaller caller = new AssertionCaller();
-        token.setBalance(address(this), 1);
-        token.setBalance(address(caller), 131);
+        balanceToken.setBalance(address(this), 1);
+        balanceToken.setBalance(address(caller), 131);
 
-        caller.assertAtLeast(assertions, address(token), 131);
+        caller.assertAtLeast(flowAssertions, address(balanceToken), 131);
     }
 
     function test_BalanceBelowMinimumReportsActualAndRequiredValues() external {
-        token.setBalance(address(this), 137);
+        balanceToken.setBalance(address(this), 137);
 
-        vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.BalanceBelowMinimum.selector, address(token), 137, 139));
-        assertions.assertBalanceAtLeast(address(token), 139);
+        vm.expectRevert(
+            abi.encodeWithSelector(IFlowAssertions.BalanceBelowMinimum.selector, address(balanceToken), 137, 139)
+        );
+        flowAssertions.assertBalanceAtLeast(address(balanceToken), 139);
     }
 
     function test_IncreaseAtLeastUsesExactPositiveDeltaAndReportsFailure() external {
-        token.setBalance(address(this), 149);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        token.setBalance(address(this), 160);
+        balanceToken.setBalance(address(this), 149);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        balanceToken.setBalance(address(this), 160);
 
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 11);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 11);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IFlowAssertions.BalanceIncreaseTooSmall.selector, address(token), CHECKPOINT_A, 11, 12
+                IFlowAssertions.BalanceIncreaseTooSmall.selector, address(balanceToken), CHECKPOINT_A_ID, 11, 12
             )
         );
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 12);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 12);
     }
 
     function test_IncreaseAtLeastSaturatesToZeroWhenBalanceFalls() external {
-        token.setBalance(address(this), 163);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        token.setBalance(address(this), 151);
+        balanceToken.setBalance(address(this), 163);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        balanceToken.setBalance(address(this), 151);
 
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 0);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(IFlowAssertions.BalanceIncreaseTooSmall.selector, address(token), CHECKPOINT_A, 0, 1)
-        );
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 1);
-    }
-
-    function test_IncreaseAtLeastSaturatesToZeroAtEqualBalance() external {
-        token.setBalance(address(this), 167);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 0);
-    }
-
-    function test_DecreaseAtMostUsesExactPositiveDeltaAndReportsFailure() external {
-        token.setBalance(address(this), 173);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        token.setBalance(address(this), 160);
-
-        assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT_A, 13);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 0);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IFlowAssertions.BalanceDecreaseTooLarge.selector, address(token), CHECKPOINT_A, 13, 12
+                IFlowAssertions.BalanceIncreaseTooSmall.selector, address(balanceToken), CHECKPOINT_A_ID, 0, 1
             )
         );
-        assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT_A, 12);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 1);
+    }
+
+    function test_IncreaseAtLeastSaturatesToZeroAtEqualBalance() external {
+        balanceToken.setBalance(address(this), 167);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 0);
+    }
+
+    function test_DecreaseAtMostUsesExactPositiveDeltaAndReportsFailure() external {
+        balanceToken.setBalance(address(this), 173);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        balanceToken.setBalance(address(this), 160);
+
+        flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_A_ID, 13);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IFlowAssertions.BalanceDecreaseTooLarge.selector, address(balanceToken), CHECKPOINT_A_ID, 13, 12
+            )
+        );
+        flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_A_ID, 12);
     }
 
     function test_DecreaseAtMostSaturatesToZeroWhenBalanceRises() external {
-        token.setBalance(address(this), 179);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        token.setBalance(address(this), 191);
+        balanceToken.setBalance(address(this), 179);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        balanceToken.setBalance(address(this), 191);
 
-        assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT_A, 0);
+        flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_A_ID, 0);
     }
 
     function test_DecreaseAtMostSaturatesToZeroAtEqualBalance() external {
-        token.setBalance(address(this), 193);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
+        balanceToken.setBalance(address(this), 193);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
 
-        assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT_A, 0);
+        flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_A_ID, 0);
     }
 
     function test_SuccessfulAssertionsDoNotConsumeSnapshot() external {
-        token.setBalance(address(this), 197);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        token.setBalance(address(this), 211);
+        balanceToken.setBalance(address(this), 197);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        balanceToken.setBalance(address(this), 211);
 
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 14);
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 14);
-        assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT_A, 0);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 14);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 14);
+        flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_A_ID, 0);
 
         (bool present, address snapshotToken, uint256 snapshotBalance) =
-            assertions.snapshotRecord(address(this), CHECKPOINT_A);
+            flowAssertions.snapshotRecord(address(this), CHECKPOINT_A_ID);
         assertTrue(present, "snapshot consumed");
-        assertEq(snapshotToken, address(token), "snapshot token changed");
+        assertEq(snapshotToken, address(balanceToken), "snapshot token changed");
         assertEq(snapshotBalance, 197, "snapshot balance changed");
     }
 
@@ -232,40 +238,40 @@ contract FlowAssertionsTest is Test {
         RevertingAssertionBalanceToken revertingToken = new RevertingAssertionBalanceToken(17, "must-not-read");
 
         vm.expectRevert(
-            abi.encodeWithSelector(IFlowAssertions.AssertionCheckpointNotFound.selector, address(this), CHECKPOINT_A)
+            abi.encodeWithSelector(IFlowAssertions.AssertionCheckpointNotFound.selector, address(this), CHECKPOINT_A_ID)
         );
-        assertions.assertBalanceIncreaseAtLeast(address(revertingToken), CHECKPOINT_A, type(uint256).max);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(revertingToken), CHECKPOINT_A_ID, type(uint256).max);
 
         vm.expectRevert(
-            abi.encodeWithSelector(IFlowAssertions.AssertionCheckpointNotFound.selector, address(this), CHECKPOINT_A)
+            abi.encodeWithSelector(IFlowAssertions.AssertionCheckpointNotFound.selector, address(this), CHECKPOINT_A_ID)
         );
-        assertions.assertBalanceDecreaseAtMost(address(revertingToken), CHECKPOINT_A, type(uint256).max);
+        flowAssertions.assertBalanceDecreaseAtMost(address(revertingToken), CHECKPOINT_A_ID, type(uint256).max);
     }
 
     function test_TokenMismatchRevertsBeforeCurrentBalanceReadAndThreshold() external {
         RevertingAssertionBalanceToken revertingToken = new RevertingAssertionBalanceToken(19, "must-not-read");
-        token.setBalance(address(this), 223);
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
+        balanceToken.setBalance(address(this), 223);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
 
         bytes memory mismatch = abi.encodeWithSelector(
             IFlowAssertions.AssertionCheckpointTokenMismatch.selector,
             address(this),
-            CHECKPOINT_A,
+            CHECKPOINT_A_ID,
             address(revertingToken),
-            address(token)
+            address(balanceToken)
         );
         vm.expectRevert(mismatch);
-        assertions.assertBalanceIncreaseAtLeast(address(revertingToken), CHECKPOINT_A, type(uint256).max);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(revertingToken), CHECKPOINT_A_ID, type(uint256).max);
 
         vm.expectRevert(mismatch);
-        assertions.assertBalanceDecreaseAtMost(address(revertingToken), CHECKPOINT_A, type(uint256).max);
+        flowAssertions.assertBalanceDecreaseAtMost(address(revertingToken), CHECKPOINT_A_ID, type(uint256).max);
     }
 
     function test_ZeroCheckpointReferenceIsReportedAsMissing() external {
         vm.expectRevert(
             abi.encodeWithSelector(IFlowAssertions.AssertionCheckpointNotFound.selector, address(this), bytes32(0))
         );
-        assertions.assertBalanceIncreaseAtLeast(address(token), bytes32(0), 0);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), bytes32(0), 0);
     }
 
     function test_RevertingBalanceReadPreservesCompleteReason() external {
@@ -278,10 +284,10 @@ contract FlowAssertionsTest is Test {
         );
 
         vm.expectRevert(wrapped);
-        assertions.snapshotBalance(address(revertingToken), CHECKPOINT_A);
+        flowAssertions.snapshotBalance(address(revertingToken), CHECKPOINT_A_ID);
 
         vm.expectRevert(wrapped);
-        assertions.assertBalanceAtLeast(address(revertingToken), 0);
+        flowAssertions.assertBalanceAtLeast(address(revertingToken), 0);
     }
 
     function test_ShortSuccessfulBalanceReadPreservesMalformedBytes() external {
@@ -290,7 +296,7 @@ contract FlowAssertionsTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IFlowAssertions.AssertionBalanceReadFailed.selector, address(shortToken), hex"1234")
         );
-        assertions.snapshotBalance(address(shortToken), CHECKPOINT_A);
+        flowAssertions.snapshotBalance(address(shortToken), CHECKPOINT_A_ID);
     }
 
     function test_EmptySuccessfulBalanceReadAndEoaReadPreserveEmptyReason() external {
@@ -300,20 +306,20 @@ contract FlowAssertionsTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IFlowAssertions.AssertionBalanceReadFailed.selector, address(emptyToken), bytes(""))
         );
-        assertions.assertBalanceAtLeast(address(emptyToken), 0);
+        flowAssertions.assertBalanceAtLeast(address(emptyToken), 0);
 
         vm.expectRevert(abi.encodeWithSelector(IFlowAssertions.AssertionBalanceReadFailed.selector, noCode, bytes("")));
-        assertions.assertBalanceAtLeast(noCode, 0);
+        flowAssertions.assertBalanceAtLeast(noCode, 0);
     }
 
     function test_SnapshotAndAssertionsEmitNoCustomEvents() external {
-        token.setBalance(address(this), 227);
+        balanceToken.setBalance(address(this), 227);
 
         vm.recordLogs();
-        assertions.snapshotBalance(address(token), CHECKPOINT_A);
-        assertions.assertBalanceAtLeast(address(token), 227);
-        assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT_A, 0);
-        assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT_A, 0);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_A_ID);
+        flowAssertions.assertBalanceAtLeast(address(balanceToken), 227);
+        flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_A_ID, 0);
+        flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_A_ID, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(logs.length, 0, "unexpected assertion event");
@@ -321,25 +327,25 @@ contract FlowAssertionsTest is Test {
 }
 
 contract FlowAssertionsTransactionLifetimeTest is Test {
-    bytes32 private constant REUSED_CHECKPOINT = keccak256("transaction-lifetime");
+    bytes32 private constant REUSED_CHECKPOINT_ID = keccak256("transaction-lifetime");
 
-    FlowAssertionsHarness private assertions;
-    AssertionBalanceToken private token;
+    FlowAssertionsHarness private flowAssertions;
+    AssertionBalanceToken private balanceToken;
 
     function setUp() external {
-        assertions = new FlowAssertionsHarness();
-        token = new AssertionBalanceToken();
-        token.setBalance(address(this), 229);
-        assertions.snapshotBalance(address(token), REUSED_CHECKPOINT);
+        flowAssertions = new FlowAssertionsHarness();
+        balanceToken = new AssertionBalanceToken();
+        balanceToken.setBalance(address(this), 229);
+        flowAssertions.snapshotBalance(address(balanceToken), REUSED_CHECKPOINT_ID);
     }
 
     function test_SnapshotFromSetUpTransactionDoesNotSurviveIntoTestTransaction() external {
-        assertions.snapshotBalance(address(token), REUSED_CHECKPOINT);
+        flowAssertions.snapshotBalance(address(balanceToken), REUSED_CHECKPOINT_ID);
 
         (bool present, address snapshotToken, uint256 snapshotBalance) =
-            assertions.snapshotRecord(address(this), REUSED_CHECKPOINT);
+            flowAssertions.snapshotRecord(address(this), REUSED_CHECKPOINT_ID);
         assertTrue(present, "test-transaction snapshot absent");
-        assertEq(snapshotToken, address(token), "test-transaction token");
+        assertEq(snapshotToken, address(balanceToken), "test-transaction token");
         assertEq(snapshotBalance, 229, "test-transaction balance");
     }
 }

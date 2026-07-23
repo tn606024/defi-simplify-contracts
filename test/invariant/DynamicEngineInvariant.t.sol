@@ -16,33 +16,33 @@ contract DynamicEngineInvariantHandler {
     address private immutable _initializer;
 
     /// @dev Delegated EOA viewed through the test-only checkpoint inspector ABI.
-    CheckpointTableHarness public account;
+    CheckpointTableHarness public delegatedAccount;
     /// @dev Token whose modeled balances drive checkpoint and patch actions.
-    PatchBalanceToken public immutable token;
+    PatchBalanceToken public immutable balanceToken;
     /// @dev Stateful target compared with the handler's successful-call model.
-    DynamicExecutionTarget public immutable target;
+    DynamicExecutionTarget public immutable recordingTarget;
     /// @dev Calldata capture target used for checkpoint-only invocations.
-    DynamicPatchTarget public immutable patchTarget;
+    DynamicPatchTarget public immutable calldataCaptureTarget;
 
     /// @dev Number of target records expected from successful modeled actions.
-    uint256 public modelTargetCount;
+    uint256 public expectedSuccessfulCallCount;
     /// @dev Sum of target amounts expected from successful modeled actions.
-    uint256 public modelTargetTotal;
+    uint256 public expectedSuccessfulAmountTotal;
 
     constructor() {
         _initializer = msg.sender;
-        token = new PatchBalanceToken();
-        target = new DynamicExecutionTarget();
-        patchTarget = new DynamicPatchTarget();
+        balanceToken = new PatchBalanceToken();
+        recordingTarget = new DynamicExecutionTarget();
+        calldataCaptureTarget = new DynamicPatchTarget();
     }
 
     /// @dev Binds the one delegated account after its implementation has been constructed
     ///      with this handler as EntryPoint. This test-only initialization is single use.
-    /// @param delegatedAccount The EOA carrying the test implementation delegation.
-    function initialize(address payable delegatedAccount) external {
+    /// @param delegatedEoa The EOA carrying the test implementation delegation.
+    function initialize(address payable delegatedEoa) external {
         require(msg.sender == _initializer, "not invariant initializer");
-        require(address(account) == address(0), "invariant account initialized");
-        account = CheckpointTableHarness(delegatedAccount);
+        require(address(delegatedAccount) == address(0), "invariant account initialized");
+        delegatedAccount = CheckpointTableHarness(delegatedEoa);
     }
 
     /// @dev Exercises a CurrentBalance patch and updates the successful-call model.
@@ -50,14 +50,14 @@ contract DynamicEngineInvariantHandler {
     /// @param rawBps Unbounded input normalized into the valid BPS interval.
     function exerciseCurrentBalance(uint128 balance, uint16 rawBps) external {
         uint16 bps = _validBps(rawBps);
-        token.setBalance(address(account), balance);
+        balanceToken.setBalance(address(delegatedAccount), balance);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _recordCall(_singlePatch(_currentPatch(4, bps)));
-        account.executeBatchDynamic(calls);
+        calls[0] = _buildRecordingCall(_onePatch(_currentBalancePatch(4, bps)));
+        delegatedAccount.executeBatchDynamic(calls);
 
-        modelTargetCount += 1;
-        modelTargetTotal += Math.mulDiv(uint256(balance), uint256(bps), 10_000);
+        expectedSuccessfulCallCount += 1;
+        expectedSuccessfulAmountTotal += Math.mulDiv(uint256(balance), uint256(bps), 10_000);
     }
 
     /// @dev Exercises a producer checkpoint followed by a CheckpointDelta consumer.
@@ -68,20 +68,20 @@ contract DynamicEngineInvariantHandler {
     function exerciseCheckpointDelta(uint128 inventory, uint128 produced, uint16 rawBps, bytes32 rawId) external {
         bytes32 checkpointId = _validId(rawId);
         uint16 bps = _validBps(rawBps);
-        token.setBalance(address(account), inventory);
+        balanceToken.setBalance(address(delegatedAccount), inventory);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _call(
-            address(token),
+        calls[0] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(produced))),
-            _singleCheckpoint(checkpointId),
+            _oneCheckpoint(checkpointId),
             _noPatches()
         );
-        calls[1] = _recordCall(_singlePatch(_deltaPatch(checkpointId, 4, bps)));
-        account.executeBatchDynamic(calls);
+        calls[1] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(checkpointId, 4, bps)));
+        delegatedAccount.executeBatchDynamic(calls);
 
-        modelTargetCount += 1;
-        modelTargetTotal += Math.mulDiv(uint256(produced), uint256(bps), 10_000);
+        expectedSuccessfulCallCount += 1;
+        expectedSuccessfulAmountTotal += Math.mulDiv(uint256(produced), uint256(bps), 10_000);
     }
 
     /// @dev Reuses one logical checkpoint ID across two invocation scopes.
@@ -90,17 +90,17 @@ contract DynamicEngineInvariantHandler {
     /// @param rawId Unbounded checkpoint identifier normalized away from zero.
     function exerciseSameIdSequentialInvocations(uint128 firstBalance, uint128 secondBalance, bytes32 rawId) external {
         bytes32 checkpointId = _validId(rawId);
-        uint256 baseline = account.invocationCounter();
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _checkpointOnlyCall(checkpointId);
+        uint256 baseline = delegatedAccount.invocationCounter();
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildCheckpointOnlyBatch(checkpointId);
 
-        token.setBalance(address(account), firstBalance);
-        account.executeBatchDynamic(calls);
+        balanceToken.setBalance(address(delegatedAccount), firstBalance);
+        delegatedAccount.executeBatchDynamic(calls);
         _requireRecord(baseline + 1, checkpointId, firstBalance);
 
-        token.setBalance(address(account), secondBalance);
-        account.executeBatchDynamic(calls);
+        balanceToken.setBalance(address(delegatedAccount), secondBalance);
+        delegatedAccount.executeBatchDynamic(calls);
         _requireRecord(baseline + 2, checkpointId, secondBalance);
-        require(account.invocationCounter() == baseline + 2, "sequential counter mismatch");
+        require(delegatedAccount.invocationCounter() == baseline + 2, "sequential counter mismatch");
     }
 
     /// @dev Proves failed invocation records and counter increments roll back atomically.
@@ -115,18 +115,18 @@ contract DynamicEngineInvariantHandler {
         bytes32 rawId
     ) external {
         bytes32 checkpointId = _validId(rawId);
-        uint256 baseline = account.invocationCounter();
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _checkpointOnlyCall(checkpointId);
+        uint256 baseline = delegatedAccount.invocationCounter();
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildCheckpointOnlyBatch(checkpointId);
 
-        token.setBalance(address(account), firstBalance);
-        account.executeBatchDynamic(calls);
+        balanceToken.setBalance(address(delegatedAccount), firstBalance);
+        delegatedAccount.executeBatchDynamic(calls);
         _requireRecord(baseline + 1, checkpointId, firstBalance);
 
-        token.setBalance(address(account), failedBalance);
-        calls[0] = _call(
-            address(target),
+        balanceToken.setBalance(address(delegatedAccount), failedBalance);
+        calls[0] = _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.fail, (uint256(51), bytes("invariant-rollback"))),
-            _singleCheckpoint(checkpointId),
+            _oneCheckpoint(checkpointId),
             _noPatches()
         );
         bytes memory targetReason =
@@ -134,17 +134,17 @@ contract DynamicEngineInvariantHandler {
         _requireExecutionRevert(
             calls,
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(target), targetReason
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(recordingTarget), targetReason
             )
         );
 
-        require(account.invocationCounter() == baseline + 1, "reverted counter persisted");
-        (bool revertedPresent,,) = account.checkpointRecord(baseline + 2, checkpointId);
+        require(delegatedAccount.invocationCounter() == baseline + 1, "reverted counter persisted");
+        (bool revertedPresent,,) = delegatedAccount.checkpointRecord(baseline + 2, checkpointId);
         require(!revertedPresent, "reverted record persisted");
 
-        token.setBalance(address(account), recoveredBalance);
-        calls = _checkpointOnlyCall(checkpointId);
-        account.executeBatchDynamic(calls);
+        balanceToken.setBalance(address(delegatedAccount), recoveredBalance);
+        calls = _buildCheckpointOnlyBatch(checkpointId);
+        delegatedAccount.executeBatchDynamic(calls);
         _requireRecord(baseline + 2, checkpointId, recoveredBalance);
     }
 
@@ -154,23 +154,23 @@ contract DynamicEngineInvariantHandler {
     /// @param rawId Unbounded checkpoint identifier normalized away from zero.
     function exerciseStaleScopeRejection(uint128 firstBalance, uint128 recoveredBalance, bytes32 rawId) external {
         bytes32 checkpointId = _validId(rawId);
-        uint256 baseline = account.invocationCounter();
-        token.setBalance(address(account), firstBalance);
+        uint256 baseline = delegatedAccount.invocationCounter();
+        balanceToken.setBalance(address(delegatedAccount), firstBalance);
 
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _checkpointOnlyCall(checkpointId);
-        account.executeBatchDynamic(calls);
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildCheckpointOnlyBatch(checkpointId);
+        delegatedAccount.executeBatchDynamic(calls);
         _requireRecord(baseline + 1, checkpointId, firstBalance);
 
         calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _recordCall(_singlePatch(_deltaPatch(checkpointId, 4, 10_000)));
+        calls[0] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(checkpointId, 4, 10_000)));
         _requireExecutionRevert(
             calls, abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointNotFound.selector, 0, 0, checkpointId)
         );
-        require(account.invocationCounter() == baseline + 1, "stale lookup counter persisted");
+        require(delegatedAccount.invocationCounter() == baseline + 1, "stale lookup counter persisted");
 
-        token.setBalance(address(account), recoveredBalance);
-        calls = _checkpointOnlyCall(checkpointId);
-        account.executeBatchDynamic(calls);
+        balanceToken.setBalance(address(delegatedAccount), recoveredBalance);
+        calls = _buildCheckpointOnlyBatch(checkpointId);
+        delegatedAccount.executeBatchDynamic(calls);
         _requireRecord(baseline + 2, checkpointId, recoveredBalance);
     }
 
@@ -183,36 +183,39 @@ contract DynamicEngineInvariantHandler {
         uint256 checkpointBalance = uint256(rawBalance) + 1;
         uint256 consumed = uint256(rawConsumed) % checkpointBalance + 1;
         uint256 currentBalance = checkpointBalance - consumed;
-        uint256 baseline = account.invocationCounter();
-        uint256 targetCountBefore = target.count();
-        uint256 targetTotalBefore = target.total();
-        token.setBalance(address(account), checkpointBalance);
+        uint256 baseline = delegatedAccount.invocationCounter();
+        uint256 targetCountBefore = recordingTarget.count();
+        uint256 targetTotalBefore = recordingTarget.total();
+        balanceToken.setBalance(address(delegatedAccount), checkpointBalance);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _call(
-            address(token),
+        calls[0] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.consume, (consumed)),
-            _singleCheckpoint(checkpointId),
+            _oneCheckpoint(checkpointId),
             _noPatches()
         );
-        calls[1] = _recordCall(_singlePatch(_deltaPatch(checkpointId, 4, 10_000)));
+        calls[1] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(checkpointId, 4, 10_000)));
         _requireExecutionRevert(
             calls,
             abi.encodeWithSelector(
                 IDefiSimplify7702Account.BalanceBelowCheckpoint.selector,
                 1,
                 0,
-                address(token),
+                address(balanceToken),
                 checkpointId,
                 currentBalance,
                 checkpointBalance
             )
         );
 
-        require(account.invocationCounter() == baseline, "negative-delta counter persisted");
-        require(token.balanceOf(address(account)) == checkpointBalance, "negative-delta token state persisted");
-        require(target.count() == targetCountBefore, "negative-delta target count changed");
-        require(target.total() == targetTotalBefore, "negative-delta target total changed");
+        require(delegatedAccount.invocationCounter() == baseline, "negative-delta counter persisted");
+        require(
+            balanceToken.balanceOf(address(delegatedAccount)) == checkpointBalance,
+            "negative-delta token state persisted"
+        );
+        require(recordingTarget.count() == targetCountBefore, "negative-delta target count changed");
+        require(recordingTarget.total() == targetTotalBefore, "negative-delta target total changed");
     }
 
     /// @dev Proves duplicate checkpoint IDs revert the invocation counter and records.
@@ -220,39 +223,39 @@ contract DynamicEngineInvariantHandler {
     /// @param rawId Unbounded checkpoint identifier normalized away from zero.
     function exerciseDuplicateIdRollback(uint128 balance, bytes32 rawId) external {
         bytes32 checkpointId = _validId(rawId);
-        uint256 baseline = account.invocationCounter();
-        token.setBalance(address(account), balance);
+        uint256 baseline = delegatedAccount.invocationCounter();
+        balanceToken.setBalance(address(delegatedAccount), balance);
 
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
         checkpoints[0] = _checkpoint(checkpointId);
         checkpoints[1] = _checkpoint(checkpointId);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _call(address(patchTarget), hex"deadbeef", checkpoints, _noPatches());
+        calls[0] = _buildDynamicCall(address(calldataCaptureTarget), hex"deadbeef", checkpoints, _noPatches());
 
         _requireExecutionRevert(
             calls, abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointAlreadyExists.selector, 0, 1, checkpointId)
         );
-        require(account.invocationCounter() == baseline, "duplicate-id counter persisted");
+        require(delegatedAccount.invocationCounter() == baseline, "duplicate-id counter persisted");
     }
 
     /// @dev Proves a later target failure rolls back an earlier target mutation.
     /// @param amount Amount recorded by the call that must be rolled back.
     /// @param rawPayload Arbitrary nested revert payload material.
     function exerciseAtomicTargetRollback(uint128 amount, bytes32 rawPayload) external {
-        uint256 baseline = account.invocationCounter();
-        uint256 targetCountBefore = target.count();
-        uint256 targetTotalBefore = target.total();
+        uint256 baseline = delegatedAccount.invocationCounter();
+        uint256 targetCountBefore = recordingTarget.count();
+        uint256 targetTotalBefore = recordingTarget.total();
         bytes memory payload = abi.encodePacked(rawPayload);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _call(
-            address(target),
+        calls[0] = _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(amount), bytes("must-roll-back"))),
             _noCheckpoints(),
             _noPatches()
         );
-        calls[1] = _call(
-            address(target),
+        calls[1] = _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.fail, (uint256(52), payload)),
             _noCheckpoints(),
             _noPatches()
@@ -261,20 +264,20 @@ contract DynamicEngineInvariantHandler {
         _requireExecutionRevert(
             calls,
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), targetReason
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(recordingTarget), targetReason
             )
         );
 
-        require(account.invocationCounter() == baseline, "target-revert counter persisted");
-        require(target.count() == targetCountBefore, "target-revert count persisted");
-        require(target.total() == targetTotalBefore, "target-revert total persisted");
+        require(delegatedAccount.invocationCounter() == baseline, "target-revert counter persisted");
+        require(recordingTarget.count() == targetCountBefore, "target-revert count persisted");
+        require(recordingTarget.total() == targetTotalBefore, "target-revert total persisted");
     }
 
     function _requireRecord(uint256 invocationId, bytes32 checkpointId, uint256 expectedBalance) private view {
         (bool present, address storedToken, uint256 storedBalance) =
-            account.checkpointRecord(invocationId, checkpointId);
+            delegatedAccount.checkpointRecord(invocationId, checkpointId);
         require(present, "checkpoint record missing");
-        require(storedToken == address(token), "checkpoint token mismatch");
+        require(storedToken == address(balanceToken), "checkpoint token mismatch");
         require(storedBalance == expectedBalance, "checkpoint balance mismatch");
     }
 
@@ -282,41 +285,43 @@ contract DynamicEngineInvariantHandler {
         private
     {
         (bool success, bytes memory reason) =
-            address(account).call(abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls)));
+            address(delegatedAccount).call(abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls)));
         require(!success, "expected dynamic execution revert");
         require(keccak256(reason) == keccak256(expectedReason), "unexpected dynamic execution revert");
     }
 
-    function _checkpointOnlyCall(bytes32 checkpointId)
+    function _buildCheckpointOnlyBatch(bytes32 checkpointId)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _call(address(patchTarget), hex"deadbeef", _singleCheckpoint(checkpointId), _noPatches());
+        calls[0] = _buildDynamicCall(
+            address(calldataCaptureTarget), hex"deadbeef", _oneCheckpoint(checkpointId), _noPatches()
+        );
     }
 
-    function _recordCall(IDefiSimplify7702Account.BalancePatch[] memory patches)
+    function _buildRecordingCall(IDefiSimplify7702Account.BalancePatch[] memory patches)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall memory)
     {
-        return _call(
-            address(target),
+        return _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("invariant"))),
             _noCheckpoints(),
             patches
         );
     }
 
-    function _call(
+    function _buildDynamicCall(
         address callTarget,
-        bytes memory data,
+        bytes memory callData,
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints,
         IDefiSimplify7702Account.BalancePatch[] memory patches
     ) private pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
         dynamicCall.target = callTarget;
-        dynamicCall.data = data;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = checkpoints;
         dynamicCall.patches = patches;
     }
@@ -326,10 +331,10 @@ contract DynamicEngineInvariantHandler {
         view
         returns (IDefiSimplify7702Account.BalanceCheckpoint memory)
     {
-        return IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: checkpointId});
+        return IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: checkpointId});
     }
 
-    function _singleCheckpoint(bytes32 checkpointId)
+    function _oneCheckpoint(bytes32 checkpointId)
         private
         view
         returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
@@ -342,7 +347,7 @@ contract DynamicEngineInvariantHandler {
         checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
     }
 
-    function _singlePatch(IDefiSimplify7702Account.BalancePatch memory patch)
+    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
         private
         pure
         returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
@@ -355,13 +360,13 @@ contract DynamicEngineInvariantHandler {
         patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 
-    function _currentPatch(uint32 offset, uint16 bps)
+    function _currentBalancePatch(uint32 offset, uint16 bps)
         private
         view
         returns (IDefiSimplify7702Account.BalancePatch memory)
     {
         return IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: bytes32(0),
             offset: offset,
             bps: bps,
@@ -369,13 +374,13 @@ contract DynamicEngineInvariantHandler {
         });
     }
 
-    function _deltaPatch(bytes32 checkpointId, uint32 offset, uint16 bps)
+    function _checkpointDeltaPatch(bytes32 checkpointId, uint32 offset, uint16 bps)
         private
         view
         returns (IDefiSimplify7702Account.BalancePatch memory)
     {
         return IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: checkpointId,
             offset: offset,
             bps: bps,
@@ -397,96 +402,103 @@ contract DynamicEngineInvariantTest is DelegatedAccountFixture {
     uint256 private constant INVARIANT_AUTHORITY_KEY =
         0x71f99d742cecae7c01849d43c198ee58613bf258a1b696f2dadc695a67b90f42;
 
-    DynamicEngineInvariantHandler private handler;
-    CheckpointTableHarness private implementation;
-    address payable private account;
+    DynamicEngineInvariantHandler private scenarioHandler;
+    CheckpointTableHarness private checkpointHarnessImplementation;
+    address payable private delegatedEoa;
 
     /// @dev Installs a real EIP-7702 delegation and restricts the invariant runner
     ///      to the handler's modeled actions.
     function setUp() external {
-        handler = new DynamicEngineInvariantHandler();
-        implementation = new CheckpointTableHarness(IEntryPoint(address(handler)));
-        account = payable(vm.addr(INVARIANT_AUTHORITY_KEY));
-        require(account.code.length == 0, "invariant authority already has code");
-        vm.signAndAttachDelegation(address(implementation), INVARIANT_AUTHORITY_KEY);
-        require(_delegationTarget(account) == address(implementation), "wrong invariant delegation target");
-        handler.initialize(account);
+        scenarioHandler = new DynamicEngineInvariantHandler();
+        checkpointHarnessImplementation = new CheckpointTableHarness(IEntryPoint(address(scenarioHandler)));
+        delegatedEoa = payable(vm.addr(INVARIANT_AUTHORITY_KEY));
+        require(delegatedEoa.code.length == 0, "invariant authority already has code");
+        vm.signAndAttachDelegation(address(checkpointHarnessImplementation), INVARIANT_AUTHORITY_KEY);
+        require(
+            _delegationTarget(delegatedEoa) == address(checkpointHarnessImplementation),
+            "wrong invariant delegation target"
+        );
+        scenarioHandler.initialize(delegatedEoa);
 
         bytes4[] memory selectors = new bytes4[](8);
-        selectors[0] = handler.exerciseCurrentBalance.selector;
-        selectors[1] = handler.exerciseCheckpointDelta.selector;
-        selectors[2] = handler.exerciseSameIdSequentialInvocations.selector;
-        selectors[3] = handler.exerciseRevertedScopeRollback.selector;
-        selectors[4] = handler.exerciseStaleScopeRejection.selector;
-        selectors[5] = handler.exerciseNegativeDeltaRollback.selector;
-        selectors[6] = handler.exerciseDuplicateIdRollback.selector;
-        selectors[7] = handler.exerciseAtomicTargetRollback.selector;
-        targetContract(address(handler));
-        targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
+        selectors[0] = scenarioHandler.exerciseCurrentBalance.selector;
+        selectors[1] = scenarioHandler.exerciseCheckpointDelta.selector;
+        selectors[2] = scenarioHandler.exerciseSameIdSequentialInvocations.selector;
+        selectors[3] = scenarioHandler.exerciseRevertedScopeRollback.selector;
+        selectors[4] = scenarioHandler.exerciseStaleScopeRejection.selector;
+        selectors[5] = scenarioHandler.exerciseNegativeDeltaRollback.selector;
+        selectors[6] = scenarioHandler.exerciseDuplicateIdRollback.selector;
+        selectors[7] = scenarioHandler.exerciseAtomicTargetRollback.selector;
+        targetContract(address(scenarioHandler));
+        targetSelector(FuzzSelector({addr: address(scenarioHandler), selectors: selectors}));
     }
 
     /// @dev Target state must equal only the handler actions that returned successfully.
     function invariant_TargetStateMatchesSuccessfulActionModel() external view {
-        DynamicExecutionTarget target = handler.target();
-        assertEq(target.count(), handler.modelTargetCount(), "invariant target count");
-        assertEq(target.total(), handler.modelTargetTotal(), "invariant target total");
-        if (target.count() != 0) {
-            assertEq(target.lastCaller(), account, "invariant delegated caller");
+        DynamicExecutionTarget recordingTarget = scenarioHandler.recordingTarget();
+        assertEq(recordingTarget.count(), scenarioHandler.expectedSuccessfulCallCount(), "invariant target count");
+        assertEq(recordingTarget.total(), scenarioHandler.expectedSuccessfulAmountTotal(), "invariant target total");
+        if (recordingTarget.count() != 0) {
+            assertEq(recordingTarget.lastCaller(), delegatedEoa, "invariant delegated caller");
         }
     }
 
     /// @dev Dynamic activity must never replace or remove the EIP-7702 delegation.
     function invariant_DelegationTargetRemainsInstalled() external view {
-        assertEq(account.code.length, 23, "delegation indicator length");
-        assertEq(_delegationTarget(account), address(implementation), "delegation target changed");
+        assertEq(delegatedEoa.code.length, 23, "delegation indicator length");
+        assertEq(_delegationTarget(delegatedEoa), address(checkpointHarnessImplementation), "delegation target changed");
     }
 
     /// @dev Records SSTORE access to prove dynamic execution has no permanent account writes.
     function test_DynamicExecutionWritesNoPermanentAccountStorage() external {
-        PatchBalanceToken token = handler.token();
-        token.setBalance(account, 123);
+        PatchBalanceToken balanceToken = scenarioHandler.balanceToken();
+        balanceToken.setBalance(delegatedEoa, 123);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0].target = address(handler.patchTarget());
+        calls[0].target = address(scenarioHandler.calldataCaptureTarget());
         calls[0].data = hex"deadbeef";
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
         calls[0].checkpointsBefore[0] =
-            IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: bytes32(uint256(1))});
+            IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: bytes32(uint256(1))});
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
 
         vm.record();
-        vm.prank(address(handler));
-        IDefiSimplify7702Account(account).executeBatchDynamic(calls);
-        (, bytes32[] memory permanentWrites) = vm.accesses(account);
+        vm.prank(address(scenarioHandler));
+        IDefiSimplify7702Account(delegatedEoa).executeBatchDynamic(calls);
+        (, bytes32[] memory permanentWrites) = vm.accesses(delegatedEoa);
 
-        assertEq(permanentWrites.length, 0, "dynamic execution wrote permanent account storage");
+        assertEq(permanentWrites.length, 0, "dynamic execution wrote permanent delegatedEoa storage");
     }
 
     /// @dev Proves inherited static execution remains usable around a dynamic invocation.
     function test_InheritedStaticExecutionRemainsUsableBeforeAndAfterDynamicInvocation() external {
-        DynamicExecutionTarget target = handler.target();
+        DynamicExecutionTarget recordingTarget = scenarioHandler.recordingTarget();
 
-        vm.prank(account);
-        BaseAccount(account)
+        vm.prank(delegatedEoa);
+        BaseAccount(delegatedEoa)
             .execute(
-                address(target), 0, abi.encodeCall(DynamicExecutionTarget.record, (uint256(11), bytes("static-before")))
+                address(recordingTarget),
+                0,
+                abi.encodeCall(DynamicExecutionTarget.record, (uint256(11), bytes("static-before")))
             );
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0].target = address(target);
+        calls[0].target = address(recordingTarget);
         calls[0].data = abi.encodeCall(DynamicExecutionTarget.record, (uint256(13), bytes("dynamic")));
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
-        vm.prank(account);
-        IDefiSimplify7702Account(account).executeBatchDynamic(calls);
+        vm.prank(delegatedEoa);
+        IDefiSimplify7702Account(delegatedEoa).executeBatchDynamic(calls);
 
-        vm.prank(account);
-        BaseAccount(account)
+        vm.prank(delegatedEoa);
+        BaseAccount(delegatedEoa)
             .execute(
-                address(target), 0, abi.encodeCall(DynamicExecutionTarget.record, (uint256(17), bytes("static-after")))
+                address(recordingTarget),
+                0,
+                abi.encodeCall(DynamicExecutionTarget.record, (uint256(17), bytes("static-after")))
             );
 
-        assertEq(target.count(), 3, "static/dynamic/static count");
-        assertEq(target.total(), 41, "static/dynamic/static total");
-        assertEq(target.lastCaller(), account, "static/dynamic/static delegated caller");
+        assertEq(recordingTarget.count(), 3, "static/dynamic/static count");
+        assertEq(recordingTarget.total(), 41, "static/dynamic/static total");
+        assertEq(recordingTarget.lastCaller(), delegatedEoa, "static/dynamic/static delegated caller");
     }
 }
