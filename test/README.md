@@ -223,7 +223,7 @@ Both paths select one aligned fixed-width returndata word and apply either a
 minimum or maximum uint256 bound.
 
 `unit/StaticCallUint256Assertions.t.sol` covers validation order, account-word
-byte isolation, subject-change evidence, both comparison directions, adjacent
+byte isolation, account-binding evidence, both comparison directions, adjacent
 return sentinels, malformed return data, complete target revert data, the
 documented trailing-padding bypass, direct immutable identity, and the no-event
 policy. `fuzz/StaticCallUint256AssertionsFuzz.t.sol` checks offset models,
@@ -244,7 +244,7 @@ production contracts retain 100% line, statement, branch, and function
 coverage. The independent checker runtime is 1,082 bytes with runtime code hash
 `0xc26f9f8ce08cbeb069a32ac005b6a6c26dd878cb085295381f52e8de0f7e10d8`.
 The reproducible artifact tree is
-`de7c07913cacf335f8b0d386c110d8ffa5ae96f9629f1c20edfa0ccb00d4da60`.
+`8552f847e4c0fe8849649d531bba31030f32acdd4fba99e042033226ee642e1f`.
 The tracked `FlowAssertions` source, interface, and ABI fixture remain
 byte-for-byte unchanged.
 

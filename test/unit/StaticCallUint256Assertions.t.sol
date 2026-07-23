@@ -8,163 +8,211 @@ import {Test} from "forge-std/Test.sol";
 import {StaticCallUint256TargetMock} from "../mocks/StaticCallUint256AssertionsMocks.sol";
 
 contract StaticCallUint256AssertionsTest is Test {
-    uint32 private constant GLOBAL_READ = type(uint32).max;
-    uint32 private constant SUBJECT_OFFSET = 36;
-    uint32 private constant SELECTED_RETURN_OFFSET = 32;
-    address private constant ORIGINAL_SUBJECT = 0x1111111111111111111111111111111111111111;
-    address private constant PADDING_SUBJECT = 0x2222222222222222222222222222222222222222;
-    uint256 private constant LEFT = 601;
-    uint256 private constant SELECTED = 701;
-    uint256 private constant RIGHT = 801;
+    uint32 private constant NO_ACCOUNT_BINDING = type(uint32).max;
+    uint32 private constant ACCOUNT_ARGUMENT_OFFSET = 36;
+    uint32 private constant ACCOUNT_VALUE_RETURN_OFFSET = 32;
+    uint32 private constant GLOBAL_VALUE_RETURN_OFFSET = 32;
+    address private constant PLACEHOLDER_ACCOUNT = 0x1111111111111111111111111111111111111111;
+    address private constant PADDING_ONLY_ACCOUNT = 0x2222222222222222222222222222222222222222;
+    uint256 private constant PLACEHOLDER_ACCOUNT_VALUE = 307;
+    uint256 private constant LEADING_SENTINEL = 601;
+    uint256 private constant CALLER_ACCOUNT_VALUE = 701;
+    uint256 private constant GLOBAL_RETURN_VALUE = 701;
+    uint256 private constant TRAILING_SENTINEL = 801;
 
-    StaticCallUint256Assertions private assertions;
-    StaticCallUint256TargetMock private target;
+    StaticCallUint256Assertions private uint256Assertions;
+    StaticCallUint256TargetMock private readTarget;
 
     function setUp() external {
-        assertions = new StaticCallUint256Assertions();
-        target = new StaticCallUint256TargetMock();
-        target.setSubjectValue(ORIGINAL_SUBJECT, 307);
-        target.setSubjectValue(address(this), SELECTED);
+        uint256Assertions = new StaticCallUint256Assertions();
+        readTarget = new StaticCallUint256TargetMock();
+        readTarget.setAccountValue(PLACEHOLDER_ACCOUNT, PLACEHOLDER_ACCOUNT_VALUE);
+        readTarget.setAccountValue(address(this), CALLER_ACCOUNT_VALUE);
     }
 
-    function test_AccountBoundAtLeastUsesReplacedCallerAndPassesAtEqualityAndAbove() external view {
-        bytes memory data = _subjectTupleData(ORIGINAL_SUBJECT);
+    function test_AtLeastBindsAccountArgumentToCallerAndAcceptsSatisfiedMinimum() external view {
+        bytes memory callData = _encodeAccountValueRead(PLACEHOLDER_ACCOUNT);
 
-        assertions.assertStaticCallUint256AtLeast(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), callData, ACCOUNT_ARGUMENT_OFFSET, ACCOUNT_VALUE_RETURN_OFFSET, CALLER_ACCOUNT_VALUE
         );
-        assertions.assertStaticCallUint256AtLeast(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED - 1
-        );
-    }
-
-    function test_AccountBoundAtMostUsesReplacedCallerAndPassesAtEqualityAndBelow() external view {
-        bytes memory data = _subjectTupleData(ORIGINAL_SUBJECT);
-
-        assertions.assertStaticCallUint256AtMost(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED
-        );
-        assertions.assertStaticCallUint256AtMost(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED + 1
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget),
+            callData,
+            ACCOUNT_ARGUMENT_OFFSET,
+            ACCOUNT_VALUE_RETURN_OFFSET,
+            CALLER_ACCOUNT_VALUE - 1
         );
     }
 
-    function test_AccountBoundThresholdFailuresCarryCompleteContext() external {
-        bytes memory data = _subjectTupleData(ORIGINAL_SUBJECT);
-        bytes4 selector = StaticCallUint256TargetMock.subjectTuple.selector;
+    function test_AtMostBindsAccountArgumentToCallerAndAcceptsSatisfiedMaximum() external view {
+        bytes memory callData = _encodeAccountValueRead(PLACEHOLDER_ACCOUNT);
+
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), callData, ACCOUNT_ARGUMENT_OFFSET, ACCOUNT_VALUE_RETURN_OFFSET, CALLER_ACCOUNT_VALUE
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget),
+            callData,
+            ACCOUNT_ARGUMENT_OFFSET,
+            ACCOUNT_VALUE_RETURN_OFFSET,
+            CALLER_ACCOUNT_VALUE + 1
+        );
+    }
+
+    function test_AccountBoundFailuresReportOffsetsActualValueAndBound() external {
+        bytes memory callData = _encodeAccountValueRead(PLACEHOLDER_ACCOUNT);
+        bytes4 selector = StaticCallUint256TargetMock.accountValueWithSentinels.selector;
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 IStaticCallUint256Assertions.StaticCallUint256BelowMinimum.selector,
-                address(target),
+                address(readTarget),
                 selector,
-                uint256(SUBJECT_OFFSET),
-                uint256(SELECTED_RETURN_OFFSET),
-                SELECTED,
-                SELECTED + 1
+                uint256(ACCOUNT_ARGUMENT_OFFSET),
+                uint256(ACCOUNT_VALUE_RETURN_OFFSET),
+                CALLER_ACCOUNT_VALUE,
+                CALLER_ACCOUNT_VALUE + 1
             )
         );
-        assertions.assertStaticCallUint256AtLeast(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED + 1
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget),
+            callData,
+            ACCOUNT_ARGUMENT_OFFSET,
+            ACCOUNT_VALUE_RETURN_OFFSET,
+            CALLER_ACCOUNT_VALUE + 1
         );
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 IStaticCallUint256Assertions.StaticCallUint256AboveMaximum.selector,
-                address(target),
+                address(readTarget),
                 selector,
-                uint256(SUBJECT_OFFSET),
-                uint256(SELECTED_RETURN_OFFSET),
-                SELECTED,
-                SELECTED - 1
+                uint256(ACCOUNT_ARGUMENT_OFFSET),
+                uint256(ACCOUNT_VALUE_RETURN_OFFSET),
+                CALLER_ACCOUNT_VALUE,
+                CALLER_ACCOUNT_VALUE - 1
             )
         );
-        assertions.assertStaticCallUint256AtMost(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED - 1
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget),
+            callData,
+            ACCOUNT_ARGUMENT_OFFSET,
+            ACCOUNT_VALUE_RETURN_OFFSET,
+            CALLER_ACCOUNT_VALUE - 1
         );
     }
 
-    function test_SubjectChangeProofFailsWithoutReplacementButPassesThroughChecker() external view {
-        (uint256 directLeft, uint256 directSelected, uint256 directRight) =
-            target.subjectTuple(LEFT, ORIGINAL_SUBJECT, RIGHT);
-        assertEq(directLeft, LEFT, "direct left");
-        assertEq(directSelected, 307, "direct original subject");
-        assertEq(directRight, RIGHT, "direct right");
+    function test_AccountBindingReadsCallerValueInsteadOfPlaceholderAccountValue() external view {
+        (uint256 leadingValue, uint256 placeholderAccountValue, uint256 trailingValue) =
+            readTarget.accountValueWithSentinels(LEADING_SENTINEL, PLACEHOLDER_ACCOUNT, TRAILING_SENTINEL);
+        assertEq(leadingValue, LEADING_SENTINEL, "leading sentinel");
+        assertEq(placeholderAccountValue, PLACEHOLDER_ACCOUNT_VALUE, "placeholder account value");
+        assertEq(trailingValue, TRAILING_SENTINEL, "trailing sentinel");
 
-        assertions.assertStaticCallUint256AtLeast(
-            address(target), _subjectTupleData(ORIGINAL_SUBJECT), SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget),
+            _encodeAccountValueRead(PLACEHOLDER_ACCOUNT),
+            ACCOUNT_ARGUMENT_OFFSET,
+            ACCOUNT_VALUE_RETURN_OFFSET,
+            CALLER_ACCOUNT_VALUE
         );
     }
 
-    function test_AccountWordReplacementChangesExactlyTheExpectedCalldataBytes() external view {
-        bytes memory original =
-            abi.encodeCall(StaticCallUint256TargetMock.calldataHash, (LEFT, ORIGINAL_SUBJECT, RIGHT));
-        bytes memory expected = abi.encodeCall(StaticCallUint256TargetMock.calldataHash, (LEFT, address(this), RIGHT));
+    function test_AccountBindingChangesOnlyTheConfiguredCalldataWord() external view {
+        bytes memory original = abi.encodeCall(
+            StaticCallUint256TargetMock.calldataHash, (LEADING_SENTINEL, PLACEHOLDER_ACCOUNT, TRAILING_SENTINEL)
+        );
+        bytes memory expected = abi.encodeCall(
+            StaticCallUint256TargetMock.calldataHash, (LEADING_SENTINEL, address(this), TRAILING_SENTINEL)
+        );
         uint256 expectedHash = uint256(keccak256(expected));
 
-        assertions.assertStaticCallUint256AtLeast(address(target), original, SUBJECT_OFFSET, 0, expectedHash);
-        assertions.assertStaticCallUint256AtMost(address(target), original, SUBJECT_OFFSET, 0, expectedHash);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), original, ACCOUNT_ARGUMENT_OFFSET, 0, expectedHash
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), original, ACCOUNT_ARGUMENT_OFFSET, 0, expectedHash
+        );
     }
 
-    function test_AdjacentReturnWordsRemainDistinctAndSelectable() external view {
-        bytes memory data = _subjectTupleData(ORIGINAL_SUBJECT);
+    function test_ReturnOffsetsSelectLeadingAccountAndTrailingWordsIndependently() external view {
+        bytes memory callData = _encodeAccountValueRead(PLACEHOLDER_ACCOUNT);
 
-        assertions.assertStaticCallUint256AtLeast(address(target), data, SUBJECT_OFFSET, 0, LEFT);
-        assertions.assertStaticCallUint256AtMost(address(target), data, SUBJECT_OFFSET, 0, LEFT);
-        assertions.assertStaticCallUint256AtLeast(
-            address(target), data, SUBJECT_OFFSET, SELECTED_RETURN_OFFSET, SELECTED
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), callData, ACCOUNT_ARGUMENT_OFFSET, 0, LEADING_SENTINEL
         );
-        assertions.assertStaticCallUint256AtMost(address(target), data, SUBJECT_OFFSET, 64, RIGHT);
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), callData, ACCOUNT_ARGUMENT_OFFSET, 0, LEADING_SENTINEL
+        );
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), callData, ACCOUNT_ARGUMENT_OFFSET, ACCOUNT_VALUE_RETURN_OFFSET, CALLER_ACCOUNT_VALUE
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), callData, ACCOUNT_ARGUMENT_OFFSET, 64, TRAILING_SENTINEL
+        );
     }
 
     function test_GlobalReadLeavesCalldataUnmodifiedForBothDirections() external view {
-        bytes memory data = abi.encodeCall(StaticCallUint256TargetMock.globalTuple, (LEFT, SELECTED, RIGHT));
+        bytes memory callData = abi.encodeCall(
+            StaticCallUint256TargetMock.globalTuple, (LEADING_SENTINEL, GLOBAL_RETURN_VALUE, TRAILING_SENTINEL)
+        );
 
-        assertions.assertStaticCallUint256AtLeast(address(target), data, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED);
-        assertions.assertStaticCallUint256AtMost(address(target), data, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), callData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), callData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE
+        );
     }
 
     function test_GlobalReadThresholdFailuresUseExplicitSentinel() external {
-        bytes memory data = abi.encodeCall(StaticCallUint256TargetMock.globalTuple, (LEFT, SELECTED, RIGHT));
+        bytes memory callData = abi.encodeCall(
+            StaticCallUint256TargetMock.globalTuple, (LEADING_SENTINEL, GLOBAL_RETURN_VALUE, TRAILING_SENTINEL)
+        );
         bytes4 selector = StaticCallUint256TargetMock.globalTuple.selector;
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 IStaticCallUint256Assertions.StaticCallUint256BelowMinimum.selector,
-                address(target),
+                address(readTarget),
                 selector,
-                uint256(GLOBAL_READ),
-                uint256(SELECTED_RETURN_OFFSET),
-                SELECTED,
-                SELECTED + 1
+                uint256(NO_ACCOUNT_BINDING),
+                uint256(GLOBAL_VALUE_RETURN_OFFSET),
+                GLOBAL_RETURN_VALUE,
+                GLOBAL_RETURN_VALUE + 1
             )
         );
-        assertions.assertStaticCallUint256AtLeast(
-            address(target), data, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED + 1
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), callData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE + 1
         );
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 IStaticCallUint256Assertions.StaticCallUint256AboveMaximum.selector,
-                address(target),
+                address(readTarget),
                 selector,
-                uint256(GLOBAL_READ),
-                uint256(SELECTED_RETURN_OFFSET),
-                SELECTED,
-                SELECTED - 1
+                uint256(NO_ACCOUNT_BINDING),
+                uint256(GLOBAL_VALUE_RETURN_OFFSET),
+                GLOBAL_RETURN_VALUE,
+                GLOBAL_RETURN_VALUE - 1
             )
         );
-        assertions.assertStaticCallUint256AtMost(
-            address(target), data, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED - 1
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), callData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE - 1
         );
     }
 
-    function test_TrailingPaddingCanPatchUnusedWordWithoutBindingRealSubject() external view {
-        bytes memory realCall = abi.encodeCall(StaticCallUint256TargetMock.subjectValue, (ORIGINAL_SUBJECT));
-        bytes memory padded = bytes.concat(realCall, abi.encode(PADDING_SUBJECT));
+    function test_TrailingPaddingCanBePatchedWithoutBindingTheRealAccountArgument() external view {
+        bytes memory accountValueCall = abi.encodeCall(StaticCallUint256TargetMock.accountValue, (PLACEHOLDER_ACCOUNT));
+        bytes memory paddedCallData = bytes.concat(accountValueCall, abi.encode(PADDING_ONLY_ACCOUNT));
 
-        assertions.assertStaticCallUint256AtLeast(address(target), padded, SUBJECT_OFFSET, 0, 307);
-        assertions.assertStaticCallUint256AtMost(address(target), padded, SUBJECT_OFFSET, 0, 307);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), paddedCallData, ACCOUNT_ARGUMENT_OFFSET, 0, PLACEHOLDER_ACCOUNT_VALUE
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), paddedCallData, ACCOUNT_ARGUMENT_OFFSET, 0, PLACEHOLDER_ACCOUNT_VALUE
+        );
     }
 
     function test_ZeroAndSelfTargetsAreRejectedBeforeCalldataValidation() external {
@@ -173,51 +221,63 @@ contract StaticCallUint256AssertionsTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionTarget.selector, address(0))
         );
-        assertions.assertStaticCallUint256AtLeast(address(0), tooShort, GLOBAL_READ, 0, 0);
+        uint256Assertions.assertStaticCallUint256AtLeast(address(0), tooShort, NO_ACCOUNT_BINDING, 0, 0);
 
         vm.expectRevert(
-            abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionTarget.selector, address(assertions))
+            abi.encodeWithSelector(
+                IStaticCallUint256Assertions.InvalidAssertionTarget.selector, address(uint256Assertions)
+            )
         );
-        assertions.assertStaticCallUint256AtMost(address(assertions), tooShort, GLOBAL_READ, 0, 0);
+        uint256Assertions.assertStaticCallUint256AtMost(address(uint256Assertions), tooShort, NO_ACCOUNT_BINDING, 0, 0);
     }
 
     function test_CalldataMustContainCompleteSelector() external {
         for (uint256 length = 0; length < 4; ++length) {
-            bytes memory data = new bytes(length);
+            bytes memory incompleteCallData = new bytes(length);
             vm.expectRevert(
                 abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionCallData.selector, length)
             );
-            assertions.assertStaticCallUint256AtLeast(address(target), data, GLOBAL_READ, 0, 0);
+            uint256Assertions.assertStaticCallUint256AtLeast(
+                address(readTarget), incompleteCallData, NO_ACCOUNT_BINDING, 0, 0
+            );
         }
     }
 
     function test_AccountOffsetRejectsLowerBoundAlignmentAndUpperBoundViolations() external {
-        bytes memory data = _subjectTupleData(ORIGINAL_SUBJECT);
+        bytes memory accountValueCall = _encodeAccountValueRead(PLACEHOLDER_ACCOUNT);
         uint32[3] memory invalidOffsets = [uint32(3), uint32(5), uint32(100)];
 
         for (uint256 i; i < invalidOffsets.length; ++i) {
             uint256 offset = uint256(invalidOffsets[i]);
             vm.expectRevert(
                 abi.encodeWithSelector(
-                    IStaticCallUint256Assertions.InvalidAssertionAccountOffset.selector, offset, data.length
+                    IStaticCallUint256Assertions.InvalidAssertionAccountOffset.selector, offset, accountValueCall.length
                 )
             );
-            assertions.assertStaticCallUint256AtLeast(address(target), data, invalidOffsets[i], 0, 0);
+            uint256Assertions.assertStaticCallUint256AtLeast(
+                address(readTarget), accountValueCall, invalidOffsets[i], 0, 0
+            );
         }
     }
 
     function test_ReturnOffsetRejectsUnalignedAndOutOfBoundsWords() external {
-        bytes memory data = abi.encodeCall(StaticCallUint256TargetMock.globalTuple, (LEFT, SELECTED, RIGHT));
+        bytes memory threeWordReturnCall = abi.encodeCall(
+            StaticCallUint256TargetMock.globalTuple, (LEADING_SENTINEL, GLOBAL_RETURN_VALUE, TRAILING_SENTINEL)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, 1, 96)
         );
-        assertions.assertStaticCallUint256AtLeast(address(target), data, GLOBAL_READ, 1, 0);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), threeWordReturnCall, NO_ACCOUNT_BINDING, 1, 0
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, 96, 96)
         );
-        assertions.assertStaticCallUint256AtLeast(address(target), data, GLOBAL_READ, 96, 0);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), threeWordReturnCall, NO_ACCOUNT_BINDING, 96, 0
+        );
     }
 
     function test_EmptyShortExactAndLongerReturnDataAreDistinguished() external {
@@ -225,68 +285,84 @@ contract StaticCallUint256AssertionsTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, 0, 0)
         );
-        assertions.assertStaticCallUint256AtLeast(address(target), emptyData, GLOBAL_READ, 0, 0);
+        uint256Assertions.assertStaticCallUint256AtLeast(address(readTarget), emptyData, NO_ACCOUNT_BINDING, 0, 0);
 
         bytes memory shortData = abi.encodeCall(StaticCallUint256TargetMock.shortReturn, ());
         vm.expectRevert(
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, 0, 3)
         );
-        assertions.assertStaticCallUint256AtLeast(address(target), shortData, GLOBAL_READ, 0, 0);
+        uint256Assertions.assertStaticCallUint256AtLeast(address(readTarget), shortData, NO_ACCOUNT_BINDING, 0, 0);
 
-        bytes memory exactData = abi.encodeCall(StaticCallUint256TargetMock.exactReturn, (SELECTED));
-        assertions.assertStaticCallUint256AtLeast(address(target), exactData, GLOBAL_READ, 0, SELECTED);
+        bytes memory exactData = abi.encodeCall(StaticCallUint256TargetMock.exactReturn, (GLOBAL_RETURN_VALUE));
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), exactData, NO_ACCOUNT_BINDING, 0, GLOBAL_RETURN_VALUE
+        );
 
-        bytes memory longerData = abi.encodeCall(StaticCallUint256TargetMock.globalTuple, (LEFT, SELECTED, RIGHT));
-        assertions.assertStaticCallUint256AtMost(
-            address(target), longerData, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED
+        bytes memory longerData = abi.encodeCall(
+            StaticCallUint256TargetMock.globalTuple, (LEADING_SENTINEL, GLOBAL_RETURN_VALUE, TRAILING_SENTINEL)
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), longerData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE
         );
     }
 
     function test_NoCodeTargetSucceedsCallButFailsReturnBounds() external {
         address noCode = address(0xBEEF);
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("read()")));
+        bytes memory readCall = abi.encodeWithSelector(bytes4(keccak256("read()")));
 
         vm.expectRevert(
             abi.encodeWithSelector(IStaticCallUint256Assertions.InvalidAssertionReturnOffset.selector, 0, 0)
         );
-        assertions.assertStaticCallUint256AtLeast(noCode, data, GLOBAL_READ, 0, 0);
+        uint256Assertions.assertStaticCallUint256AtLeast(noCode, readCall, NO_ACCOUNT_BINDING, 0, 0);
     }
 
     function test_StaticCallFailurePreservesSelectorModeAndCompleteReasonBeforeReturnValidation() external {
         bytes memory payload = hex"0102030405060708090a0b0c";
-        bytes memory data = abi.encodeCall(StaticCallUint256TargetMock.revertRead, (907, payload));
+        bytes memory revertingReadCall = abi.encodeCall(StaticCallUint256TargetMock.revertRead, (907, payload));
         bytes memory reason =
             abi.encodeWithSelector(StaticCallUint256TargetMock.StaticReadFailure.selector, 907, payload);
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 IStaticCallUint256Assertions.AssertionStaticCallFailed.selector,
-                address(target),
+                address(readTarget),
                 StaticCallUint256TargetMock.revertRead.selector,
-                uint256(GLOBAL_READ),
+                uint256(NO_ACCOUNT_BINDING),
                 reason
             )
         );
-        assertions.assertStaticCallUint256AtLeast(address(target), data, GLOBAL_READ, 1, type(uint256).max);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), revertingReadCall, NO_ACCOUNT_BINDING, 1, type(uint256).max
+        );
     }
 
     function test_ChecksEmitNoCustomEvents() external {
-        bytes memory data = abi.encodeCall(StaticCallUint256TargetMock.globalTuple, (LEFT, SELECTED, RIGHT));
+        bytes memory callData = abi.encodeCall(
+            StaticCallUint256TargetMock.globalTuple, (LEADING_SENTINEL, GLOBAL_RETURN_VALUE, TRAILING_SENTINEL)
+        );
 
         vm.recordLogs();
-        assertions.assertStaticCallUint256AtLeast(address(target), data, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED);
-        assertions.assertStaticCallUint256AtMost(address(target), data, GLOBAL_READ, SELECTED_RETURN_OFFSET, SELECTED);
+        uint256Assertions.assertStaticCallUint256AtLeast(
+            address(readTarget), callData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE
+        );
+        uint256Assertions.assertStaticCallUint256AtMost(
+            address(readTarget), callData, NO_ACCOUNT_BINDING, GLOBAL_VALUE_RETURN_OFFSET, GLOBAL_RETURN_VALUE
+        );
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(logs.length, 0, "unexpected checker event");
     }
 
     function test_DirectDeploymentRuntimeMatchesIndependentImmutableArtifact() external view {
-        assertEq(address(assertions).code, type(StaticCallUint256Assertions).runtimeCode, "runtime artifact mismatch");
-        assertEq(address(assertions).codehash, keccak256(type(StaticCallUint256Assertions).runtimeCode));
+        assertEq(
+            address(uint256Assertions).code, type(StaticCallUint256Assertions).runtimeCode, "runtime artifact mismatch"
+        );
+        assertEq(address(uint256Assertions).codehash, keccak256(type(StaticCallUint256Assertions).runtimeCode));
     }
 
-    function _subjectTupleData(address subject) private pure returns (bytes memory) {
-        return abi.encodeCall(StaticCallUint256TargetMock.subjectTuple, (LEFT, subject, RIGHT));
+    function _encodeAccountValueRead(address account) private pure returns (bytes memory) {
+        return abi.encodeCall(
+            StaticCallUint256TargetMock.accountValueWithSentinels, (LEADING_SENTINEL, account, TRAILING_SENTINEL)
+        );
     }
 }

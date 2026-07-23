@@ -17,15 +17,15 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         0x0f9be418f26495095633001cdf2f537edb74bb7c7634a681558521f0b85b8c46;
     uint256 private constant BASE_GENERIC_CUSTOM_AUTHORITY_KEY =
         0x103e3a64ac46b56b6678ff2c49b6a4ed949015751f64a0cbc43f28dd628bef18;
-    uint32 private constant GLOBAL_READ = type(uint32).max;
-    uint32 private constant AAVE_ACCOUNT_OFFSET = 4;
+    uint32 private constant NO_ACCOUNT_BINDING = type(uint32).max;
+    uint32 private constant AAVE_ACCOUNT_ARGUMENT_OFFSET = 4;
     uint32 private constant AAVE_HEALTH_FACTOR_RETURN_OFFSET = 5 * 32;
     address private constant AAVE_V3_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
     address private constant BASE_WETH = 0x4200000000000000000000000000000000000006;
     address private constant PLACEHOLDER_ACCOUNT = 0x1111111111111111111111111111111111111111;
 
     DelegatedPair private pair;
-    StaticCallUint256Assertions private assertions;
+    StaticCallUint256Assertions private uint256Assertions;
 
     function setUp() external {
         require(block.chainid == BASE_CHAIN_ID, "fork is not Base mainnet");
@@ -35,7 +35,7 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         pair = _deployDelegatedPair(
             IEntryPoint(address(this)), BASE_GENERIC_UPSTREAM_AUTHORITY_KEY, BASE_GENERIC_CUSTOM_AUTHORITY_KEY
         );
-        assertions = new StaticCallUint256Assertions();
+        uint256Assertions = new StaticCallUint256Assertions();
     }
 
     function test_IndependentCheckerBindsDelegatedAccountForBaseAaveAndSupportsGlobalBaseRead() external {
@@ -43,8 +43,10 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         assertEq(healthFactor, type(uint256).max, "unexpected no-position health factor");
 
         BaseAccount.Call[] memory calls = new BaseAccount.Call[](2);
-        calls[0] = BaseAccount.Call({target: address(assertions), value: 0, data: _aaveAssertionData()});
-        calls[1] = BaseAccount.Call({target: address(assertions), value: 0, data: _globalWethAssertionData()});
+        calls[0] =
+            BaseAccount.Call({target: address(uint256Assertions), value: 0, data: _encodeAaveHealthFactorAssertion()});
+        calls[1] =
+            BaseAccount.Call({target: address(uint256Assertions), value: 0, data: _encodeWethTotalSupplyAssertion()});
 
         vm.prank(pair.customAccount, pair.customAccount);
         _customAccount(pair).executeBatch(calls);
@@ -52,8 +54,8 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
 
     function test_IndependentCheckerWorksAsFinalDynamicStepAgainstBaseAave() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0].target = address(assertions);
-        calls[0].data = _aaveAssertionData();
+        calls[0].target = address(uint256Assertions);
+        calls[0].data = _encodeAaveHealthFactorAssertion();
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
 
@@ -61,19 +63,19 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
-    function _aaveAssertionData() private pure returns (bytes memory) {
+    function _encodeAaveHealthFactorAssertion() private pure returns (bytes memory) {
         bytes memory poolData = abi.encodeCall(IAaveV3Pool.getUserAccountData, (PLACEHOLDER_ACCOUNT));
         return abi.encodeCall(
             IStaticCallUint256Assertions.assertStaticCallUint256AtLeast,
-            (AAVE_V3_POOL, poolData, AAVE_ACCOUNT_OFFSET, AAVE_HEALTH_FACTOR_RETURN_OFFSET, type(uint256).max)
+            (AAVE_V3_POOL, poolData, AAVE_ACCOUNT_ARGUMENT_OFFSET, AAVE_HEALTH_FACTOR_RETURN_OFFSET, type(uint256).max)
         );
     }
 
-    function _globalWethAssertionData() private pure returns (bytes memory) {
+    function _encodeWethTotalSupplyAssertion() private pure returns (bytes memory) {
         bytes memory wethData = abi.encodeCall(IERC20.totalSupply, ());
         return abi.encodeCall(
             IStaticCallUint256Assertions.assertStaticCallUint256AtLeast,
-            (BASE_WETH, wethData, GLOBAL_READ, uint32(0), uint256(1))
+            (BASE_WETH, wethData, NO_ACCOUNT_BINDING, uint32(0), uint256(1))
         );
     }
 }

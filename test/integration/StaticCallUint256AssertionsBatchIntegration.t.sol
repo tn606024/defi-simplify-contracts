@@ -11,107 +11,112 @@ import {StaticCallUint256TargetMock} from "../mocks/StaticCallUint256AssertionsM
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 contract StaticCallUint256AssertionsBatchIntegrationTest is DelegatedAccountFixture {
-    uint32 private constant SUBJECT_OFFSET = 36;
-    address private constant PLACEHOLDER_SUBJECT = 0x1111111111111111111111111111111111111111;
+    uint32 private constant ACCOUNT_ARGUMENT_OFFSET = 36;
+    address private constant PLACEHOLDER_ACCOUNT = 0x1111111111111111111111111111111111111111;
 
     DelegatedPair private pair;
-    StaticCallUint256Assertions private assertions;
-    StaticCallUint256TargetMock private target;
-    AssertionBalanceToken private token;
+    StaticCallUint256Assertions private uint256Assertions;
+    StaticCallUint256TargetMock private balanceReadTarget;
+    AssertionBalanceToken private balanceToken;
 
     function setUp() external {
         pair = _deployDelegatedPair(IEntryPoint(address(this)));
-        assertions = new StaticCallUint256Assertions();
-        target = new StaticCallUint256TargetMock();
-        token = new AssertionBalanceToken();
+        uint256Assertions = new StaticCallUint256Assertions();
+        balanceReadTarget = new StaticCallUint256TargetMock();
+        balanceToken = new AssertionBalanceToken();
     }
 
-    function test_GenericCheckerWorksAsFinalStepOfInheritedStaticBatches() external {
-        _upstreamAccount(pair).executeBatch(_staticPlan(31, 31));
-        _customAccount(pair).executeBatch(_staticPlan(37, 37));
+    function test_StaticBatchesExecuteBalanceAssertionAsFinalCall() external {
+        _upstreamAccount(pair).executeBatch(_buildStaticAssertionBatch(31, 31));
+        _customAccount(pair).executeBatch(_buildStaticAssertionBatch(37, 37));
 
-        assertEq(token.balanceOf(pair.upstreamAccount), 31, "upstream producer");
-        assertEq(token.balanceOf(pair.customAccount), 37, "custom producer");
+        assertEq(balanceToken.balanceOf(pair.upstreamAccount), 31, "upstream producer");
+        assertEq(balanceToken.balanceOf(pair.customAccount), 37, "custom producer");
     }
 
-    function test_FailedFinalStaticCheckRollsBackEarlierBatchState() external {
-        bytes memory assertionReason = _belowMinimumReason(41, 42);
+    function test_StaticBatchRevertsProducerWhenFinalBalanceAssertionFails() external {
+        bytes memory assertionReason = _encodeBelowMinimumError(41, 42);
 
         vm.expectRevert(abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 1, assertionReason));
-        _customAccount(pair).executeBatch(_staticPlan(41, 42));
+        _customAccount(pair).executeBatch(_buildStaticAssertionBatch(41, 42));
 
-        assertEq(token.balanceOf(pair.customAccount), 0, "failed static producer survived");
+        assertEq(balanceToken.balanceOf(pair.customAccount), 0, "failed static producer survived");
     }
 
-    function test_GenericCheckerWorksAsFinalStepOfDynamicBatch() external {
-        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(43, 43));
+    function test_DynamicBatchExecutesBalanceAssertionAsFinalCall() external {
+        _dynamicAccount(pair).executeBatchDynamic(_buildDynamicAssertionBatch(43, 43));
 
-        assertEq(token.balanceOf(pair.customAccount), 43, "dynamic producer");
+        assertEq(balanceToken.balanceOf(pair.customAccount), 43, "dynamic producer");
     }
 
-    function test_FailedFinalDynamicCheckRollsBackEarlierBatchState() external {
-        bytes memory assertionReason = _belowMinimumReason(47, 48);
+    function test_DynamicBatchRevertsProducerWhenFinalBalanceAssertionFails() external {
+        bytes memory assertionReason = _encodeBelowMinimumError(47, 48);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(assertions), assertionReason
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(uint256Assertions), assertionReason
             )
         );
-        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(47, 48));
+        _dynamicAccount(pair).executeBatchDynamic(_buildDynamicAssertionBatch(47, 48));
 
-        assertEq(token.balanceOf(pair.customAccount), 0, "failed dynamic producer survived");
+        assertEq(balanceToken.balanceOf(pair.customAccount), 0, "failed dynamic producer survived");
     }
 
-    function _staticPlan(uint256 producedAmount, uint256 minimum)
+    function _buildStaticAssertionBatch(uint256 producedAmount, uint256 minimum)
         private
         view
         returns (BaseAccount.Call[] memory calls)
     {
         calls = new BaseAccount.Call[](2);
         calls[0] = BaseAccount.Call({
-            target: address(token), value: 0, data: abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
+            target: address(balanceToken),
+            value: 0,
+            data: abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
         });
-        calls[1] = BaseAccount.Call({target: address(assertions), value: 0, data: _assertionData(minimum)});
+        calls[1] = BaseAccount.Call({
+            target: address(uint256Assertions), value: 0, data: _encodeMinimumBalanceAssertion(minimum)
+        });
     }
 
-    function _dynamicPlan(uint256 producedAmount, uint256 minimum)
+    function _buildDynamicAssertionBatch(uint256 producedAmount, uint256 minimum)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _dynamicCall(address(token), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount)));
-        calls[1] = _dynamicCall(address(assertions), _assertionData(minimum));
+        calls[0] =
+            _buildDynamicCall(address(balanceToken), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount)));
+        calls[1] = _buildDynamicCall(address(uint256Assertions), _encodeMinimumBalanceAssertion(minimum));
     }
 
-    function _assertionData(uint256 minimum) private view returns (bytes memory) {
-        bytes memory readData =
-            abi.encodeCall(StaticCallUint256TargetMock.tokenBalance, (address(token), PLACEHOLDER_SUBJECT));
+    function _encodeMinimumBalanceAssertion(uint256 minimum) private view returns (bytes memory) {
+        bytes memory balanceReadData =
+            abi.encodeCall(StaticCallUint256TargetMock.tokenBalance, (address(balanceToken), PLACEHOLDER_ACCOUNT));
         return abi.encodeCall(
             IStaticCallUint256Assertions.assertStaticCallUint256AtLeast,
-            (address(target), readData, SUBJECT_OFFSET, uint32(0), minimum)
+            (address(balanceReadTarget), balanceReadData, ACCOUNT_ARGUMENT_OFFSET, uint32(0), minimum)
         );
     }
 
-    function _belowMinimumReason(uint256 actual, uint256 minimum) private view returns (bytes memory) {
+    function _encodeBelowMinimumError(uint256 actual, uint256 minimum) private view returns (bytes memory) {
         return abi.encodeWithSelector(
             IStaticCallUint256Assertions.StaticCallUint256BelowMinimum.selector,
-            address(target),
+            address(balanceReadTarget),
             StaticCallUint256TargetMock.tokenBalance.selector,
-            uint256(SUBJECT_OFFSET),
+            uint256(ACCOUNT_ARGUMENT_OFFSET),
             0,
             actual,
             minimum
         );
     }
 
-    function _dynamicCall(address targetAddress, bytes memory data)
+    function _buildDynamicCall(address callTarget, bytes memory callData)
         private
         pure
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = targetAddress;
-        dynamicCall.data = data;
+        dynamicCall.target = callTarget;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }

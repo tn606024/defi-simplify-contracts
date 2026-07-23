@@ -1,45 +1,45 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-interface ISubjectBalance {
-    function balanceOf(address subject) external view returns (uint256);
+interface IBalanceOf {
+    function balanceOf(address account) external view returns (uint256);
 }
 
 contract StaticCallUint256TargetMock {
     error StaticReadFailure(uint256 code, bytes payload);
 
-    mapping(address subject => uint256 value) private _subjectValues;
+    mapping(address account => uint256 value) private _accountValues;
 
-    function setSubjectValue(address subject, uint256 value) external {
-        _subjectValues[subject] = value;
+    function setAccountValue(address account, uint256 value) external {
+        _accountValues[account] = value;
     }
 
-    function subjectValue(address subject) external view returns (uint256) {
-        return _subjectValues[subject];
+    function accountValue(address account) external view returns (uint256) {
+        return _accountValues[account];
     }
 
-    function subjectTuple(uint256 left, address subject, uint256 right)
+    function accountValueWithSentinels(uint256 leadingSentinel, address account, uint256 trailingSentinel)
         external
         view
-        returns (uint256 leftResult, uint256 selected, uint256 rightResult)
+        returns (uint256 leadingResult, uint256 accountValueResult, uint256 trailingResult)
     {
-        return (left, _subjectValues[subject], right);
+        return (leadingSentinel, _accountValues[account], trailingSentinel);
     }
 
-    function tokenBalance(address token, address subject) external view returns (uint256) {
-        return ISubjectBalance(token).balanceOf(subject);
+    function tokenBalance(address token, address account) external view returns (uint256) {
+        return IBalanceOf(token).balanceOf(account);
     }
 
     function calldataHash(uint256, address, uint256) external pure returns (uint256) {
         return uint256(keccak256(msg.data));
     }
 
-    function globalTuple(uint256 left, uint256 selected, uint256 right)
+    function globalTuple(uint256 leadingSentinel, uint256 value, uint256 trailingSentinel)
         external
         pure
-        returns (uint256 leftResult, uint256 selectedResult, uint256 rightResult)
+        returns (uint256 leadingResult, uint256 valueResult, uint256 trailingResult)
     {
-        return (left, selected, right);
+        return (leadingSentinel, value, trailingSentinel);
     }
 
     function exactReturn(uint256 value) external pure returns (uint256) {

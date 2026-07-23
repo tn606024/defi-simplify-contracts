@@ -15,6 +15,6 @@ health factor and is checked through an inherited static account batch.
 
 `BaseStaticCallUint256Assertions.t.sol` pins the same block and independently
 checks both generic modes. Account-binding mode replaces an Aave V3
-`getUserAccountData` subject with the delegated EOA and selects the health-factor
+`getUserAccountData` account argument with the delegated EOA and selects the health-factor
 word; global-read mode checks Base WETH `totalSupply()` without modifying its
 calldata. The suite covers inherited static and custom dynamic batch paths.
