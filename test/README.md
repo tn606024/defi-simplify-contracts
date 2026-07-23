@@ -294,6 +294,39 @@ forge test --match-path 'test/integration/StaticCallUint256AssertionsBatchIntegr
 forge test --match-path 'test/fork/BaseStaticCallUint256Assertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
 ```
 
+## DSC-78 callback-enabled ABI freeze
+
+`unit/CallbackAbi.t.sol` proves the safe transition from the historical
+callback-free tuple to the final v1 ABI. Ordinary dynamic batches still execute
+when every flag is false. A callback flag at the first, middle, or last call
+index fails before any target executes, and two flags report both indices before
+the first target. Direct `executeOperation` calls fail before malformed envelope
+bytes are decoded.
+
+The test also documents the deliberate selector boundary. Final-selector
+calldata without the appended boolean fails ABI decoding. The historical
+selector is not retained as an overload; the inherited EOA-style fallback
+accepts it as an inert unknown call, so it cannot execute a historical dynamic
+batch. SDK and signer code must use the final interface ID rather than infer
+execution from receipt success.
+
+`unit/CallbackGoldenVectors.t.sol` verifies
+`abi/CallbackExecution.golden.json`: old and final selectors, final ERC-165
+interface ID, both boolean encodings, zero/one/many-call callback envelopes, and
+every callback error encoding. `unit/DynamicGoldenVectors.t.sol` updates the
+existing plan fixture to version 2 for the appended boolean.
+
+DSC-78 brings the repository to 223 non-fork tests. Successful Aave callback
+execution is deliberately deferred to DSC-79 and DSC-80.
+
+Run the focused DSC-78 suites with:
+
+```sh
+forge test --match-path 'test/unit/Callback*.t.sol' -vvv
+./script/check-minimal-account-surface.sh
+./script/check-abi-fixtures.sh
+```
+
 ### Validation commands
 
 Run the focused verification layers with:

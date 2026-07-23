@@ -62,6 +62,12 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             revert EmptyDynamicBatch();
         }
 
+        (bool callbackExpected, uint256 callbackCallIndex) = _findExpectedCallback(calls);
+        if (callbackExpected) {
+            DynamicCall calldata callbackCall = calls[callbackCallIndex];
+            revert CallbackNotConsumed(callbackCallIndex, callbackCall.target, 0);
+        }
+
         for (uint256 i = 0; i < callsLength; ++i) {
             DynamicCall calldata dynamicCall = calls[i];
             address target = dynamicCall.target;
@@ -82,6 +88,45 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
 
         lockSlot.tstore(false);
+    }
+
+    /// @inheritdoc IDefiSimplify7702Account
+    function executeOperation(address asset, uint256 amount, uint256 premium, address initiator, bytes calldata params)
+        external
+        override
+        returns (bool success)
+    {
+        asset;
+        amount;
+        premium;
+        initiator;
+        params;
+        success = false;
+        revert CallbackOutsideDynamicExecution();
+    }
+
+    /// @dev Prevalidates that an outer batch requests at most one callback window.
+    ///      DSC-78 intentionally remains fail-closed: the returned callback index is rejected
+    ///      before any target call until the transient commitment engine is implemented.
+    /// @param calls Ordered outer dynamic calls.
+    /// @return callbackExpected Whether one call requests a callback.
+    /// @return callbackCallIndex Index of that call when `callbackExpected` is true.
+    function _findExpectedCallback(DynamicCall[] calldata calls)
+        private
+        pure
+        returns (bool callbackExpected, uint256 callbackCallIndex)
+    {
+        uint256 callsLength = calls.length;
+        for (uint256 i = 0; i < callsLength; ++i) {
+            if (!calls[i].expectsCallback) {
+                continue;
+            }
+            if (callbackExpected) {
+                revert MultipleExpectedCallbacks(callbackCallIndex, i);
+            }
+            callbackExpected = true;
+            callbackCallIndex = i;
+        }
     }
 
     /// @dev Increments the transaction-scoped transient counter and returns this frame's checkpoint scope.

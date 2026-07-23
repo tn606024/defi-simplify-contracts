@@ -2,7 +2,7 @@
 pragma solidity 0.8.36;
 
 /// @title IDefiSimplify7702Account
-/// @notice Frozen v1 ABI for checkpoint-based dynamic account execution.
+/// @notice Frozen v1 ABI for checkpoint-based dynamic account execution and one authenticated Aave V3 callback.
 /// @dev Token addresses are supplied by the plan and trusted to implement ERC20
 ///      `balanceOf(address)` semantics. The account accepts a successful balance read
 ///      with at least 32 bytes and interprets its first word as the unsigned balance.
@@ -48,12 +48,23 @@ interface IDefiSimplify7702Account {
     /// @param data Target calldata copied to memory before patches are applied.
     /// @param checkpointsBefore Balance snapshots created after patches and immediately before the target call.
     /// @param patches Strictly offset-sorted calldata word replacements resolved before checkpoint creation.
+    /// @param expectsCallback Whether this exact outer call must consume the single authenticated callback window.
     struct DynamicCall {
         address target;
         uint256 value;
         bytes data;
         BalanceCheckpoint[] checkpointsBefore;
         BalancePatch[] patches;
+        bool expectsCallback;
+    }
+
+    /// @notice Carries the premium bound and dynamic plan executed inside an Aave V3 callback.
+    /// @dev Every callback call must set `expectsCallback` to false in v1.
+    /// @param maxPremium Maximum Aave V3 premium accepted for the flash loan.
+    /// @param callbackCalls Ordered dynamic calls executed while the authenticated callback is active.
+    struct CallbackEnvelope {
+        uint256 maxPremium;
+        DynamicCall[] callbackCalls;
     }
 
     /// @notice Raised when dynamic execution receives no calls.
@@ -159,9 +170,107 @@ interface IDefiSimplify7702Account {
     /// @param reason Complete target revert data.
     error DynamicCallFailed(uint256 index, address target, bytes reason);
 
+    /// @notice Raised when more than one outer call requests a callback window.
+    /// @param firstCallIndex Index of the first callback-enabled call.
+    /// @param secondCallIndex Index of the next callback-enabled call.
+    error MultipleExpectedCallbacks(uint256 firstCallIndex, uint256 secondCallIndex);
+
+    /// @notice Raised when the callback receiver is called outside active dynamic execution.
+    error CallbackOutsideDynamicExecution();
+
+    /// @notice Raised when a callback arrives while its transient state is not awaiting consumption.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param actualState Actual callback-state ordinal.
+    error CallbackNotAwaiting(uint256 callIndex, uint8 actualState);
+
+    /// @notice Raised when a callback sender differs from the committed direct outer target.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param expected Committed direct outer target.
+    /// @param actual Actual callback sender.
+    error UnexpectedCallbackSender(uint256 callIndex, address expected, address actual);
+
+    /// @notice Raised when Aave reports an initiator other than the delegated account.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param expected Delegated account required as the flash-loan initiator.
+    /// @param actual Actual initiator supplied to the callback.
+    error UnexpectedCallbackInitiator(uint256 callIndex, address expected, address actual);
+
+    /// @notice Raised when reconstructed Aave calldata differs from the committed patched calldata.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param expected Committed hash of the patched outer calldata.
+    /// @param actual Hash reconstructed from the callback arguments.
+    error CallbackOriginMismatch(uint256 callIndex, bytes32 expected, bytes32 actual);
+
+    /// @notice Raised when a callback-enabled target returns without exactly one consumed callback.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param target Direct outer target expected to call back.
+    /// @param actualState Actual callback-state ordinal after the target returns.
+    error CallbackNotConsumed(uint256 callIndex, address target, uint8 actualState);
+
+    /// @notice Raised when a callback plan recursively requests another callback window.
+    /// @param outerCallIndex Index of the callback-enabled outer call.
+    /// @param callbackCallIndex Index of the invalid nested callback call.
+    error NestedCallbackNotSupported(uint256 outerCallIndex, uint256 callbackCallIndex);
+
+    /// @notice Raised when the Aave premium exceeds the signed plan's maximum.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param actual Premium reported by the Aave Pool.
+    /// @param maximum Maximum premium accepted by the callback envelope.
+    error FlashLoanPremiumTooHigh(uint256 callIndex, uint256 actual, uint256 maximum);
+
+    /// @notice Raised when the delegated account cannot cover flash-loan principal plus premium.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash-loaned ERC20 repayment asset.
+    /// @param actual Actual delegated-account asset balance.
+    /// @param required Principal-plus-premium repayment balance required.
+    error FlashLoanRepaymentBalanceInsufficient(uint256 callIndex, address asset, uint256 actual, uint256 required);
+
+    /// @notice Raised when installing the exact Aave Pool repayment allowance fails.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash-loaned ERC20 repayment asset.
+    /// @param pool Aave Pool receiving repayment authority.
+    /// @param reason Complete failed approval returndata.
+    error FlashLoanRepaymentApprovalFailed(uint256 callIndex, address asset, address pool, bytes reason);
+
+    /// @notice Raised when reading the Pool's remaining repayment allowance fails or is malformed.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash-loaned ERC20 repayment asset.
+    /// @param pool Aave Pool whose allowance is read.
+    /// @param reason Complete failed or malformed allowance returndata.
+    error FlashLoanAllowanceReadFailed(uint256 callIndex, address asset, address pool, bytes reason);
+
+    /// @notice Raised when the Pool leaves any repayment allowance after its outer call returns.
+    /// @param callIndex Index of the callback-enabled outer call.
+    /// @param asset Flash-loaned ERC20 repayment asset.
+    /// @param pool Aave Pool retaining allowance.
+    /// @param remaining Remaining nonzero allowance.
+    error ResidualFlashLoanAllowance(uint256 callIndex, address asset, address pool, uint256 remaining);
+
+    /// @notice Raised when a dynamic target call inside the authenticated callback fails.
+    /// @param outerCallIndex Index of the callback-enabled outer call.
+    /// @param callbackCallIndex Index of the failed call inside the callback envelope.
+    /// @param target Callback-plan target whose call failed.
+    /// @param reason Complete target revert data.
+    error CallbackDynamicCallFailed(uint256 outerCallIndex, uint256 callbackCallIndex, address target, bytes reason);
+
     /// @notice Executes an authorized, atomic sequence of balance-patched external calls.
     /// @dev Each call resolves patches, creates checkpoints, and then executes its target in array order.
-    ///      Successful target returndata is discarded; a failure reverts the entire batch.
+    ///      At most one outer call may request a callback; callback execution remains disabled until
+    ///      the authenticated commitment engine is installed. Successful target returndata is discarded;
+    ///      a failure reverts the entire batch.
     /// @param calls Ordered dynamic calls to execute from the delegated account.
     function executeBatchDynamic(DynamicCall[] calldata calls) external payable;
+
+    /// @notice Receives the authenticated callback for one direct Aave V3 `flashLoanSimple` call.
+    /// @dev This is not a user execution entrypoint. It authenticates an already-authorized outer
+    ///      invocation and remains fail-closed until the callback commitment engine is installed.
+    /// @param asset ERC20 asset supplied by the Aave V3 Pool.
+    /// @param amount Flash-loan principal supplied by the Pool.
+    /// @param premium Premium charged by the Pool.
+    /// @param initiator Address that initiated the Aave flash loan.
+    /// @param params ABI-encoded `CallbackEnvelope` committed by the outer call.
+    /// @return success True only after the authenticated callback plan and exact repayment setup succeed.
+    function executeOperation(address asset, uint256 amount, uint256 premium, address initiator, bytes calldata params)
+        external
+        returns (bool success);
 }
