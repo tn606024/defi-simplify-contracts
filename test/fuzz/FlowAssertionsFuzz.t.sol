@@ -7,28 +7,28 @@ import {Test} from "forge-std/Test.sol";
 import {AssertionBalanceToken} from "../mocks/FlowAssertionsMocks.sol";
 
 contract FlowAssertionsFuzzTest is Test {
-    bytes32 private constant CHECKPOINT = keccak256("fuzz-flow-assertion");
+    bytes32 private constant CHECKPOINT_ID = keccak256("fuzz-flow-assertion");
 
-    FlowAssertions private assertions;
-    AssertionBalanceToken private token;
+    FlowAssertions private flowAssertions;
+    AssertionBalanceToken private balanceToken;
 
     function setUp() external {
-        assertions = new FlowAssertions();
-        token = new AssertionBalanceToken();
+        flowAssertions = new FlowAssertions();
+        balanceToken = new AssertionBalanceToken();
     }
 
     function testFuzz_BalanceAtLeastMatchesUnsignedComparison(uint256 currentBalance, uint256 minimum) external {
-        token.setBalance(address(this), currentBalance);
+        balanceToken.setBalance(address(this), currentBalance);
 
         if (currentBalance >= minimum) {
-            assertions.assertBalanceAtLeast(address(token), minimum);
+            flowAssertions.assertBalanceAtLeast(address(balanceToken), minimum);
         } else {
             vm.expectRevert(
                 abi.encodeWithSelector(
-                    IFlowAssertions.BalanceBelowMinimum.selector, address(token), currentBalance, minimum
+                    IFlowAssertions.BalanceBelowMinimum.selector, address(balanceToken), currentBalance, minimum
                 )
             );
-            assertions.assertBalanceAtLeast(address(token), minimum);
+            flowAssertions.assertBalanceAtLeast(address(balanceToken), minimum);
         }
     }
 
@@ -37,24 +37,24 @@ contract FlowAssertionsFuzzTest is Test {
         uint256 currentBalance,
         uint256 minimumDelta
     ) external {
-        token.setBalance(address(this), checkpointBalance);
-        assertions.snapshotBalance(address(token), CHECKPOINT);
-        token.setBalance(address(this), currentBalance);
+        balanceToken.setBalance(address(this), checkpointBalance);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_ID);
+        balanceToken.setBalance(address(this), currentBalance);
         uint256 actualDelta = currentBalance > checkpointBalance ? currentBalance - checkpointBalance : 0;
 
         if (actualDelta >= minimumDelta) {
-            assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT, minimumDelta);
+            flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_ID, minimumDelta);
         } else {
             vm.expectRevert(
                 abi.encodeWithSelector(
                     IFlowAssertions.BalanceIncreaseTooSmall.selector,
-                    address(token),
-                    CHECKPOINT,
+                    address(balanceToken),
+                    CHECKPOINT_ID,
                     actualDelta,
                     minimumDelta
                 )
             );
-            assertions.assertBalanceIncreaseAtLeast(address(token), CHECKPOINT, minimumDelta);
+            flowAssertions.assertBalanceIncreaseAtLeast(address(balanceToken), CHECKPOINT_ID, minimumDelta);
         }
     }
 
@@ -63,24 +63,24 @@ contract FlowAssertionsFuzzTest is Test {
         uint256 currentBalance,
         uint256 maximumDelta
     ) external {
-        token.setBalance(address(this), checkpointBalance);
-        assertions.snapshotBalance(address(token), CHECKPOINT);
-        token.setBalance(address(this), currentBalance);
+        balanceToken.setBalance(address(this), checkpointBalance);
+        flowAssertions.snapshotBalance(address(balanceToken), CHECKPOINT_ID);
+        balanceToken.setBalance(address(this), currentBalance);
         uint256 actualDelta = checkpointBalance > currentBalance ? checkpointBalance - currentBalance : 0;
 
         if (actualDelta <= maximumDelta) {
-            assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT, maximumDelta);
+            flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_ID, maximumDelta);
         } else {
             vm.expectRevert(
                 abi.encodeWithSelector(
                     IFlowAssertions.BalanceDecreaseTooLarge.selector,
-                    address(token),
-                    CHECKPOINT,
+                    address(balanceToken),
+                    CHECKPOINT_ID,
                     actualDelta,
                     maximumDelta
                 )
             );
-            assertions.assertBalanceDecreaseAtMost(address(token), CHECKPOINT, maximumDelta);
+            flowAssertions.assertBalanceDecreaseAtMost(address(balanceToken), CHECKPOINT_ID, maximumDelta);
         }
     }
 }

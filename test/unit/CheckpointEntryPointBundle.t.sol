@@ -15,42 +15,42 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
     bytes32 private constant REUSED_CHECKPOINT_ID = keccak256("bundle-reused-checkpoint");
 
     EntryPoint private entryPoint;
-    CheckpointTableHarness private implementation;
-    address payable private account;
-    PatchBalanceToken private token;
-    DynamicExecutionTarget private target;
+    CheckpointTableHarness private checkpointHarnessImplementation;
+    address payable private delegatedEoa;
+    PatchBalanceToken private balanceToken;
+    DynamicExecutionTarget private recordingTarget;
 
     function setUp() external {
         entryPoint = new EntryPoint();
-        implementation = new CheckpointTableHarness(entryPoint);
-        account = payable(vm.addr(ACCOUNT_AUTHORITY_KEY));
-        require(account.code.length == 0, "authority already has code");
-        vm.signAndAttachDelegation(address(implementation), ACCOUNT_AUTHORITY_KEY);
-        require(_delegationTarget(account) == address(implementation), "wrong delegation target");
+        checkpointHarnessImplementation = new CheckpointTableHarness(entryPoint);
+        delegatedEoa = payable(vm.addr(ACCOUNT_AUTHORITY_KEY));
+        require(delegatedEoa.code.length == 0, "authority already has code");
+        vm.signAndAttachDelegation(address(checkpointHarnessImplementation), ACCOUNT_AUTHORITY_KEY);
+        require(_delegationTarget(delegatedEoa) == address(checkpointHarnessImplementation), "wrong delegation target");
 
-        token = new PatchBalanceToken();
-        target = new DynamicExecutionTarget();
-        token.setBalance(account, 211);
+        balanceToken = new PatchBalanceToken();
+        recordingTarget = new DynamicExecutionTarget();
+        balanceToken.setBalance(delegatedEoa, 211);
     }
 
     function test_MultipleValidUserOperationsReceiveSuccessiveScopesInOneBundle() external {
         PackedUserOperation[] memory operations = new PackedUserOperation[](2);
-        operations[0] = _signedOperation(0, _successCall(1, "first"));
-        operations[1] = _signedOperation(1, _successCall(2, "second"));
+        operations[0] = _buildSignedUserOperation(0, _buildSuccessfulCheckpointCall(1, "first"));
+        operations[1] = _buildSignedUserOperation(1, _buildSuccessfulCheckpointCall(2, "second"));
 
         vm.prank(BUNDLER, BUNDLER);
         entryPoint.handleOps(operations, BENEFICIARY);
 
-        assertEq(target.count(), 2, "both UserOperations must execute");
-        assertEq(target.total(), 3, "bundle target total");
-        vm.prank(account);
-        assertEq(CheckpointTableHarness(account).invocationCounter(), 2, "bundle invocation counter");
-        vm.prank(account);
+        assertEq(recordingTarget.count(), 2, "both UserOperations must execute");
+        assertEq(recordingTarget.total(), 3, "bundle target total");
+        vm.prank(delegatedEoa);
+        assertEq(CheckpointTableHarness(delegatedEoa).invocationCounter(), 2, "bundle invocation counter");
+        vm.prank(delegatedEoa);
         (bool firstPresent,, uint256 firstBalance) =
-            CheckpointTableHarness(account).checkpointRecord(1, REUSED_CHECKPOINT_ID);
-        vm.prank(account);
+            CheckpointTableHarness(delegatedEoa).checkpointRecord(1, REUSED_CHECKPOINT_ID);
+        vm.prank(delegatedEoa);
         (bool secondPresent,, uint256 secondBalance) =
-            CheckpointTableHarness(account).checkpointRecord(2, REUSED_CHECKPOINT_ID);
+            CheckpointTableHarness(delegatedEoa).checkpointRecord(2, REUSED_CHECKPOINT_ID);
         assertTrue(firstPresent && secondPresent, "bundle scopes absent");
         assertEq(firstBalance, 211, "first scope balance");
         assertEq(secondBalance, 211, "second scope balance");
@@ -58,22 +58,22 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
 
     function test_RevertedUserOperationBetweenSuccessesRollsBackTentativeScope() external {
         PackedUserOperation[] memory operations = new PackedUserOperation[](3);
-        operations[0] = _signedOperation(0, _successCall(3, "before-revert"));
-        operations[1] = _signedOperation(1, _failureCall(5, "reverted"));
-        operations[2] = _signedOperation(2, _successCall(7, "after-revert"));
+        operations[0] = _buildSignedUserOperation(0, _buildSuccessfulCheckpointCall(3, "before-revert"));
+        operations[1] = _buildSignedUserOperation(1, _buildRevertingCheckpointCall(5, "reverted"));
+        operations[2] = _buildSignedUserOperation(2, _buildSuccessfulCheckpointCall(7, "after-revert"));
 
         vm.prank(BUNDLER, BUNDLER);
         entryPoint.handleOps(operations, BENEFICIARY);
 
-        assertEq(target.count(), 2, "bundle must continue after failed execution");
-        assertEq(target.total(), 10, "only successful operations count");
-        vm.prank(account);
-        assertEq(CheckpointTableHarness(account).invocationCounter(), 2, "failed scope consumed counter");
-        vm.prank(account);
+        assertEq(recordingTarget.count(), 2, "bundle must continue after failed execution");
+        assertEq(recordingTarget.total(), 10, "only successful operations count");
+        vm.prank(delegatedEoa);
+        assertEq(CheckpointTableHarness(delegatedEoa).invocationCounter(), 2, "failed scope consumed counter");
+        vm.prank(delegatedEoa);
         (bool secondPresent,, uint256 secondBalance) =
-            CheckpointTableHarness(account).checkpointRecord(2, REUSED_CHECKPOINT_ID);
-        vm.prank(account);
-        (bool thirdPresent,,) = CheckpointTableHarness(account).checkpointRecord(3, REUSED_CHECKPOINT_ID);
+            CheckpointTableHarness(delegatedEoa).checkpointRecord(2, REUSED_CHECKPOINT_ID);
+        vm.prank(delegatedEoa);
+        (bool thirdPresent,,) = CheckpointTableHarness(delegatedEoa).checkpointRecord(3, REUSED_CHECKPOINT_ID);
         assertTrue(secondPresent, "post-revert scope absent");
         assertEq(secondBalance, 211, "post-revert scope balance");
         assertFalse(thirdPresent, "failed operation left an extra scope");
@@ -81,34 +81,34 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
 
     function test_PatchesConsumeOnlyTheirOwnCheckpointScopeAcrossBundledUserOperations() external {
         PackedUserOperation[] memory operations = new PackedUserOperation[](2);
-        operations[0] = _signedPatchedOperation(0, 10, false);
-        operations[1] = _signedPatchedOperation(1, 20, false);
+        operations[0] = _buildSignedPatchedUserOperation(0, 10, false);
+        operations[1] = _buildSignedPatchedUserOperation(1, 20, false);
 
         vm.prank(BUNDLER, BUNDLER);
         entryPoint.handleOps(operations, BENEFICIARY);
 
-        assertEq(target.count(), 2, "both patched UserOperations must execute");
-        assertEq(target.total(), 30, "each patch must use its invocation-local delta");
-        assertEq(token.balanceOf(account), 241, "both producers must commit");
+        assertEq(recordingTarget.count(), 2, "both patched UserOperations must execute");
+        assertEq(recordingTarget.total(), 30, "each patch must use its invocation-local delta");
+        assertEq(balanceToken.balanceOf(delegatedEoa), 241, "both producers must commit");
     }
 
     function test_RevertedPatchedUserOperationRollsBackScopeAndBalanceBeforeNextPatch() external {
         PackedUserOperation[] memory operations = new PackedUserOperation[](3);
-        operations[0] = _signedPatchedOperation(0, 10, false);
-        operations[1] = _signedPatchedOperation(1, 90, true);
-        operations[2] = _signedPatchedOperation(2, 20, false);
+        operations[0] = _buildSignedPatchedUserOperation(0, 10, false);
+        operations[1] = _buildSignedPatchedUserOperation(1, 90, true);
+        operations[2] = _buildSignedPatchedUserOperation(2, 20, false);
 
         vm.prank(BUNDLER, BUNDLER);
         entryPoint.handleOps(operations, BENEFICIARY);
 
-        assertEq(target.count(), 2, "failed patched operation must not stop bundle");
-        assertEq(target.total(), 30, "post-revert patch consumed stale or rolled-back delta");
-        assertEq(token.balanceOf(account), 241, "failed producer balance survived rollback");
-        vm.prank(account);
-        assertEq(CheckpointTableHarness(account).invocationCounter(), 2, "failed patched scope consumed counter");
+        assertEq(recordingTarget.count(), 2, "failed patched operation must not stop bundle");
+        assertEq(recordingTarget.total(), 30, "post-revert patch consumed stale or rolled-back delta");
+        assertEq(balanceToken.balanceOf(delegatedEoa), 241, "failed producer balance survived rollback");
+        vm.prank(delegatedEoa);
+        assertEq(CheckpointTableHarness(delegatedEoa).invocationCounter(), 2, "failed patched scope consumed counter");
     }
 
-    function _signedOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall memory dynamicCall)
+    function _buildSignedUserOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall memory dynamicCall)
         private
         view
         returns (PackedUserOperation memory operation)
@@ -116,15 +116,15 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = dynamicCall;
 
-        return _signedOperation(nonce, calls);
+        return _buildSignedUserOperation(nonce, calls);
     }
 
-    function _signedOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall[] memory calls)
+    function _buildSignedUserOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall[] memory calls)
         private
         view
         returns (PackedUserOperation memory operation)
     {
-        operation.sender = account;
+        operation.sender = delegatedEoa;
         operation.nonce = nonce;
         operation.callData = abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls));
         operation.accountGasLimits = bytes32((uint256(1_000_000) << 128) | uint256(1_000_000));
@@ -133,62 +133,62 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         operation.signature = _signature(ACCOUNT_AUTHORITY_KEY, entryPoint.getUserOpHash(operation));
     }
 
-    function _signedPatchedOperation(uint256 nonce, uint256 producedAmount, bool mustFail)
+    function _buildSignedPatchedUserOperation(uint256 nonce, uint256 producedAmount, bool mustFail)
         private
         view
         returns (PackedUserOperation memory operation)
     {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0].target = address(token);
+        calls[0].target = address(balanceToken);
         calls[0].data = abi.encodeCall(PatchBalanceToken.produce, (producedAmount));
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
         calls[0].checkpointsBefore[0] =
-            IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: REUSED_CHECKPOINT_ID});
+            IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: REUSED_CHECKPOINT_ID});
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
 
-        calls[1].target = address(target);
+        calls[1].target = address(recordingTarget);
         calls[1].data = mustFail
             ? abi.encodeCall(DynamicExecutionTarget.fail, (uint256(0), bytes("patched-revert")))
             : abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("patched-success")));
         calls[1].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         calls[1].patches = new IDefiSimplify7702Account.BalancePatch[](1);
         calls[1].patches[0] = IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: REUSED_CHECKPOINT_ID,
             offset: 4,
             bps: 10_000,
             source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
         });
 
-        return _signedOperation(nonce, calls);
+        return _buildSignedUserOperation(nonce, calls);
     }
 
-    function _successCall(uint256 amount, bytes memory payload)
+    function _buildSuccessfulCheckpointCall(uint256 amount, bytes memory payload)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall = _baseCall(abi.encodeCall(DynamicExecutionTarget.record, (amount, payload)));
+        dynamicCall = _buildCheckpointedTargetCall(abi.encodeCall(DynamicExecutionTarget.record, (amount, payload)));
     }
 
-    function _failureCall(uint256 code, bytes memory payload)
+    function _buildRevertingCheckpointCall(uint256 code, bytes memory payload)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall = _baseCall(abi.encodeCall(DynamicExecutionTarget.fail, (code, payload)));
+        dynamicCall = _buildCheckpointedTargetCall(abi.encodeCall(DynamicExecutionTarget.fail, (code, payload)));
     }
 
-    function _baseCall(bytes memory data)
+    function _buildCheckpointedTargetCall(bytes memory callData)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = address(target);
-        dynamicCall.data = data;
+        dynamicCall.target = address(recordingTarget);
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
         dynamicCall.checkpointsBefore[0] =
-            IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: REUSED_CHECKPOINT_ID});
+            IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: REUSED_CHECKPOINT_ID});
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 }

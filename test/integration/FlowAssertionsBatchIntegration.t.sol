@@ -9,130 +9,166 @@ import {AssertionBalanceToken, FlowAssertionsHarness} from "../mocks/FlowAsserti
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
-    bytes32 private constant STATIC_CHECKPOINT = keccak256("static-flow-assertion");
-    bytes32 private constant DYNAMIC_CHECKPOINT = keccak256("dynamic-flow-assertion");
+    bytes32 private constant STATIC_ASSERTION_CHECKPOINT_ID = keccak256("static-flow-assertion");
+    bytes32 private constant DYNAMIC_ASSERTION_CHECKPOINT_ID = keccak256("dynamic-flow-assertion");
 
-    DelegatedPair private pair;
-    FlowAssertionsHarness private assertions;
-    AssertionBalanceToken private token;
+    UpstreamCompatibilityFixture private compatibilityFixture;
+    FlowAssertionsHarness private flowAssertions;
+    AssertionBalanceToken private balanceToken;
 
     function setUp() external {
-        pair = _deployDelegatedPair(IEntryPoint(address(this)));
-        assertions = new FlowAssertionsHarness();
-        token = new AssertionBalanceToken();
+        compatibilityFixture = _deployUpstreamCompatibilityFixture(IEntryPoint(address(this)));
+        flowAssertions = new FlowAssertionsHarness();
+        balanceToken = new AssertionBalanceToken();
     }
 
-    function test_AssertionsWorkAsFinalStepsOfInheritedStaticBatches() external {
-        token.setBalance(pair.upstreamAccount, 251);
-        token.setBalance(pair.customAccount, 257);
+    function test_InheritedStaticBatches_WhenFinalBalanceAssertionPasses_CommitProducerAndSnapshot() external {
+        balanceToken.setBalance(compatibilityFixture.upstream.delegatedEoa, 251);
+        balanceToken.setBalance(compatibilityFixture.defiSimplify.delegatedEoa, 257);
 
-        _upstreamAccount(pair).executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 11, 11));
-        _customAccount(pair).executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 13, 13));
+        _upstreamAccountView(compatibilityFixture)
+            .executeBatch(_buildStaticBalanceIncreaseBatch(STATIC_ASSERTION_CHECKPOINT_ID, 11, 11));
+        _defiSimplifyAccountView(compatibilityFixture)
+            .executeBatch(_buildStaticBalanceIncreaseBatch(STATIC_ASSERTION_CHECKPOINT_ID, 13, 13));
 
-        assertEq(token.balanceOf(pair.upstreamAccount), 262, "upstream static balance");
-        assertEq(token.balanceOf(pair.customAccount), 270, "custom static balance");
+        assertEq(balanceToken.balanceOf(compatibilityFixture.upstream.delegatedEoa), 262, "upstream static balance");
+        assertEq(
+            balanceToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa), 270, "DeFi Simplify static balance"
+        );
         (bool upstreamPresent, address upstreamToken, uint256 upstreamSnapshot) =
-            assertions.snapshotRecord(pair.upstreamAccount, STATIC_CHECKPOINT);
-        (bool customPresent, address customToken, uint256 customSnapshot) =
-            assertions.snapshotRecord(pair.customAccount, STATIC_CHECKPOINT);
-        assertTrue(upstreamPresent && customPresent, "static snapshots absent");
-        assertEq(upstreamToken, address(token), "upstream static token");
-        assertEq(customToken, address(token), "custom static token");
+            flowAssertions.snapshotRecord(compatibilityFixture.upstream.delegatedEoa, STATIC_ASSERTION_CHECKPOINT_ID);
+        (bool defiSimplifyPresent, address defiSimplifyToken, uint256 defiSimplifySnapshot) = flowAssertions.snapshotRecord(
+            compatibilityFixture.defiSimplify.delegatedEoa, STATIC_ASSERTION_CHECKPOINT_ID
+        );
+        assertTrue(upstreamPresent && defiSimplifyPresent, "static snapshots absent");
+        assertEq(upstreamToken, address(balanceToken), "upstream static token");
+        assertEq(defiSimplifyToken, address(balanceToken), "DeFi Simplify static token");
         assertEq(upstreamSnapshot, 251, "upstream static snapshot");
-        assertEq(customSnapshot, 257, "custom static snapshot");
+        assertEq(defiSimplifySnapshot, 257, "DeFi Simplify static snapshot");
     }
 
-    function test_FailedFinalStaticAssertionRollsBackEarlierCallsAndSnapshot() external {
-        token.setBalance(pair.customAccount, 271);
+    function test_InheritedStaticBatch_WhenFinalBalanceAssertionFails_RollsBackProducerAndSnapshot() external {
+        balanceToken.setBalance(compatibilityFixture.defiSimplify.delegatedEoa, 271);
         bytes memory assertionReason = abi.encodeWithSelector(
-            IFlowAssertions.BalanceIncreaseTooSmall.selector, address(token), STATIC_CHECKPOINT, 17, 18
+            IFlowAssertions.BalanceIncreaseTooSmall.selector,
+            address(balanceToken),
+            STATIC_ASSERTION_CHECKPOINT_ID,
+            17,
+            18
         );
 
         vm.expectRevert(abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 2, assertionReason));
-        _customAccount(pair).executeBatch(_staticIncreasePlan(STATIC_CHECKPOINT, 17, 18));
+        _defiSimplifyAccountView(compatibilityFixture)
+            .executeBatch(_buildStaticBalanceIncreaseBatch(STATIC_ASSERTION_CHECKPOINT_ID, 17, 18));
 
-        assertEq(token.balanceOf(pair.customAccount), 271, "failed static producer survived");
-        (bool present,,) = assertions.snapshotRecord(pair.customAccount, STATIC_CHECKPOINT);
+        assertEq(
+            balanceToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa),
+            271,
+            "failed static producer survived"
+        );
+        (bool present,,) = flowAssertions.snapshotRecord(
+            compatibilityFixture.defiSimplify.delegatedEoa, STATIC_ASSERTION_CHECKPOINT_ID
+        );
         assertFalse(present, "failed static snapshot survived");
     }
 
-    function test_AssertionsWorkAsFinalStepsOfDynamicBatch() external {
-        token.setBalance(pair.customAccount, 277);
+    function test_DynamicBatch_WhenFinalBalanceAssertionPasses_CommitsProducerAndSnapshot() external {
+        balanceToken.setBalance(compatibilityFixture.defiSimplify.delegatedEoa, 277);
 
-        _dynamicAccount(pair).executeBatchDynamic(_dynamicIncreasePlan(DYNAMIC_CHECKPOINT, 19, 19));
+        _dynamicExecutionInterfaceView(compatibilityFixture.defiSimplify.delegatedEoa)
+            .executeBatchDynamic(_buildDynamicBalanceIncreaseBatch(DYNAMIC_ASSERTION_CHECKPOINT_ID, 19, 19));
 
-        assertEq(token.balanceOf(pair.customAccount), 296, "dynamic balance");
-        (bool present, address snapshotToken, uint256 snapshotBalance) =
-            assertions.snapshotRecord(pair.customAccount, DYNAMIC_CHECKPOINT);
+        assertEq(balanceToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa), 296, "dynamic balance");
+        (bool present, address snapshotToken, uint256 snapshotBalance) = flowAssertions.snapshotRecord(
+            compatibilityFixture.defiSimplify.delegatedEoa, DYNAMIC_ASSERTION_CHECKPOINT_ID
+        );
         assertTrue(present, "dynamic snapshot absent");
-        assertEq(snapshotToken, address(token), "dynamic snapshot token");
+        assertEq(snapshotToken, address(balanceToken), "dynamic snapshot token");
         assertEq(snapshotBalance, 277, "dynamic snapshot balance");
     }
 
-    function test_FailedFinalDynamicAssertionRollsBackEarlierCallsAndSnapshot() external {
-        token.setBalance(pair.customAccount, 281);
+    function test_DynamicBatch_WhenFinalBalanceAssertionFails_RollsBackProducerAndSnapshot() external {
+        balanceToken.setBalance(compatibilityFixture.defiSimplify.delegatedEoa, 281);
         bytes memory assertionReason = abi.encodeWithSelector(
-            IFlowAssertions.BalanceIncreaseTooSmall.selector, address(token), DYNAMIC_CHECKPOINT, 23, 24
+            IFlowAssertions.BalanceIncreaseTooSmall.selector,
+            address(balanceToken),
+            DYNAMIC_ASSERTION_CHECKPOINT_ID,
+            23,
+            24
         );
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.DynamicCallFailed.selector, 2, address(assertions), assertionReason
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 2, address(flowAssertions), assertionReason
             )
         );
-        _dynamicAccount(pair).executeBatchDynamic(_dynamicIncreasePlan(DYNAMIC_CHECKPOINT, 23, 24));
+        _dynamicExecutionInterfaceView(compatibilityFixture.defiSimplify.delegatedEoa)
+            .executeBatchDynamic(_buildDynamicBalanceIncreaseBatch(DYNAMIC_ASSERTION_CHECKPOINT_ID, 23, 24));
 
-        assertEq(token.balanceOf(pair.customAccount), 281, "failed dynamic producer survived");
-        (bool present,,) = assertions.snapshotRecord(pair.customAccount, DYNAMIC_CHECKPOINT);
+        assertEq(
+            balanceToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa),
+            281,
+            "failed dynamic producer survived"
+        );
+        (bool present,,) = flowAssertions.snapshotRecord(
+            compatibilityFixture.defiSimplify.delegatedEoa, DYNAMIC_ASSERTION_CHECKPOINT_ID
+        );
         assertFalse(present, "failed dynamic snapshot survived");
     }
 
-    function _staticIncreasePlan(bytes32 checkpointId, uint256 producedAmount, uint256 minimumDelta)
+    function _buildStaticBalanceIncreaseBatch(bytes32 checkpointId, uint256 producedAmount, uint256 minimumDelta)
         private
         view
         returns (BaseAccount.Call[] memory calls)
     {
         calls = new BaseAccount.Call[](3);
         calls[0] = BaseAccount.Call({
-            target: address(assertions),
+            target: address(flowAssertions),
             value: 0,
-            data: abi.encodeCall(IFlowAssertions.snapshotBalance, (address(token), checkpointId))
+            data: abi.encodeCall(IFlowAssertions.snapshotBalance, (address(balanceToken), checkpointId))
         });
         calls[1] = BaseAccount.Call({
-            target: address(token), value: 0, data: abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
+            target: address(balanceToken),
+            value: 0,
+            data: abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
         });
         calls[2] = BaseAccount.Call({
-            target: address(assertions),
+            target: address(flowAssertions),
             value: 0,
             data: abi.encodeCall(
-                IFlowAssertions.assertBalanceIncreaseAtLeast, (address(token), checkpointId, minimumDelta)
+                IFlowAssertions.assertBalanceIncreaseAtLeast, (address(balanceToken), checkpointId, minimumDelta)
             )
         });
     }
 
-    function _dynamicIncreasePlan(bytes32 checkpointId, uint256 producedAmount, uint256 minimumDelta)
+    function _buildDynamicBalanceIncreaseBatch(bytes32 checkpointId, uint256 producedAmount, uint256 minimumDelta)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](3);
-        calls[0] = _dynamicCall(
-            address(assertions), abi.encodeCall(IFlowAssertions.snapshotBalance, (address(token), checkpointId))
+        calls[0] = _buildUnpatchedDynamicCall(
+            address(flowAssertions),
+            abi.encodeCall(IFlowAssertions.snapshotBalance, (address(balanceToken), checkpointId))
         );
-        calls[1] = _dynamicCall(address(token), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount)));
-        calls[2] = _dynamicCall(
-            address(assertions),
-            abi.encodeCall(IFlowAssertions.assertBalanceIncreaseAtLeast, (address(token), checkpointId, minimumDelta))
+        calls[1] = _buildUnpatchedDynamicCall(
+            address(balanceToken), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
+        );
+        calls[2] = _buildUnpatchedDynamicCall(
+            address(flowAssertions),
+            abi.encodeCall(
+                IFlowAssertions.assertBalanceIncreaseAtLeast, (address(balanceToken), checkpointId, minimumDelta)
+            )
         );
     }
 
-    function _dynamicCall(address target, bytes memory data)
+    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData)
         private
         pure
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = target;
-        dynamicCall.data = data;
+        dynamicCall.target = callTarget;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }

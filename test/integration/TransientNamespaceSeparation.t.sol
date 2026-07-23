@@ -10,10 +10,10 @@ contract TransientNamespaceSeparationTest is Test {
 
     bytes32 private constant CHECKPOINT_ID = keccak256("namespace-separation");
 
-    FlowAssertionsHarness private assertions;
+    FlowAssertionsHarness private flowAssertions;
 
     function setUp() external {
-        assertions = new FlowAssertionsHarness();
+        flowAssertions = new FlowAssertionsHarness();
     }
 
     function test_AccountAndAssertionTransientNamespacesAndRecordLayoutRemainSeparated() external view {
@@ -30,8 +30,8 @@ contract TransientNamespaceSeparationTest is Test {
         assertNotEq(checkpointNamespace, assertionNamespace, "checkpoint/assertion namespace collision");
 
         bytes32 expectedRoot = assertionNamespace.deriveMapping(address(this)).deriveMapping(CHECKPOINT_ID);
-        bytes32 actualRoot = assertions.snapshotRecordRoot(address(this), CHECKPOINT_ID);
-        assertEq(assertions.snapshotNamespace(), assertionNamespace, "assertion namespace");
+        bytes32 actualRoot = flowAssertions.snapshotRecordRoot(address(this), CHECKPOINT_ID);
+        assertEq(flowAssertions.snapshotNamespace(), assertionNamespace, "assertion namespace");
         assertEq(actualRoot, expectedRoot, "assertion nested mapping derivation");
         assertNotEq(actualRoot, actualRoot.offset(1), "presence/token slot collision");
         assertNotEq(actualRoot.offset(1), actualRoot.offset(2), "token/balance slot collision");

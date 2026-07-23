@@ -29,19 +29,19 @@ contract TransientTokenBalanceRecordHarness {
 }
 
 contract TransientTokenBalanceRecordTest is Test {
-    bytes32 private constant RECORD_A = keccak256("transient-token-balance-record-a");
-    bytes32 private constant RECORD_B = keccak256("transient-token-balance-record-b");
-    address private constant TOKEN_A = address(0xA11CE);
-    address private constant TOKEN_B = address(0xB0B);
+    bytes32 private constant RECORD_A_ROOT = keccak256("transient-token-balance-record-a");
+    bytes32 private constant RECORD_B_ROOT = keccak256("transient-token-balance-record-b");
+    address private constant TOKEN_A_ADDRESS = address(0xA11CE);
+    address private constant TOKEN_B_ADDRESS = address(0xB0B);
 
-    TransientTokenBalanceRecordHarness private harness;
+    TransientTokenBalanceRecordHarness private recordHarness;
 
     function setUp() external {
-        harness = new TransientTokenBalanceRecordHarness();
+        recordHarness = new TransientTokenBalanceRecordHarness();
     }
 
     function test_UnwrittenRecordHasZeroedIndependentFields() external view {
-        (bool present, address token, uint256 balance) = harness.record(RECORD_A);
+        (bool present, address token, uint256 balance) = recordHarness.record(RECORD_A_ROOT);
 
         assertFalse(present, "unwritten presence");
         assertEq(token, address(0), "unwritten token");
@@ -49,36 +49,36 @@ contract TransientTokenBalanceRecordTest is Test {
     }
 
     function test_StorePublishesTokenAndBalanceAtCanonicalOffsets() external {
-        harness.store(RECORD_A, TOKEN_A, 123_456);
+        recordHarness.store(RECORD_A_ROOT, TOKEN_A_ADDRESS, 123_456);
 
-        (bool present, address token, uint256 balance) = harness.record(RECORD_A);
+        (bool present, address token, uint256 balance) = recordHarness.record(RECORD_A_ROOT);
         assertTrue(present, "stored presence");
-        assertEq(token, TOKEN_A, "stored token");
+        assertEq(token, TOKEN_A_ADDRESS, "stored token");
         assertEq(balance, 123_456, "stored balance");
-        assertEq(harness.rawField(RECORD_A, 0), bytes32(uint256(1)), "presence offset");
-        assertEq(harness.rawField(RECORD_A, 1), bytes32(uint256(uint160(TOKEN_A))), "token offset");
-        assertEq(harness.rawField(RECORD_A, 2), bytes32(uint256(123_456)), "balance offset");
+        assertEq(recordHarness.rawField(RECORD_A_ROOT, 0), bytes32(uint256(1)), "presence offset");
+        assertEq(recordHarness.rawField(RECORD_A_ROOT, 1), bytes32(uint256(uint160(TOKEN_A_ADDRESS))), "token offset");
+        assertEq(recordHarness.rawField(RECORD_A_ROOT, 2), bytes32(uint256(123_456)), "balance offset");
     }
 
     function test_ZeroBalanceRemainsPresentAndDistinctFromAbsence() external {
-        harness.store(RECORD_A, TOKEN_A, 0);
+        recordHarness.store(RECORD_A_ROOT, TOKEN_A_ADDRESS, 0);
 
-        (bool present, address token, uint256 balance) = harness.record(RECORD_A);
+        (bool present, address token, uint256 balance) = recordHarness.record(RECORD_A_ROOT);
         assertTrue(present, "zero-balance presence");
-        assertEq(token, TOKEN_A, "zero-balance token");
+        assertEq(token, TOKEN_A_ADDRESS, "zero-balance token");
         assertEq(balance, 0, "zero-balance value");
     }
 
     function test_StoreDoesNotOverwriteAdjacentSlotOrIndependentRoot() external {
         bytes32 sentinel = keccak256("adjacent-field-sentinel");
-        harness.seedRawField(RECORD_A, 3, sentinel);
-        harness.store(RECORD_B, TOKEN_B, 654_321);
-        harness.store(RECORD_A, TOKEN_A, 123_456);
+        recordHarness.seedRawField(RECORD_A_ROOT, 3, sentinel);
+        recordHarness.store(RECORD_B_ROOT, TOKEN_B_ADDRESS, 654_321);
+        recordHarness.store(RECORD_A_ROOT, TOKEN_A_ADDRESS, 123_456);
 
-        assertEq(harness.rawField(RECORD_A, 3), sentinel, "adjacent slot changed");
-        (bool presentB, address tokenB, uint256 balanceB) = harness.record(RECORD_B);
+        assertEq(recordHarness.rawField(RECORD_A_ROOT, 3), sentinel, "adjacent slot changed");
+        (bool presentB, address tokenB, uint256 balanceB) = recordHarness.record(RECORD_B_ROOT);
         assertTrue(presentB, "independent root presence");
-        assertEq(tokenB, TOKEN_B, "independent root token");
+        assertEq(tokenB, TOKEN_B_ADDRESS, "independent root token");
         assertEq(balanceB, 654_321, "independent root balance");
     }
 }

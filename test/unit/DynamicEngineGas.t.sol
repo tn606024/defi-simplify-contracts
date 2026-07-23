@@ -13,60 +13,63 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
     bytes32 private constant CHECKPOINT_ID = keccak256("dynamic-engine-gas-checkpoint");
     bytes4 private constant CAPTURE_SELECTOR = bytes4(keccak256("capture(uint256,uint256,uint256)"));
 
-    DelegatedPair private pair;
-    PatchBalanceToken private token;
-    DynamicExecutionTarget private target;
-    DynamicPatchTarget private patchTarget;
+    DelegatedDefiSimplifyAccount private accountUnderTest;
+    PatchBalanceToken private balanceToken;
+    DynamicExecutionTarget private recordingTarget;
+    DynamicPatchTarget private calldataCaptureTarget;
 
     /// @dev Installs the delegated account and target fixtures for each gas scenario.
     function setUp() external {
-        pair = _deployDelegatedPair(IEntryPoint(address(this)));
-        token = new PatchBalanceToken();
-        target = new DynamicExecutionTarget();
-        patchTarget = new DynamicPatchTarget();
+        accountUnderTest = _deployDelegatedDefiSimplifyAccount(IEntryPoint(address(this)));
+        balanceToken = new PatchBalanceToken();
+        recordingTarget = new DynamicExecutionTarget();
+        calldataCaptureTarget = new DynamicPatchTarget();
     }
 
     /// @dev Snapshots one CurrentBalance patch and one target call.
     function test_Gas_IntegratedOneCallCurrentBalancePatch() external {
-        token.setBalance(pair.customAccount, 1_000);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, 1_000);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _recordCall(_singlePatch(_currentPatch(4, 10_000)));
+        calls[0] = _buildRecordingCall(_onePatch(_currentBalancePatch(4, 10_000)));
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
-        assertEq(target.total(), 1_000, "current-balance amount");
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
+        assertEq(recordingTarget.total(), 1_000, "current-balance amount");
     }
 
     /// @dev Snapshots checkpoint creation followed by one CheckpointDelta patch.
     function test_Gas_IntegratedTwoCallCheckpointDeltaPatch() external {
-        token.setBalance(pair.customAccount, 1_000);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, 1_000);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _call(
-            address(token), abi.encodeCall(PatchBalanceToken.produce, (uint256(250))), _singleCheckpoint(), _noPatches()
+        calls[0] = _buildDynamicCall(
+            address(balanceToken),
+            abi.encodeCall(PatchBalanceToken.produce, (uint256(250))),
+            _oneCheckpoint(),
+            _noPatches()
         );
-        calls[1] = _recordCall(_singlePatch(_deltaPatch(4, 10_000)));
+        calls[1] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(4, 10_000)));
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
-        assertEq(target.total(), 250, "checkpoint-delta amount");
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
+        assertEq(recordingTarget.total(), 250, "checkpoint-delta amount");
     }
 
     /// @dev Snapshots three same-token patches sharing one balance read.
     function test_Gas_IntegratedThreeSameTokenCachedPatches() external {
-        token.setBalance(pair.customAccount, 2_000);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, 2_000);
         IDefiSimplify7702Account.BalancePatch[] memory patches = new IDefiSimplify7702Account.BalancePatch[](3);
-        patches[0] = _currentPatch(4, 2_500);
-        patches[1] = _currentPatch(36, 5_000);
-        patches[2] = _currentPatch(68, 10_000);
+        patches[0] = _currentBalancePatch(4, 2_500);
+        patches[1] = _currentBalancePatch(36, 5_000);
+        patches[2] = _currentBalancePatch(68, 10_000);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _call(
-            address(patchTarget),
+        calls[0] = _buildDynamicCall(
+            address(calldataCaptureTarget),
             abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(0), uint256(0), uint256(0)),
             _noCheckpoints(),
             patches
         );
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
         assertEq(
-            patchTarget.observedData(),
+            calldataCaptureTarget.observedData(),
             abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(500), uint256(1_000), uint256(2_000)),
             "cached patch amounts"
         );
@@ -74,57 +77,53 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
 
     /// @dev Snapshots two sequential invocation scopes on one delegated account.
     function test_Gas_IntegratedSameAccountSequentialInvocations() external {
-        token.setBalance(pair.customAccount, 3_000);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, 3_000);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _recordCall(_singlePatch(_currentPatch(4, 5_000)));
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        calls[0] = _buildRecordingCall(_onePatch(_currentBalancePatch(4, 5_000)));
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        token.setBalance(pair.customAccount, 4_000);
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, 4_000);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        assertEq(target.count(), 2, "sequential invocation count");
-        assertEq(target.total(), 3_500, "sequential invocation total");
+        assertEq(recordingTarget.count(), 2, "sequential invocation count");
+        assertEq(recordingTarget.total(), 3_500, "sequential invocation total");
     }
 
-    function _recordCall(IDefiSimplify7702Account.BalancePatch[] memory patches)
+    function _buildRecordingCall(IDefiSimplify7702Account.BalancePatch[] memory patches)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall memory)
     {
-        return _call(
-            address(target),
+        return _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("gas"))),
             _noCheckpoints(),
             patches
         );
     }
 
-    function _call(
+    function _buildDynamicCall(
         address callTarget,
-        bytes memory data,
+        bytes memory callData,
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints,
         IDefiSimplify7702Account.BalancePatch[] memory patches
     ) private pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
         dynamicCall.target = callTarget;
-        dynamicCall.data = data;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = checkpoints;
         dynamicCall.patches = patches;
     }
 
-    function _singleCheckpoint()
-        private
-        view
-        returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
-    {
+    function _oneCheckpoint() private view returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
         checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: CHECKPOINT_ID});
+        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: CHECKPOINT_ID});
     }
 
     function _noCheckpoints() private pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
         checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
     }
 
-    function _singlePatch(IDefiSimplify7702Account.BalancePatch memory patch)
+    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
         private
         pure
         returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
@@ -137,13 +136,13 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
         patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 
-    function _currentPatch(uint32 offset, uint16 bps)
+    function _currentBalancePatch(uint32 offset, uint16 bps)
         private
         view
         returns (IDefiSimplify7702Account.BalancePatch memory)
     {
         return IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: bytes32(0),
             offset: offset,
             bps: bps,
@@ -151,13 +150,13 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
         });
     }
 
-    function _deltaPatch(uint32 offset, uint16 bps)
+    function _checkpointDeltaPatch(uint32 offset, uint16 bps)
         private
         view
         returns (IDefiSimplify7702Account.BalancePatch memory)
     {
         return IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: CHECKPOINT_ID,
             offset: offset,
             bps: bps,

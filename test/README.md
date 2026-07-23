@@ -1,17 +1,22 @@
 # Test fixtures
 
 `utils/DelegatedAccountFixture.sol` is the canonical EIP-7702 fixture for unit
-and Base fork tests. It deploys pinned upstream and custom implementations, then
-uses forge-std's Prague `signAndAttachDelegation` cheatcode to install each
-implementation on a real test EOA.
+and Base fork tests. It uses forge-std's Prague
+`signAndAttachDelegation` cheatcode to install the requested implementation on a
+real test EOA.
 
 Calls made through the returned EOA addresses execute with the required account
 context: `address(this)` is the EOA and inherited self-or-EntryPoint
 authorization observes that EOA. Direct calls to an implementation contract and
 `vm.etch` do not model delegation processing and must not replace this fixture
 for authorization, signature, receiver, fallback, or protocol-accounting tests.
-Use the fixture's `_upstreamAccount(pair)`, `_customAccount(pair)`, and
-`_dynamicAccount(pair)` accessors instead of repeating delegated-address casts
+
+Ordinary DeFi Simplify tests deploy one `DelegatedDefiSimplifyAccount` named
+`accountUnderTest`. Tests that genuinely compare inherited behavior deploy an
+`UpstreamCompatibilityFixture` named `compatibilityFixture`; it contains
+separate `upstream` and `defiSimplify` delegated EOAs. Use
+`_upstreamAccountView`, `_defiSimplifyAccountView`, and
+`_dynamicExecutionInterfaceView` instead of repeating delegated-address casts
 or defining suite-local wrappers.
 
 The static differential suite in `unit/UpstreamCompatibility.t.sol` intentionally
@@ -26,6 +31,33 @@ invocation isolation, rollback, and lookup cost without adding a getter to the
 production account ABI. `unit/CheckpointEntryPointBundle.t.sol` uses the real
 pinned EntryPoint source to prove that multiple same-account UserOperations in
 one bundle receive isolated invocation scopes.
+
+## Reviewer-readable test vocabulary
+
+DSC-77 established one vocabulary across unit, fuzz, invariant, integration, and
+Base fork tests. Names should expose the scenario without requiring a reviewer
+to reverse-engineer helper code:
+
+| Before | Use now | Meaning |
+| --- | --- | --- |
+| `pair` | `compatibilityFixture` | Two independent delegated EOAs used for upstream differential tests |
+| `customAccount` | `accountUnderTest` or `defiSimplify` | The delegated DeFi Simplify EOA, not a separate account hidden behind an ABI cast |
+| `target` | `recordingTarget`, `calldataCaptureTarget`, `aavePool`, etc. | The target's role in the scenario |
+| `token` | `balanceToken`, `checkpointToken`, `producedToken`, etc. | The token's role in the scenario |
+| `_call` / `_dynamicCall` | `_build...Call` or `_build...Batch` | A builder whose name says what scenario it constructs |
+| `SUBJECT_OFFSET` / `SELECTED_RETURN_OFFSET` | `ACCOUNT_ARGUMENT_OFFSET` / `ACCOUNT_VALUE_RETURN_OFFSET` | The exact ABI word and byte sequence being indexed |
+
+Test names read as executable specifications: subject or action, condition when
+needed, and observable result. Gas, golden-vector, fuzz, and invariant tests
+retain their conventional prefixes. Generic ABI field names such as `target`,
+`value`, `data`, and `token` remain appropriate inside the ABI structs and
+small generic builders where the surrounding scope already supplies their
+meaning.
+
+This refactor intentionally changes only test code, fixture topology, names, and
+deterministic test gas. Production source, public ABI fixtures, runtime bytecode,
+and contract behavior remain unchanged. The non-fork regression suite remains
+210 tests.
 
 ## DSC-51 dynamic-engine verification report
 
@@ -57,24 +89,29 @@ CI also executes each dynamic-engine fuzz property with 10,000 runs.
 
 | Scenario | Test gas |
 | --- | ---: |
-| One-call `CurrentBalance` patch | 145,298 |
-| Two-call `CheckpointDelta` producer/consumer | 153,792 |
-| Three same-token cached patches | 173,550 |
-| Two same-account sequential invocations | 159,242 |
+| One-call `CurrentBalance` patch | 145,118 |
+| Two-call `CheckpointDelta` producer/consumer | 153,511 |
+| Three same-token cached patches | 173,262 |
+| Two same-account sequential invocations | 159,014 |
 
 The existing production checkpoint-delta matrix remains:
 
 | Checkpoint-delta patches | Test gas |
 | ---: | ---: |
-| 1 | 87,528 |
-| 4 | 111,515 |
-| 8 | 142,287 |
-| 16 | 205,941 |
-| 32 | 332,893 |
+| 1 | 87,534 |
+| 4 | 111,539 |
+| 8 | 142,335 |
+| 16 | 206,037 |
+| 32 | 333,085 |
 
 The incremental cost remains approximately linear as checkpoint/patch count
 grows. These figures are regression evidence for table complexity, not
 protocol-flow estimates or permission to weaken validation.
+
+DSC-77 refreshed these figures after ordinary custom-account suites stopped
+deploying an unused upstream comparison account. The changes measure fixture
+construction and renamed test harnesses; production runtime bytecode is
+unchanged.
 
 The snapshot command excludes `invariant_` functions because their reported
 run/call totals intentionally differ between the default and CI profiles. The

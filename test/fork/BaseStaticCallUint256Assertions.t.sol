@@ -13,9 +13,7 @@ import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
     uint256 private constant BASE_CHAIN_ID = 8453;
     uint256 private constant BASE_FORK_BLOCK = 48_961_870;
-    uint256 private constant BASE_GENERIC_UPSTREAM_AUTHORITY_KEY =
-        0x0f9be418f26495095633001cdf2f537edb74bb7c7634a681558521f0b85b8c46;
-    uint256 private constant BASE_GENERIC_CUSTOM_AUTHORITY_KEY =
+    uint256 private constant BASE_GENERIC_ASSERTION_AUTHORITY_KEY =
         0x103e3a64ac46b56b6678ff2c49b6a4ed949015751f64a0cbc43f28dd628bef18;
     uint32 private constant NO_ACCOUNT_BINDING = type(uint32).max;
     uint32 private constant AAVE_ACCOUNT_ARGUMENT_OFFSET = 4;
@@ -24,43 +22,42 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
     address private constant BASE_WETH = 0x4200000000000000000000000000000000000006;
     address private constant PLACEHOLDER_ACCOUNT = 0x1111111111111111111111111111111111111111;
 
-    DelegatedPair private pair;
-    StaticCallUint256Assertions private uint256Assertions;
+    DelegatedDefiSimplifyAccount private accountUnderTest;
+    StaticCallUint256Assertions private genericAssertions;
 
     function setUp() external {
         require(block.chainid == BASE_CHAIN_ID, "fork is not Base mainnet");
         vm.rollFork(BASE_FORK_BLOCK);
         require(AAVE_V3_POOL.code.length != 0, "Aave V3 Pool has no code");
         require(BASE_WETH.code.length != 0, "Base WETH has no code");
-        pair = _deployDelegatedPair(
-            IEntryPoint(address(this)), BASE_GENERIC_UPSTREAM_AUTHORITY_KEY, BASE_GENERIC_CUSTOM_AUTHORITY_KEY
-        );
-        uint256Assertions = new StaticCallUint256Assertions();
+        accountUnderTest =
+            _deployDelegatedDefiSimplifyAccount(IEntryPoint(address(this)), BASE_GENERIC_ASSERTION_AUTHORITY_KEY);
+        genericAssertions = new StaticCallUint256Assertions();
     }
 
     function test_IndependentCheckerBindsDelegatedAccountForBaseAaveAndSupportsGlobalBaseRead() external {
-        (,,,,, uint256 healthFactor) = IAaveV3Pool(AAVE_V3_POOL).getUserAccountData(pair.customAccount);
+        (,,,,, uint256 healthFactor) = IAaveV3Pool(AAVE_V3_POOL).getUserAccountData(accountUnderTest.delegatedEoa);
         assertEq(healthFactor, type(uint256).max, "unexpected no-position health factor");
 
         BaseAccount.Call[] memory calls = new BaseAccount.Call[](2);
         calls[0] =
-            BaseAccount.Call({target: address(uint256Assertions), value: 0, data: _encodeAaveHealthFactorAssertion()});
+            BaseAccount.Call({target: address(genericAssertions), value: 0, data: _encodeAaveHealthFactorAssertion()});
         calls[1] =
-            BaseAccount.Call({target: address(uint256Assertions), value: 0, data: _encodeWethTotalSupplyAssertion()});
+            BaseAccount.Call({target: address(genericAssertions), value: 0, data: _encodeWethTotalSupplyAssertion()});
 
-        vm.prank(pair.customAccount, pair.customAccount);
-        _customAccount(pair).executeBatch(calls);
+        vm.prank(accountUnderTest.delegatedEoa, accountUnderTest.delegatedEoa);
+        _defiSimplifyAccountView(accountUnderTest).executeBatch(calls);
     }
 
     function test_IndependentCheckerWorksAsFinalDynamicStepAgainstBaseAave() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0].target = address(uint256Assertions);
+        calls[0].target = address(genericAssertions);
         calls[0].data = _encodeAaveHealthFactorAssertion();
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
 
-        vm.prank(pair.customAccount, pair.customAccount);
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        vm.prank(accountUnderTest.delegatedEoa, accountUnderTest.delegatedEoa);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
     }
 
     function _encodeAaveHealthFactorAssertion() private pure returns (bytes memory) {

@@ -11,99 +11,117 @@ import {AssertionBalanceToken} from "../mocks/FlowAssertionsMocks.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
-    DelegatedPair private pair;
-    FlowAssertions private assertions;
-    AaveV3PoolMock private pool;
-    AssertionBalanceToken private token;
+    UpstreamCompatibilityFixture private compatibilityFixture;
+    FlowAssertions private flowAssertions;
+    AaveV3PoolMock private aavePool;
+    AssertionBalanceToken private producedToken;
 
     function setUp() external {
-        pair = _deployDelegatedPair(IEntryPoint(address(this)));
-        assertions = new FlowAssertions();
-        pool = new AaveV3PoolMock();
-        token = new AssertionBalanceToken();
+        compatibilityFixture = _deployUpstreamCompatibilityFixture(IEntryPoint(address(this)));
+        flowAssertions = new FlowAssertions();
+        aavePool = new AaveV3PoolMock();
+        producedToken = new AssertionBalanceToken();
     }
 
-    function test_AaveV3AssertionWorksAsFinalStepOfInheritedStaticBatches() external {
-        pool.setHealthFactor(pair.upstreamAccount, 1.5e18);
-        pool.setHealthFactor(pair.customAccount, 1.6e18);
+    function test_InheritedStaticBatches_WhenAaveHealthFactorMeetsMinimum_CommitProducerState() external {
+        aavePool.setHealthFactor(compatibilityFixture.upstream.delegatedEoa, 1.5e18);
+        aavePool.setHealthFactor(compatibilityFixture.defiSimplify.delegatedEoa, 1.6e18);
 
-        _upstreamAccount(pair).executeBatch(_staticPlan(31, 1.5e18));
-        _customAccount(pair).executeBatch(_staticPlan(37, 1.6e18));
+        _upstreamAccountView(compatibilityFixture).executeBatch(_buildStaticAaveAssertionBatch(31, 1.5e18));
+        _defiSimplifyAccountView(compatibilityFixture).executeBatch(_buildStaticAaveAssertionBatch(37, 1.6e18));
 
-        assertEq(token.balanceOf(pair.upstreamAccount), 31, "upstream producer");
-        assertEq(token.balanceOf(pair.customAccount), 37, "custom producer");
+        assertEq(producedToken.balanceOf(compatibilityFixture.upstream.delegatedEoa), 31, "upstream producer");
+        assertEq(producedToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa), 37, "DeFi Simplify producer");
     }
 
-    function test_FailedFinalStaticAaveV3AssertionRollsBackEarlierState() external {
-        pool.setHealthFactor(pair.customAccount, 1.2e18);
-        bytes memory assertionReason =
-            abi.encodeWithSelector(IFlowAssertions.AaveV3HealthFactorTooLow.selector, address(pool), 1.2e18, 1.3e18);
+    function test_InheritedStaticBatch_WhenFinalAaveAssertionFails_RollsBackProducerState() external {
+        aavePool.setHealthFactor(compatibilityFixture.defiSimplify.delegatedEoa, 1.2e18);
+        bytes memory assertionReason = abi.encodeWithSelector(
+            IFlowAssertions.AaveV3HealthFactorTooLow.selector, address(aavePool), 1.2e18, 1.3e18
+        );
 
         vm.expectRevert(abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 1, assertionReason));
-        _customAccount(pair).executeBatch(_staticPlan(41, 1.3e18));
+        _defiSimplifyAccountView(compatibilityFixture).executeBatch(_buildStaticAaveAssertionBatch(41, 1.3e18));
 
-        assertEq(token.balanceOf(pair.customAccount), 0, "failed static producer survived");
+        assertEq(
+            producedToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa),
+            0,
+            "failed static producer survived"
+        );
     }
 
-    function test_AaveV3AssertionWorksAsFinalStepOfDynamicBatch() external {
-        pool.setHealthFactor(pair.customAccount, 1.4e18);
+    function test_DynamicBatch_WhenAaveHealthFactorMeetsMinimum_CommitsProducerState() external {
+        aavePool.setHealthFactor(compatibilityFixture.defiSimplify.delegatedEoa, 1.4e18);
 
-        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(43, 1.4e18));
+        _dynamicExecutionInterfaceView(compatibilityFixture.defiSimplify.delegatedEoa)
+            .executeBatchDynamic(_buildDynamicAaveAssertionBatch(43, 1.4e18));
 
-        assertEq(token.balanceOf(pair.customAccount), 43, "dynamic producer");
+        assertEq(producedToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa), 43, "dynamic producer");
     }
 
-    function test_FailedFinalDynamicAaveV3AssertionRollsBackEarlierState() external {
-        pool.setHealthFactor(pair.customAccount, 1.1e18);
-        bytes memory assertionReason =
-            abi.encodeWithSelector(IFlowAssertions.AaveV3HealthFactorTooLow.selector, address(pool), 1.1e18, 1.2e18);
+    function test_DynamicBatch_WhenFinalAaveAssertionFails_RollsBackProducerState() external {
+        aavePool.setHealthFactor(compatibilityFixture.defiSimplify.delegatedEoa, 1.1e18);
+        bytes memory assertionReason = abi.encodeWithSelector(
+            IFlowAssertions.AaveV3HealthFactorTooLow.selector, address(aavePool), 1.1e18, 1.2e18
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(assertions), assertionReason
+                IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(flowAssertions), assertionReason
             )
         );
-        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(47, 1.2e18));
+        _dynamicExecutionInterfaceView(compatibilityFixture.defiSimplify.delegatedEoa)
+            .executeBatchDynamic(_buildDynamicAaveAssertionBatch(47, 1.2e18));
 
-        assertEq(token.balanceOf(pair.customAccount), 0, "failed dynamic producer survived");
+        assertEq(
+            producedToken.balanceOf(compatibilityFixture.defiSimplify.delegatedEoa),
+            0,
+            "failed dynamic producer survived"
+        );
     }
 
-    function _staticPlan(uint256 producedAmount, uint256 minimumHealthFactor)
+    function _buildStaticAaveAssertionBatch(uint256 producedAmount, uint256 minimumHealthFactor)
         private
         view
         returns (BaseAccount.Call[] memory calls)
     {
         calls = new BaseAccount.Call[](2);
         calls[0] = BaseAccount.Call({
-            target: address(token), value: 0, data: abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
+            target: address(producedToken),
+            value: 0,
+            data: abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
         });
         calls[1] = BaseAccount.Call({
-            target: address(assertions),
+            target: address(flowAssertions),
             value: 0,
-            data: abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (address(pool), minimumHealthFactor))
+            data: abi.encodeCall(
+                IFlowAssertions.assertAaveV3HealthFactorAtLeast, (address(aavePool), minimumHealthFactor)
+            )
         });
     }
 
-    function _dynamicPlan(uint256 producedAmount, uint256 minimumHealthFactor)
+    function _buildDynamicAaveAssertionBatch(uint256 producedAmount, uint256 minimumHealthFactor)
         private
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _dynamicCall(address(token), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount)));
-        calls[1] = _dynamicCall(
-            address(assertions),
-            abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (address(pool), minimumHealthFactor))
+        calls[0] = _buildUnpatchedDynamicCall(
+            address(producedToken), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
+        );
+        calls[1] = _buildUnpatchedDynamicCall(
+            address(flowAssertions),
+            abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (address(aavePool), minimumHealthFactor))
         );
     }
 
-    function _dynamicCall(address target, bytes memory data)
+    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData)
         private
         pure
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = target;
-        dynamicCall.data = data;
+        dynamicCall.target = callTarget;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }

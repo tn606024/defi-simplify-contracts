@@ -13,42 +13,93 @@ import {Test} from "forge-std/Test.sol";
 abstract contract DelegatedAccountFixture is Test {
     uint256 internal constant UPSTREAM_AUTHORITY_KEY =
         0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
-    uint256 internal constant CUSTOM_AUTHORITY_KEY = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
+    uint256 internal constant DEFI_SIMPLIFY_AUTHORITY_KEY =
+        0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
 
-    struct DelegatedPair {
-        Simple7702Account upstreamImplementation;
-        DefiSimplify7702Account customImplementation;
-        address payable upstreamAccount;
-        address payable customAccount;
+    /// @dev One EOA delegated to the pinned upstream implementation.
+    struct DelegatedUpstreamAccount {
+        Simple7702Account implementation;
+        address payable delegatedEoa;
     }
 
-    function _deployDelegatedPair(IEntryPoint entryPoint) internal returns (DelegatedPair memory pair) {
-        return _deployDelegatedPair(entryPoint, UPSTREAM_AUTHORITY_KEY, CUSTOM_AUTHORITY_KEY);
+    /// @dev One EOA delegated to the DeFi Simplify implementation under test.
+    struct DelegatedDefiSimplifyAccount {
+        DefiSimplify7702Account implementation;
+        address payable delegatedEoa;
     }
 
-    function _deployDelegatedPair(IEntryPoint entryPoint, uint256 upstreamKey, uint256 customKey)
+    /// @dev Two independent EOAs used only for upstream compatibility comparisons.
+    struct UpstreamCompatibilityFixture {
+        DelegatedUpstreamAccount upstream;
+        DelegatedDefiSimplifyAccount defiSimplify;
+    }
+
+    function _deployDelegatedDefiSimplifyAccount(IEntryPoint entryPoint)
         internal
-        returns (DelegatedPair memory pair)
+        returns (DelegatedDefiSimplifyAccount memory accountUnderTest)
     {
-        pair.upstreamImplementation = new Simple7702Account(entryPoint);
-        pair.customImplementation = new DefiSimplify7702Account(entryPoint);
-        pair.upstreamAccount = payable(vm.addr(upstreamKey));
-        pair.customAccount = payable(vm.addr(customKey));
+        return _deployDelegatedDefiSimplifyAccount(entryPoint, DEFI_SIMPLIFY_AUTHORITY_KEY);
+    }
 
-        require(pair.upstreamAccount.code.length == 0, "upstream authority already has code");
-        require(pair.customAccount.code.length == 0, "custom authority already has code");
+    function _deployDelegatedDefiSimplifyAccount(IEntryPoint entryPoint, uint256 authorityKey)
+        internal
+        returns (DelegatedDefiSimplifyAccount memory accountUnderTest)
+    {
+        accountUnderTest.implementation = new DefiSimplify7702Account(entryPoint);
+        accountUnderTest.delegatedEoa = payable(vm.addr(authorityKey));
 
-        vm.signAndAttachDelegation(address(pair.upstreamImplementation), upstreamKey);
-        vm.signAndAttachDelegation(address(pair.customImplementation), customKey);
+        require(accountUnderTest.delegatedEoa.code.length == 0, "DeFi Simplify authority already has code");
+
+        vm.signAndAttachDelegation(address(accountUnderTest.implementation), authorityKey);
 
         require(
-            _delegationTarget(pair.upstreamAccount) == address(pair.upstreamImplementation), "wrong upstream target"
+            _delegationTarget(accountUnderTest.delegatedEoa) == address(accountUnderTest.implementation),
+            "wrong DeFi Simplify delegation target"
         );
-        require(_delegationTarget(pair.customAccount) == address(pair.customImplementation), "wrong custom target");
     }
 
-    function _delegationTarget(address account) internal view returns (address implementation) {
-        bytes memory code = account.code;
+    function _deployDelegatedUpstreamAccount(IEntryPoint entryPoint)
+        internal
+        returns (DelegatedUpstreamAccount memory upstreamAccount)
+    {
+        return _deployDelegatedUpstreamAccount(entryPoint, UPSTREAM_AUTHORITY_KEY);
+    }
+
+    function _deployDelegatedUpstreamAccount(IEntryPoint entryPoint, uint256 authorityKey)
+        internal
+        returns (DelegatedUpstreamAccount memory upstreamAccount)
+    {
+        upstreamAccount.implementation = new Simple7702Account(entryPoint);
+        upstreamAccount.delegatedEoa = payable(vm.addr(authorityKey));
+
+        require(upstreamAccount.delegatedEoa.code.length == 0, "upstream authority already has code");
+
+        vm.signAndAttachDelegation(address(upstreamAccount.implementation), authorityKey);
+
+        require(
+            _delegationTarget(upstreamAccount.delegatedEoa) == address(upstreamAccount.implementation),
+            "wrong upstream delegation target"
+        );
+    }
+
+    function _deployUpstreamCompatibilityFixture(IEntryPoint entryPoint)
+        internal
+        returns (UpstreamCompatibilityFixture memory compatibilityFixture)
+    {
+        return _deployUpstreamCompatibilityFixture(entryPoint, UPSTREAM_AUTHORITY_KEY, DEFI_SIMPLIFY_AUTHORITY_KEY);
+    }
+
+    function _deployUpstreamCompatibilityFixture(
+        IEntryPoint entryPoint,
+        uint256 upstreamAuthorityKey,
+        uint256 defiSimplifyAuthorityKey
+    ) internal returns (UpstreamCompatibilityFixture memory compatibilityFixture) {
+        compatibilityFixture.upstream = _deployDelegatedUpstreamAccount(entryPoint, upstreamAuthorityKey);
+        compatibilityFixture.defiSimplify = _deployDelegatedDefiSimplifyAccount(entryPoint, defiSimplifyAuthorityKey);
+    }
+
+    function _delegationTarget(address delegatedEoa) internal view returns (address implementation) {
+        bytes memory code = delegatedEoa.code;
         require(code.length == 23, "invalid delegation indicator length");
         uint24 prefix;
         assembly ("memory-safe") {
@@ -58,24 +109,49 @@ abstract contract DelegatedAccountFixture is Test {
         require(prefix == 0xef0100, "invalid delegation indicator prefix");
     }
 
-    /// @dev Returns the upstream delegated EOA through its inherited static-account ABI.
-    function _upstreamAccount(DelegatedPair storage pair) internal view returns (Simple7702Account) {
-        return Simple7702Account(pair.upstreamAccount);
+    /// @dev Views the fixture's upstream delegated EOA through the pinned account ABI.
+    function _upstreamAccountView(UpstreamCompatibilityFixture storage compatibilityFixture)
+        internal
+        view
+        returns (Simple7702Account)
+    {
+        return Simple7702Account(compatibilityFixture.upstream.delegatedEoa);
     }
 
-    /// @dev Returns the custom delegated EOA through its concrete account ABI.
-    function _customAccount(DelegatedPair storage pair) internal view returns (DefiSimplify7702Account) {
-        return DefiSimplify7702Account(pair.customAccount);
+    /// @dev Views the fixture's delegated EOA through the concrete DeFi Simplify ABI.
+    function _defiSimplifyAccountView(DelegatedDefiSimplifyAccount storage accountUnderTest)
+        internal
+        view
+        returns (DefiSimplify7702Account)
+    {
+        return DefiSimplify7702Account(accountUnderTest.delegatedEoa);
     }
 
-    /// @dev Returns the custom delegated EOA through the frozen dynamic interface.
-    function _dynamicAccount(DelegatedPair storage pair) internal view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
+    /// @dev Views the comparison fixture's DeFi Simplify EOA through its concrete ABI.
+    function _defiSimplifyAccountView(UpstreamCompatibilityFixture storage compatibilityFixture)
+        internal
+        view
+        returns (DefiSimplify7702Account)
+    {
+        return DefiSimplify7702Account(compatibilityFixture.defiSimplify.delegatedEoa);
     }
 
-    /// @dev Returns a delegated EOA address through the frozen dynamic interface.
-    function _dynamicAccount(address payable account) internal pure returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(account);
+    /// @dev Views the same delegated EOA through the frozen dynamic-execution interface.
+    function _dynamicExecutionInterfaceView(DelegatedDefiSimplifyAccount storage accountUnderTest)
+        internal
+        view
+        returns (IDefiSimplify7702Account)
+    {
+        return IDefiSimplify7702Account(accountUnderTest.delegatedEoa);
+    }
+
+    /// @dev Views an explicitly supplied delegated EOA through the frozen dynamic interface.
+    function _dynamicExecutionInterfaceView(address payable delegatedEoa)
+        internal
+        pure
+        returns (IDefiSimplify7702Account)
+    {
+        return IDefiSimplify7702Account(delegatedEoa);
     }
 
     function _signature(uint256 privateKey, bytes32 digest) internal pure returns (bytes memory signature) {

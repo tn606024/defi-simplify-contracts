@@ -13,19 +13,19 @@ import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
     bytes4 private constant CAPTURE_SELECTOR = bytes4(keccak256("capture(uint256,uint256,uint256)"));
 
-    DelegatedPair private pair;
-    PatchBalanceToken private token;
-    DynamicExecutionTarget private target;
-    DynamicPatchTarget private patchTarget;
-    CheckpointTableHarness private checkpointHarness;
+    DelegatedDefiSimplifyAccount private accountUnderTest;
+    PatchBalanceToken private balanceToken;
+    DynamicExecutionTarget private recordingTarget;
+    DynamicPatchTarget private calldataCaptureTarget;
+    CheckpointTableHarness private checkpointTableHarness;
 
     /// @dev Installs delegated-account, token, target, and slot-derivation fixtures.
     function setUp() external {
-        pair = _deployDelegatedPair(IEntryPoint(address(this)));
-        token = new PatchBalanceToken();
-        target = new DynamicExecutionTarget();
-        patchTarget = new DynamicPatchTarget();
-        checkpointHarness = new CheckpointTableHarness(IEntryPoint(address(this)));
+        accountUnderTest = _deployDelegatedDefiSimplifyAccount(IEntryPoint(address(this)));
+        balanceToken = new PatchBalanceToken();
+        recordingTarget = new DynamicExecutionTarget();
+        calldataCaptureTarget = new DynamicPatchTarget();
+        checkpointTableHarness = new CheckpointTableHarness(IEntryPoint(address(this)));
     }
 
     /// @dev Compares CurrentBalance resolution with the canonical full-precision calculation.
@@ -33,17 +33,17 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
     /// @param rawBps Unbounded input normalized into the valid BPS interval.
     function testFuzz_FullPrecisionCurrentBalanceMathMatchesMulDiv(uint256 balance, uint16 rawBps) external {
         uint16 bps = uint16(bound(rawBps, 1, 10_000));
-        token.setBalance(pair.customAccount, balance);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, balance);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _dynamicCall(
-            address(target),
+        calls[0] = _buildDynamicCallWithDefaultToken(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("muldiv"))),
-            _patch(4, bps)
+            _currentBalancePatch(4, bps)
         );
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        assertEq(target.total(), Math.mulDiv(balance, uint256(bps), 10_000), "full-precision result");
+        assertEq(recordingTarget.total(), Math.mulDiv(balance, uint256(bps), 10_000), "full-precision result");
     }
 
     /// @dev Proves patching mutates exactly one selected ABI word and no surrounding bytes.
@@ -63,7 +63,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
     ) external {
         uint16 bps = uint16(bound(rawBps, 1, 10_000));
         uint32 offset = 4 + uint32(rawWordIndex % 3) * 32;
-        token.setBalance(pair.customAccount, balance);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, balance);
 
         bytes memory original = abi.encodeWithSelector(CAPTURE_SELECTOR, first, second, third);
         bytes memory expected = abi.encodeWithSelector(CAPTURE_SELECTOR, first, second, third);
@@ -73,11 +73,13 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         }
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _dynamicCall(address(patchTarget), original, _patch(offset, bps));
+        calls[0] = _buildDynamicCallWithDefaultToken(
+            address(calldataCaptureTarget), original, _currentBalancePatch(offset, bps)
+        );
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        assertEq(patchTarget.observedData(), expected, "bytes outside selected word changed");
+        assertEq(calldataCaptureTarget.observedData(), expected, "bytes outside selected word changed");
     }
 
     /// @dev Proves CheckpointDelta excludes inventory held before the producer call.
@@ -93,25 +95,25 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
     ) external {
         bytes32 checkpointId = _validId(rawCheckpointId);
         uint16 bps = uint16(bound(rawBps, 1, 10_000));
-        token.setBalance(pair.customAccount, inventory);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, inventory);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _call(
-            address(token),
+        calls[0] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(produced))),
-            _singleCheckpoint(checkpointId),
+            _oneCheckpoint(checkpointId),
             _noPatches()
         );
-        calls[1] = _call(
-            address(target),
+        calls[1] = _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("fuzz-delta"))),
             _noCheckpoints(),
-            _singlePatch(_deltaPatch(checkpointId, 4, bps))
+            _onePatch(_checkpointDeltaPatch(checkpointId, 4, bps))
         );
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
-        assertEq(target.total(), Math.mulDiv(uint256(produced), uint256(bps), 10_000), "inventory leaked");
+        assertEq(recordingTarget.total(), Math.mulDiv(uint256(produced), uint256(bps), 10_000), "inventory leaked");
     }
 
     /// @dev Proves later calls re-read balances after an earlier consumer changes token state.
@@ -127,32 +129,32 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
     ) external {
         bytes32 checkpointId = _validId(rawCheckpointId);
         uint16 firstBps = uint16(bound(rawFirstBps, 1, 10_000));
-        token.setBalance(pair.customAccount, inventory);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, inventory);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](3);
-        calls[0] = _call(
-            address(token),
+        calls[0] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(produced))),
-            _singleCheckpoint(checkpointId),
+            _oneCheckpoint(checkpointId),
             _noPatches()
         );
-        calls[1] = _call(
-            address(token),
+        calls[1] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.consume, (uint256(0))),
             _noCheckpoints(),
-            _singlePatch(_deltaPatch(checkpointId, 4, firstBps))
+            _onePatch(_checkpointDeltaPatch(checkpointId, 4, firstBps))
         );
-        calls[2] = _call(
-            address(target),
+        calls[2] = _buildDynamicCall(
+            address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("fuzz-remaining"))),
             _noCheckpoints(),
-            _singlePatch(_deltaPatch(checkpointId, 4, 10_000))
+            _onePatch(_checkpointDeltaPatch(checkpointId, 4, 10_000))
         );
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
         uint256 consumed = Math.mulDiv(uint256(produced), uint256(firstBps), 10_000);
-        assertEq(target.total(), uint256(produced) - consumed, "later consumer reused stale balance");
+        assertEq(recordingTarget.total(), uint256(produced) - consumed, "later consumer reused stale balance");
     }
 
     /// @dev Proves two checkpoints for one token retain independent baselines.
@@ -170,35 +172,35 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
     ) external {
         bytes32 firstId = _validId(rawFirstId);
         bytes32 secondId = _distinctId(rawSecondId, firstId);
-        token.setBalance(pair.customAccount, inventory);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, inventory);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](3);
-        calls[0] = _call(
-            address(token),
+        calls[0] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(firstProduced))),
-            _singleCheckpoint(firstId),
+            _oneCheckpoint(firstId),
             _noPatches()
         );
-        calls[1] = _call(
-            address(token),
+        calls[1] = _buildDynamicCall(
+            address(balanceToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(secondProduced))),
-            _singleCheckpoint(secondId),
+            _oneCheckpoint(secondId),
             _noPatches()
         );
         IDefiSimplify7702Account.BalancePatch[] memory patches = new IDefiSimplify7702Account.BalancePatch[](2);
-        patches[0] = _deltaPatch(firstId, 4, 10_000);
-        patches[1] = _deltaPatch(secondId, 36, 10_000);
-        calls[2] = _call(
-            address(patchTarget),
+        patches[0] = _checkpointDeltaPatch(firstId, 4, 10_000);
+        patches[1] = _checkpointDeltaPatch(secondId, 36, 10_000);
+        calls[2] = _buildDynamicCall(
+            address(calldataCaptureTarget),
             abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(0), uint256(0), uint256(0xC0FFEE)),
             _noCheckpoints(),
             patches
         );
 
-        _dynamicAccount(pair).executeBatchDynamic(calls);
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
         assertEq(
-            patchTarget.observedData(),
+            calldataCaptureTarget.observedData(),
             abi.encodeWithSelector(
                 CAPTURE_SELECTOR, uint256(firstProduced) + uint256(secondProduced), uint256(secondProduced), 0xC0FFEE
             ),
@@ -220,31 +222,33 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         vm.assume(firstWord != secondWord);
         uint32 firstOffset = 4 + uint32(firstWord) * 32;
         uint32 secondOffset = 4 + uint32(secondWord) * 32;
-        token.setBalance(pair.customAccount, tokenBalance);
+        balanceToken.setBalance(accountUnderTest.delegatedEoa, tokenBalance);
 
         IDefiSimplify7702Account.BalancePatch[] memory patches = new IDefiSimplify7702Account.BalancePatch[](2);
-        patches[0] = _patch(firstOffset, 10_000);
-        patches[1] = _patch(secondOffset, 10_000);
+        patches[0] = _currentBalancePatch(firstOffset, 10_000);
+        patches[1] = _currentBalancePatch(secondOffset, 10_000);
         bytes memory original = abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(11), uint256(22), uint256(33));
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _call(address(patchTarget), original, _noCheckpoints(), patches);
-        vm.expectCall(address(token), abi.encodeCall(IERC20.balanceOf, (pair.customAccount)), uint64(1));
+        calls[0] = _buildDynamicCall(address(calldataCaptureTarget), original, _noCheckpoints(), patches);
+        vm.expectCall(
+            address(balanceToken), abi.encodeCall(IERC20.balanceOf, (accountUnderTest.delegatedEoa)), uint64(1)
+        );
 
         if (firstOffset < secondOffset) {
-            _dynamicAccount(pair).executeBatchDynamic(calls);
+            _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
             bytes memory expected = original;
             assembly ("memory-safe") {
                 mstore(add(add(expected, 32), firstOffset), tokenBalance)
                 mstore(add(add(expected, 32), secondOffset), tokenBalance)
             }
-            assertEq(patchTarget.observedData(), expected, "sorted patches changed unexpected bytes");
+            assertEq(calldataCaptureTarget.observedData(), expected, "sorted patches changed unexpected bytes");
         } else {
             vm.expectRevert(
                 abi.encodeWithSelector(
                     IDefiSimplify7702Account.UnsortedPatchOffset.selector, 0, 1, firstOffset, secondOffset
                 )
             );
-            _dynamicAccount(pair).executeBatchDynamic(calls);
+            _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
         }
     }
 
@@ -255,10 +259,10 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         external
         view
     {
-        (bytes32 lockSlot, bytes32 counterSlot, bytes32 tableNamespace) = checkpointHarness.checkpointNamespaces();
+        (bytes32 lockSlot, bytes32 counterSlot, bytes32 tableNamespace) = checkpointTableHarness.checkpointNamespaces();
         bytes32 invocationRoot = keccak256(abi.encode(invocationId, tableNamespace));
         bytes32 expectedRecordRoot = keccak256(abi.encode(checkpointId, invocationRoot));
-        bytes32 actualRecordRoot = checkpointHarness.checkpointRecordRoot(invocationId, checkpointId);
+        bytes32 actualRecordRoot = checkpointTableHarness.checkpointRecordRoot(invocationId, checkpointId);
 
         assertEq(actualRecordRoot, expectedRecordRoot, "manual nested mapping derivation");
         assertNotEq(actualRecordRoot, lockSlot, "record collided with lock");
@@ -266,19 +270,19 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         assertNotEq(bytes32(uint256(actualRecordRoot) + 1), bytes32(uint256(actualRecordRoot) + 2), "field collision");
     }
 
-    function _dynamicCall(
+    function _buildDynamicCallWithDefaultToken(
         address callTarget,
-        bytes memory data,
+        bytes memory callData,
         IDefiSimplify7702Account.BalancePatch memory balancePatch
     ) private pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
         dynamicCall.target = callTarget;
-        dynamicCall.data = data;
+        dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](1);
         dynamicCall.patches[0] = balancePatch;
     }
 
-    function _call(
+    function _buildDynamicCall(
         address callTarget,
         bytes memory data,
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints,
@@ -290,20 +294,20 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         dynamicCall.patches = patches;
     }
 
-    function _singleCheckpoint(bytes32 checkpointId)
+    function _oneCheckpoint(bytes32 checkpointId)
         private
         view
         returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
     {
         checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: address(token), id: checkpointId});
+        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: checkpointId});
     }
 
     function _noCheckpoints() private pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
         checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
     }
 
-    function _singlePatch(IDefiSimplify7702Account.BalancePatch memory patch)
+    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
         private
         pure
         returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
@@ -316,9 +320,13 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 
-    function _patch(uint32 offset, uint16 bps) private view returns (IDefiSimplify7702Account.BalancePatch memory) {
+    function _currentBalancePatch(uint32 offset, uint16 bps)
+        private
+        view
+        returns (IDefiSimplify7702Account.BalancePatch memory)
+    {
         return IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: bytes32(0),
             offset: offset,
             bps: bps,
@@ -326,13 +334,13 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         });
     }
 
-    function _deltaPatch(bytes32 checkpointId, uint32 offset, uint16 bps)
+    function _checkpointDeltaPatch(bytes32 checkpointId, uint32 offset, uint16 bps)
         private
         view
         returns (IDefiSimplify7702Account.BalancePatch memory)
     {
         return IDefiSimplify7702Account.BalancePatch({
-            token: address(token),
+            token: address(balanceToken),
             checkpointId: checkpointId,
             offset: offset,
             bps: bps,
