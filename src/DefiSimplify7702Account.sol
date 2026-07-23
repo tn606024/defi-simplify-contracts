@@ -260,11 +260,17 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
     }
 
-    /// @dev Commits the exact direct target and fully patched calldata immediately before its CALL.
+    /// @dev Requires the lifecycle to be idle, then commits the exact direct target and fully patched
+    ///      calldata immediately before its CALL.
     /// @param callIndex Index of the callback-enabled outer call.
     /// @param target Direct target that must later be the callback sender.
     /// @param calldataHash Hash of the fully patched bytes passed to the target.
-    function _openCallbackCommitment(uint256 callIndex, address target, bytes32 calldataHash) private {
+    function _openCallbackCommitment(uint256 callIndex, address target, bytes32 calldataHash) internal {
+        CallbackState state = _callbackState();
+        if (state != CallbackState.Idle) {
+            revert CallbackNotAwaiting(callIndex, uint8(state));
+        }
+
         _CALLBACK_TARGET_SLOT.asAddress().tstore(target);
         _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tstore(calldataHash);
         _CALLBACK_CALL_INDEX_SLOT.asUint256().tstore(callIndex);

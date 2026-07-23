@@ -310,6 +310,8 @@ outer-scope resumption; exact zero-first repayment; wrong sender, initiator, and
 origin; missing, replayed, nested, and reentrant callbacks; premium and
 arithmetic bounds; callback target failure with dual indices; malformed token
 reads and approvals; failed Pool pulls; residual allowance; and atomic rollback.
+`unit/CallbackCommitmentState.t.sol` directly proves that a new commitment
+cannot overwrite a non-idle callback lifecycle.
 `integration/TransientNamespaceSeparation.t.sol` includes every callback slot in
 the cross-component collision check.
 
@@ -321,7 +323,7 @@ plan fixture to version 2 for the appended boolean.
 
 DSC-79 and DSC-80 were folded into DSC-78 before release so reviewers see one
 complete behavior instead of a sequence of temporary fail-closed artifacts.
-The repository now has 254 passing non-fork tests. DSC-81 remains the separate
+The repository now has 255 passing non-fork tests. DSC-81 remains the separate
 audit-grade fuzz and invariant hardening gate.
 
 Run the focused DSC-78 suites with:
