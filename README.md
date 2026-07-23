@@ -15,14 +15,14 @@ global-read modes; binding is not an authorization boundary. The SDK and signer
 remain responsible for authenticating exact checker, target, selector, offset,
 and bound semantics.
 
-The pre-release account ABI also includes the final v1 Aave V3
-`flashLoanSimple` callback envelope and `executeOperation` receiver surface.
-Callback execution is intentionally fail-closed until the transient commitment
-engine and exact repayment path land: ordinary dynamic calls remain executable,
-while any `expectsCallback == true` plan and every direct `executeOperation`
-call revert before executing callback-controlled targets. The contracts are not
-production-ready until the remaining callback, Base flow, and security review
-gates are complete.
+The pre-release account also implements the final v1 direct Aave V3
+`flashLoanSimple` callback path. A callback-enabled call commits its fully
+patched calldata and direct Pool target in transient storage; `executeOperation`
+authenticates that origin, executes an isolated callback plan, installs an exact
+zero-first-compatible repayment allowance, and requires the Pool to consume the
+allowance completely before the outer batch continues. The contracts are not
+production-ready until the remaining adversarial, Base lifecycle, and external
+security-review gates are complete.
 
 ## Pinned bootstrap toolchain
 
