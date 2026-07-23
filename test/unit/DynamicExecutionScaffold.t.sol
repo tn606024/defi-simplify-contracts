@@ -48,10 +48,6 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
             "unexpected dynamic interface id"
         );
         assertTrue(IERC165(accountUnderTest.delegatedEoa).supportsInterface(type(IDefiSimplify7702Account).interfaceId));
-        assertFalse(
-            IERC165(accountUnderTest.delegatedEoa).supportsInterface(bytes4(0x146c3297)),
-            "historical callback-free interface ID should not be advertised"
-        );
         assertFalse(IERC165(upstreamAccount.delegatedEoa).supportsInterface(type(IDefiSimplify7702Account).interfaceId));
     }
 

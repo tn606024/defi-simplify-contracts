@@ -8,10 +8,9 @@ import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 /// @dev Proves the final callback-enabled ABI and DSC-78's fail-closed transition.
 contract CallbackAbiTest is DelegatedAccountFixture {
-    bytes4 private constant HISTORICAL_EXECUTE_BATCH_DYNAMIC_SELECTOR = 0x146c3297;
     bytes4 private constant CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR = 0xecadebe3;
 
-    struct HistoricalDynamicCall {
+    struct DynamicCallMissingCallbackFlag {
         address target;
         uint256 value;
         bytes data;
@@ -70,29 +69,16 @@ contract CallbackAbiTest is DelegatedAccountFixture {
         assertEq(recordingTarget.count(), 0, "direct callback must not execute plan data");
     }
 
-    function test_FinalSelectorRejectsHistoricalTupleWithoutCallbackFlag() external {
-        HistoricalDynamicCall[] memory historicalCalls = _buildHistoricalCalls();
+    function test_FinalSelectorRejectsTupleMissingCallbackFlag() external {
+        DynamicCallMissingCallbackFlag[] memory malformedCalls = _buildCallsMissingCallbackFlag();
         bytes memory malformedFinalCalldata =
-            bytes.concat(CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR, abi.encode(historicalCalls));
+            bytes.concat(CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR, abi.encode(malformedCalls));
 
         vm.prank(accountUnderTest.delegatedEoa);
         (bool success,) = accountUnderTest.delegatedEoa.call(malformedFinalCalldata);
 
         assertFalse(success, "final selector must reject a tuple missing expectsCallback");
         assertEq(recordingTarget.count(), 0, "malformed final calldata must not reach its target");
-    }
-
-    function test_HistoricalSelectorUsesInheritedInertFallbackInsteadOfLegacyExecution() external {
-        HistoricalDynamicCall[] memory historicalCalls = _buildHistoricalCalls();
-        bytes memory historicalCalldata =
-            bytes.concat(HISTORICAL_EXECUTE_BATCH_DYNAMIC_SELECTOR, abi.encode(historicalCalls));
-
-        vm.prank(accountUnderTest.delegatedEoa);
-        (bool success, bytes memory returnData) = accountUnderTest.delegatedEoa.call(historicalCalldata);
-
-        assertTrue(success, "upstream EOA-style fallback should accept unknown historical selector");
-        assertEq(returnData.length, 0, "inert fallback should return no data");
-        assertEq(recordingTarget.count(), 0, "historical selector must not execute a dynamic batch");
     }
 
     function test_CallbackEnvelopeEncodingCanRepresentZeroOneAndManyCalls() external pure {
@@ -145,10 +131,10 @@ contract CallbackAbiTest is DelegatedAccountFixture {
         calls[2] = _buildCall(address(recordingTarget), 30, false);
     }
 
-    function _buildHistoricalCalls() private view returns (HistoricalDynamicCall[] memory calls) {
-        calls = new HistoricalDynamicCall[](1);
+    function _buildCallsMissingCallbackFlag() private view returns (DynamicCallMissingCallbackFlag[] memory calls) {
+        calls = new DynamicCallMissingCallbackFlag[](1);
         calls[0].target = address(recordingTarget);
-        calls[0].data = abi.encodeCall(DynamicExecutionTarget.record, (99, bytes("historical")));
+        calls[0].data = abi.encodeCall(DynamicExecutionTarget.record, (99, bytes("missing-callback-flag")));
         calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }

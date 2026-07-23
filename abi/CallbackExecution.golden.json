@@ -1,7 +1,6 @@
 {
   "version": 1,
   "selectors": {
-    "historicalExecuteBatchDynamic": "0x146c3297",
     "executeBatchDynamic": "0xecadebe3",
     "executeOperation": "0x1b11d0ff",
     "interfaceId": "0xf7bc3b1c"

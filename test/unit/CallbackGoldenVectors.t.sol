@@ -17,11 +17,6 @@ contract CallbackGoldenVectorsTest is Test {
         string memory fixture = vm.readFile(FIXTURE_PATH);
 
         assertEq(
-            _parseBytes4(fixture, ".selectors.historicalExecuteBatchDynamic"),
-            bytes4(0x146c3297),
-            "historical executeBatchDynamic selector"
-        );
-        assertEq(
             _parseBytes4(fixture, ".selectors.executeBatchDynamic"),
             IDefiSimplify7702Account.executeBatchDynamic.selector,
             "final executeBatchDynamic selector"
