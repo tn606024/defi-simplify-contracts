@@ -37,7 +37,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(777, "inventory", _singlePatch(_currentPatch(address(token), 4, 10_000)));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), 123_456, "patched current balance");
         assertEq(target.lastPayloadHash(), keccak256("inventory"), "unpatched dynamic payload");
@@ -54,7 +54,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         );
         calls[1] = _recordCall(999, "delta", _singlePatch(_deltaPatch(address(token), CHECKPOINT_A, 4, 10_000)));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), 250, "pre-checkpoint inventory leaked into delta");
     }
@@ -76,7 +76,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         );
         calls[2] = _recordCall(0, "remaining", _singlePatch(_deltaPatch(address(token), CHECKPOINT_A, 4, 10_000)));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(token.balanceOf(pair.customAccount), 1_200, "first consumer amount");
         assertEq(target.total(), 200, "later call did not re-read current balance");
@@ -92,7 +92,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         calls[0] = _call(address(patchTarget), original, _noCheckpoints(), patches);
 
         vm.expectCall(address(token), abi.encodeCall(IERC20.balanceOf, (pair.customAccount)), uint64(1));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         bytes memory observed = patchTarget.observedData();
         assertEq(observed, abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(100), uint256(22), uint256(400)));
@@ -116,7 +116,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         );
 
         vm.expectCall(address(token), abi.encodeCall(IERC20.balanceOf, (pair.customAccount)), uint64(1));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_ZeroPatchTokenRevertsWithIndices() external {
@@ -184,7 +184,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(777, "zero", _singlePatch(_currentPatch(address(token), 4, 1)));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), 0, "zero patch result rejected or rounded up");
     }
@@ -219,7 +219,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointNotFound.selector, 0, 0, CHECKPOINT_A)
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_CheckpointTokenMismatchRevertsWithExpectedAndActualTokens() external {
@@ -238,7 +238,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
                 address(token)
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_BalanceBelowCheckpointRevertsWithoutClamping() external {
@@ -257,7 +257,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.BalanceBelowCheckpoint.selector, 1, 0, address(token), CHECKPOINT_A, 40, 100
             )
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
         assertEq(token.balanceOf(pair.customAccount), 100, "earlier consume did not roll back");
     }
 
@@ -293,13 +293,13 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(1, "first", _noPatches());
         calls[0].checkpointsBefore = _singleCheckpoint(address(token), CHECKPOINT_A);
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         calls[0] = _recordCall(0, "stale", _singlePatch(_deltaPatch(address(token), CHECKPOINT_A, 4, 10_000)));
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointNotFound.selector, 0, 0, CHECKPOINT_A)
         );
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function test_Golden_CurrentBalancePatchesExactAbiWord() external {
@@ -312,7 +312,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
             address(patchTarget), original, _noCheckpoints(), _singlePatch(_currentPatch(address(token), 36, 10_000))
         );
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(patchTarget.observedData(), expected, "golden patched calldata");
         assertEq(
@@ -361,7 +361,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
         calls[0] = _call(address(patchTarget), hex"deadbeef", checkpoints, _noPatches());
         calls[1] = _call(address(patchTarget), patchData, _noCheckpoints(), patches);
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function _expectSinglePatchRevert(IDefiSimplify7702Account.BalancePatch memory patch, bytes memory reason) private {
@@ -377,11 +377,7 @@ contract DynamicCalldataPatchingTest is DelegatedAccountFixture {
             _noCheckpoints(),
             patches
         );
-        _custom().executeBatchDynamic(calls);
-    }
-
-    function _custom() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function _recordCall(uint256 amount, bytes memory payload, IDefiSimplify7702Account.BalancePatch[] memory patches)

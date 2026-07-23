@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 import {IStaticCallUint256Assertions} from "../../src/interfaces/IStaticCallUint256Assertions.sol";
-import {Simple7702Account} from "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {AssertionBalanceToken} from "../mocks/FlowAssertionsMocks.sol";
@@ -29,8 +27,8 @@ contract StaticCallUint256AssertionsBatchIntegrationTest is DelegatedAccountFixt
     }
 
     function test_GenericCheckerWorksAsFinalStepOfInheritedStaticBatches() external {
-        _upstream().executeBatch(_staticPlan(31, 31));
-        _custom().executeBatch(_staticPlan(37, 37));
+        _upstreamAccount(pair).executeBatch(_staticPlan(31, 31));
+        _customAccount(pair).executeBatch(_staticPlan(37, 37));
 
         assertEq(token.balanceOf(pair.upstreamAccount), 31, "upstream producer");
         assertEq(token.balanceOf(pair.customAccount), 37, "custom producer");
@@ -40,13 +38,13 @@ contract StaticCallUint256AssertionsBatchIntegrationTest is DelegatedAccountFixt
         bytes memory assertionReason = _belowMinimumReason(41, 42);
 
         vm.expectRevert(abi.encodeWithSelector(BaseAccount.ExecuteError.selector, 1, assertionReason));
-        _custom().executeBatch(_staticPlan(41, 42));
+        _customAccount(pair).executeBatch(_staticPlan(41, 42));
 
         assertEq(token.balanceOf(pair.customAccount), 0, "failed static producer survived");
     }
 
     function test_GenericCheckerWorksAsFinalStepOfDynamicBatch() external {
-        _dynamic().executeBatchDynamic(_dynamicPlan(43, 43));
+        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(43, 43));
 
         assertEq(token.balanceOf(pair.customAccount), 43, "dynamic producer");
     }
@@ -59,7 +57,7 @@ contract StaticCallUint256AssertionsBatchIntegrationTest is DelegatedAccountFixt
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(assertions), assertionReason
             )
         );
-        _dynamic().executeBatchDynamic(_dynamicPlan(47, 48));
+        _dynamicAccount(pair).executeBatchDynamic(_dynamicPlan(47, 48));
 
         assertEq(token.balanceOf(pair.customAccount), 0, "failed dynamic producer survived");
     }
@@ -116,17 +114,5 @@ contract StaticCallUint256AssertionsBatchIntegrationTest is DelegatedAccountFixt
         dynamicCall.data = data;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-    }
-
-    function _upstream() private view returns (Simple7702Account) {
-        return Simple7702Account(pair.upstreamAccount);
-    }
-
-    function _custom() private view returns (DefiSimplify7702Account) {
-        return DefiSimplify7702Account(pair.customAccount);
-    }
-
-    function _dynamic() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
     }
 }

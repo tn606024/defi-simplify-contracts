@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
 import {IAaveV3Pool} from "../../src/interfaces/IAaveV3Pool.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
@@ -48,7 +47,7 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         calls[1] = BaseAccount.Call({target: address(assertions), value: 0, data: _globalWethAssertionData()});
 
         vm.prank(pair.customAccount, pair.customAccount);
-        DefiSimplify7702Account(pair.customAccount).executeBatch(calls);
+        _customAccount(pair).executeBatch(calls);
     }
 
     function test_IndependentCheckerWorksAsFinalDynamicStepAgainstBaseAave() external {
@@ -59,7 +58,7 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
 
         vm.prank(pair.customAccount, pair.customAccount);
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function _aaveAssertionData() private pure returns (bytes memory) {

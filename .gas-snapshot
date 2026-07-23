@@ -177,7 +177,7 @@ TransientTokenBalanceRecordTest:test_StoreDoesNotOverwriteAdjacentSlotOrIndepend
 TransientTokenBalanceRecordTest:test_StorePublishesTokenAndBalanceAtCanonicalOffsets() (gas: 10503)
 TransientTokenBalanceRecordTest:test_UnwrittenRecordHasZeroedIndependentFields() (gas: 6597)
 TransientTokenBalanceRecordTest:test_ZeroBalanceRemainsPresentAndDistinctFromAbsence() (gas: 7994)
-UpstreamCompatibilityTest:test_DelegatedFixtureUsesEoaContextAndConfiguredEntryPoint() (gas: 236868)
+UpstreamCompatibilityTest:test_DelegatedFixtureUsesEoaContextAndConfiguredEntryPoint() (gas: 237125)
 UpstreamCompatibilityTest:test_DifferentialERC1271ValidAndInvalidSignatures() (gas: 40833)
 UpstreamCompatibilityTest:test_DifferentialERC165AndReceiverBehavior() (gas: 46064)
 UpstreamCompatibilityTest:test_DifferentialExecuteBatchOneAndManyCalls() (gas: 309297)

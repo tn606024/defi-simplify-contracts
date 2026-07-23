@@ -28,7 +28,7 @@ contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
         );
 
         vm.prank(pair.customAccount, pair.customAccount);
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(entryPoint.balanceOf(pair.customAccount), deposit, "EntryPoint deposit");
         assertEq(pair.customAccount.balance, 0.75 ether, "account native balance");
@@ -47,7 +47,7 @@ contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
             )
         );
         vm.prank(pair.customAccount, pair.customAccount);
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
     }
 
     function _emptyDynamicCall(address target, bytes memory data, uint256 value)

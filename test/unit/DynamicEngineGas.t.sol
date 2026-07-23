@@ -32,7 +32,7 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(_singlePatch(_currentPatch(4, 10_000)));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
         assertEq(target.total(), 1_000, "current-balance amount");
     }
 
@@ -45,7 +45,7 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
         );
         calls[1] = _recordCall(_singlePatch(_deltaPatch(4, 10_000)));
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
         assertEq(target.total(), 250, "checkpoint-delta amount");
     }
 
@@ -64,7 +64,7 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
             patches
         );
 
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
         assertEq(
             patchTarget.observedData(),
             abi.encodeWithSelector(CAPTURE_SELECTOR, uint256(500), uint256(1_000), uint256(2_000)),
@@ -77,17 +77,13 @@ contract DynamicEngineGasTest is DelegatedAccountFixture {
         token.setBalance(pair.customAccount, 3_000);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _recordCall(_singlePatch(_currentPatch(4, 5_000)));
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         token.setBalance(pair.customAccount, 4_000);
-        _custom().executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 2, "sequential invocation count");
         assertEq(target.total(), 3_500, "sequential invocation total");
-    }
-
-    function _custom() private view returns (IDefiSimplify7702Account) {
-        return IDefiSimplify7702Account(pair.customAccount);
     }
 
     function _recordCall(IDefiSimplify7702Account.BalancePatch[] memory patches)

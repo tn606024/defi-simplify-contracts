@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
-import {Simple7702Account} from "@account-abstraction/contracts/accounts/Simple7702Account.sol";
 import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IAccount} from "@account-abstraction/contracts/interfaces/IAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
@@ -38,16 +36,16 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
             _delegationTarget(pair.upstreamAccount), address(pair.upstreamImplementation), "upstream delegation target"
         );
         assertEq(_delegationTarget(pair.customAccount), address(pair.customImplementation), "custom delegation target");
-        assertEq(address(_upstream().entryPoint()), address(this), "upstream EntryPoint");
-        assertEq(address(_custom().entryPoint()), address(this), "custom EntryPoint");
+        assertEq(address(_upstreamAccount(pair).entryPoint()), address(this), "upstream EntryPoint");
+        assertEq(address(_customAccount(pair).entryPoint()), address(this), "custom EntryPoint");
 
         bytes memory upstreamData = abi.encodeCall(StaticCompatibilityTarget.record, (11, bytes("delegated-self-call")));
         bytes memory customData = abi.encodeCall(StaticCompatibilityTarget.record, (11, bytes("delegated-self-call")));
 
         vm.prank(pair.upstreamAccount);
-        _upstream().execute(address(upstreamTarget), 0, upstreamData);
+        _upstreamAccount(pair).execute(address(upstreamTarget), 0, upstreamData);
         vm.prank(pair.customAccount);
-        _custom().execute(address(customTarget), 0, customData);
+        _customAccount(pair).execute(address(customTarget), 0, customData);
 
         _assertEquivalentTargetState();
         assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream target caller");
@@ -60,8 +58,8 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         bytes memory upstreamData = abi.encodeCall(StaticCompatibilityTarget.record, (21, bytes("single")));
         bytes memory customData = abi.encodeCall(StaticCompatibilityTarget.record, (21, bytes("single")));
 
-        _upstream().execute(address(upstreamTarget), 0.4 ether, upstreamData);
-        _custom().execute(address(customTarget), 0.4 ether, customData);
+        _upstreamAccount(pair).execute(address(upstreamTarget), 0.4 ether, upstreamData);
+        _customAccount(pair).execute(address(customTarget), 0.4 ether, customData);
 
         _assertEquivalentTargetState();
         assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream execute caller");
@@ -78,8 +76,8 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         BaseAccount.Call[] memory customOne = new BaseAccount.Call[](1);
         upstreamOne[0] = _recordCall(address(upstreamTarget), 1, 0, "one");
         customOne[0] = _recordCall(address(customTarget), 1, 0, "one");
-        _upstream().executeBatch(upstreamOne);
-        _custom().executeBatch(customOne);
+        _upstreamAccount(pair).executeBatch(upstreamOne);
+        _customAccount(pair).executeBatch(customOne);
 
         BaseAccount.Call[] memory upstreamMany = new BaseAccount.Call[](2);
         BaseAccount.Call[] memory customMany = new BaseAccount.Call[](2);
@@ -87,8 +85,8 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         upstreamMany[1] = _recordCall(address(upstreamTarget), 3, 0.25 ether, "many-b");
         customMany[0] = _recordCall(address(customTarget), 2, 0, "many-a");
         customMany[1] = _recordCall(address(customTarget), 3, 0.25 ether, "many-b");
-        _upstream().executeBatch(upstreamMany);
-        _custom().executeBatch(customMany);
+        _upstreamAccount(pair).executeBatch(upstreamMany);
+        _customAccount(pair).executeBatch(customMany);
 
         _assertEquivalentTargetState();
         assertEq(upstreamTarget.lastCaller(), pair.upstreamAccount, "upstream batch caller");
@@ -340,10 +338,10 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         bytes memory customData = abi.encodeCall(StaticCompatibilityTarget.record, (91, bytes("event")));
 
         vm.recordLogs();
-        _upstream().execute(address(upstreamTarget), 0, upstreamData);
+        _upstreamAccount(pair).execute(address(upstreamTarget), 0, upstreamData);
         Vm.Log[] memory upstreamLogs = vm.getRecordedLogs();
         vm.recordLogs();
-        _custom().execute(address(customTarget), 0, customData);
+        _customAccount(pair).execute(address(customTarget), 0, customData);
         Vm.Log[] memory customLogs = vm.getRecordedLogs();
 
         assertEq(upstreamLogs.length, 1, "upstream log count");
@@ -352,14 +350,6 @@ contract UpstreamCompatibilityTest is DelegatedAccountFixture {
         assertEq(customLogs[0].emitter, address(customTarget), "custom log emitter");
         assertEq(abi.encode(upstreamLogs[0].topics), abi.encode(customLogs[0].topics), "log topics");
         assertEq(upstreamLogs[0].data, customLogs[0].data, "log data");
-    }
-
-    function _upstream() private view returns (Simple7702Account) {
-        return Simple7702Account(pair.upstreamAccount);
-    }
-
-    function _custom() private view returns (DefiSimplify7702Account) {
-        return DefiSimplify7702Account(pair.customAccount);
     }
 
     function _recordCall(address target, uint256 amount, uint256 callValue, bytes memory payload)

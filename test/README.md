@@ -10,6 +10,9 @@ context: `address(this)` is the EOA and inherited self-or-EntryPoint
 authorization observes that EOA. Direct calls to an implementation contract and
 `vm.etch` do not model delegation processing and must not replace this fixture
 for authorization, signature, receiver, fallback, or protocol-accounting tests.
+Use the fixture's `_upstreamAccount(pair)`, `_customAccount(pair)`, and
+`_dynamicAccount(pair)` accessors instead of repeating delegated-address casts
+or defining suite-local wrappers.
 
 The static differential suite in `unit/UpstreamCompatibility.t.sol` intentionally
 runs semantically identical operations through both delegated EOAs. Keep that
@@ -241,7 +244,7 @@ production contracts retain 100% line, statement, branch, and function
 coverage. The independent checker runtime is 1,082 bytes with runtime code hash
 `0xc26f9f8ce08cbeb069a32ac005b6a6c26dd878cb085295381f52e8de0f7e10d8`.
 The reproducible artifact tree is
-`34bb1fe83f8da3d625f0a67c889838b61c27c5f23cae810fb4ff1f44b57c66e6`.
+`de7c07913cacf335f8b0d386c110d8ffa5ae96f9629f1c20edfa0ccb00d4da60`.
 The tracked `FlowAssertions` source, interface, and ABI fixture remain
 byte-for-byte unchanged.
 

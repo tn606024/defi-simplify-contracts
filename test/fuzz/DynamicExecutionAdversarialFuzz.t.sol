@@ -36,7 +36,7 @@ contract DynamicExecutionAdversarialFuzzTest is DelegatedAccountFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 1, address(target), targetReason
             )
         );
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.count(), 0, "earlier target state survived nested revert");
         assertEq(target.total(), 0, "earlier target total survived nested revert");

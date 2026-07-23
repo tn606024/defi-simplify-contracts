@@ -41,7 +41,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
             _patch(4, bps)
         );
 
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), Math.mulDiv(balance, uint256(bps), 10_000), "full-precision result");
     }
@@ -75,7 +75,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _dynamicCall(address(patchTarget), original, _patch(offset, bps));
 
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(patchTarget.observedData(), expected, "bytes outside selected word changed");
     }
@@ -109,7 +109,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
             _singlePatch(_deltaPatch(checkpointId, 4, bps))
         );
 
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(target.total(), Math.mulDiv(uint256(produced), uint256(bps), 10_000), "inventory leaked");
     }
@@ -149,7 +149,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
             _singlePatch(_deltaPatch(checkpointId, 4, 10_000))
         );
 
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         uint256 consumed = Math.mulDiv(uint256(produced), uint256(firstBps), 10_000);
         assertEq(target.total(), uint256(produced) - consumed, "later consumer reused stale balance");
@@ -195,7 +195,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
             patches
         );
 
-        IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+        _dynamicAccount(pair).executeBatchDynamic(calls);
 
         assertEq(
             patchTarget.observedData(),
@@ -231,7 +231,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         vm.expectCall(address(token), abi.encodeCall(IERC20.balanceOf, (pair.customAccount)), uint64(1));
 
         if (firstOffset < secondOffset) {
-            IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+            _dynamicAccount(pair).executeBatchDynamic(calls);
             bytes memory expected = original;
             assembly ("memory-safe") {
                 mstore(add(add(expected, 32), firstOffset), tokenBalance)
@@ -244,7 +244,7 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
                     IDefiSimplify7702Account.UnsortedPatchOffset.selector, 0, 1, firstOffset, secondOffset
                 )
             );
-            IDefiSimplify7702Account(pair.customAccount).executeBatchDynamic(calls);
+            _dynamicAccount(pair).executeBatchDynamic(calls);
         }
     }
 

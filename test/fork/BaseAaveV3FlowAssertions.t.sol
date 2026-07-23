@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {IAaveV3Pool} from "../../src/interfaces/IAaveV3Pool.sol";
 import {IFlowAssertions} from "../../src/interfaces/IFlowAssertions.sol";
@@ -44,6 +43,6 @@ contract BaseAaveV3FlowAssertionsForkTest is DelegatedAccountFixture {
         });
 
         vm.prank(pair.customAccount, pair.customAccount);
-        DefiSimplify7702Account(pair.customAccount).executeBatch(calls);
+        _customAccount(pair).executeBatch(calls);
     }
 }
