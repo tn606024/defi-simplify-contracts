@@ -7,12 +7,15 @@ v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
 provides independent post-condition assertions. The public contract surface is
 defined by the checked-in Solidity interfaces and implementation.
 
-The current implementation includes the frozen dynamic account engine and the
-independent `FlowAssertions` ERC20 balance and Aave V3 health-factor primitives.
-The Aave V3 assertion trusts the supplied Pool and its oracle/accounting view;
-the SDK remains responsible for verifying the official Base Pool address. The
-contracts remain pre-release and are not production-ready until the remaining
-generic assertion, fork-proof, and security review gates are complete.
+The current implementation includes the frozen dynamic account engine, the
+typed `FlowAssertions` ERC20 balance and Aave V3 health-factor primitives, and
+the independent `StaticCallUint256Assertions` fixed-word checker. The generic
+checker is a lower-level adapter surface with explicit account-binding and
+global-read modes; binding is not an authorization boundary. The SDK and signer
+remain responsible for authenticating exact checker, target, selector, offset,
+and bound semantics. The contracts remain pre-release and are not
+production-ready until the remaining Base flow and security review gates are
+complete.
 
 ## Pinned bootstrap toolchain
 
@@ -54,6 +57,7 @@ forge fmt --check
 forge build
 ./script/check-minimal-account-surface.sh
 ./script/check-flow-assertions-surface.sh
+./script/check-static-call-uint256-assertions-surface.sh
 ./script/check-abi-fixtures.sh
 forge test --no-match-path 'test/fork/**'
 forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
