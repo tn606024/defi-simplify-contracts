@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
+import {TransientTokenBalanceRecord} from "../../src/libraries/TransientTokenBalanceRecord.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import {Test} from "forge-std/Test.sol";
@@ -8,10 +9,14 @@ import {Test} from "forge-std/Test.sol";
 contract CheckpointRepresentationBenchmark is Test {
     using SlotDerivation for bytes32;
     using TransientSlot for *;
+    using TransientTokenBalanceRecord for bytes32;
 
-    bytes32 private constant _CHECKPOINT_NAMESPACE = keccak256("DefiSimplify7702Account.checkpointTable.benchmark.v1");
+    // ERC-7201 root for `DefiSimplify7702Account.transient.checkpointTable.benchmark.v1`.
+    bytes32 private constant _CHECKPOINT_TABLE_ROOT =
+        0xf61c81e7c0047fe80627c2b363091b6868293d10545db99bbc3c0976fa275e00;
+    // ERC-7201 slot for `DefiSimplify7702Account.transient.invocationCounter.benchmark`.
     bytes32 private constant _INVOCATION_COUNTER_SLOT =
-        keccak256("DefiSimplify7702Account.invocationCounter.benchmark.v1");
+        0x388d59266cd1f2e2bff411ce873eacf87a6f903b569da2bfab1e4ec4e8b8a300;
     address private constant _TOKEN = address(0xBEEF);
 
     struct MemoryRecord {
@@ -96,23 +101,20 @@ contract CheckpointRepresentationBenchmark is Test {
 
         for (uint256 i = 0; i < count; ++i) {
             bytes32 recordRoot = _recordRoot(invocationId, bytes32(i + 1));
-            TransientSlot.BooleanSlot presenceSlot = recordRoot.asBoolean();
-            require(!presenceSlot.tload(), "duplicate transient checkpoint");
+            require(!recordRoot.isPresent(), "duplicate transient checkpoint");
 
-            presenceSlot.tstore(true);
-            recordRoot.offset(1).asAddress().tstore(_TOKEN);
-            recordRoot.offset(2).asUint256().tstore(i + 101);
+            recordRoot.store(_TOKEN, i + 101);
         }
 
         for (uint256 i = 0; i < count; ++i) {
             bytes32 recordRoot = _recordRoot(invocationId, bytes32(i + 1));
-            require(recordRoot.asBoolean().tload(), "transient checkpoint missing");
-            require(recordRoot.offset(1).asAddress().tload() == _TOKEN, "transient token mismatch");
-            sum += recordRoot.offset(2).asUint256().tload();
+            require(recordRoot.isPresent(), "transient checkpoint missing");
+            require(recordRoot.token() == _TOKEN, "transient token mismatch");
+            sum += recordRoot.balance();
         }
     }
 
     function _recordRoot(uint256 invocationId, bytes32 checkpointId) private pure returns (bytes32) {
-        return _CHECKPOINT_NAMESPACE.deriveMapping(invocationId).deriveMapping(checkpointId);
+        return _CHECKPOINT_TABLE_ROOT.deriveMapping(invocationId).deriveMapping(checkpointId);
     }
 }

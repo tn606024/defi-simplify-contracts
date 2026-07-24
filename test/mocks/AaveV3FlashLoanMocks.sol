@@ -25,6 +25,14 @@ contract FlashLoanAssetMock {
     bool public revertAllowanceRead;
     bool public returnShortAllowanceData;
     bool public returnFalseFromTransferFrom;
+    uint16 public transferFeeBps;
+
+    bool public approvalReentryEnabled;
+    address public approvalReentryTarget;
+    bytes public approvalReentryData;
+    uint256 public approvalReentryCount;
+    bool public lastApprovalReentrySucceeded;
+    bytes public lastApprovalReentryReturnData;
 
     uint256[] private _approvalAmounts;
 
@@ -62,6 +70,17 @@ contract FlashLoanAssetMock {
 
     function setTransferFromReturnsFalse(bool enabled) external {
         returnFalseFromTransferFrom = enabled;
+    }
+
+    function setTransferFeeBps(uint16 newTransferFeeBps) external {
+        require(newTransferFeeBps <= 10_000, "fee exceeds transfer");
+        transferFeeBps = newTransferFeeBps;
+    }
+
+    function setApprovalReentry(address reentryTarget, bytes calldata reentryData, bool enabled) external {
+        approvalReentryTarget = reentryTarget;
+        approvalReentryData = reentryData;
+        approvalReentryEnabled = enabled;
     }
 
     function approvalCount() external view returns (uint256) {
@@ -111,6 +130,12 @@ contract FlashLoanAssetMock {
         _allowances[msg.sender][spender] = amount;
         _approvalAmounts.push(amount);
 
+        if (approvalReentryEnabled && amount != 0) {
+            approvalReentryCount += 1;
+            (lastApprovalReentrySucceeded, lastApprovalReentryReturnData) =
+                approvalReentryTarget.call(approvalReentryData);
+        }
+
         if (returnShortApprovalData) {
             assembly ("memory-safe") {
                 mstore(0, 1)
@@ -150,7 +175,8 @@ contract FlashLoanAssetMock {
             revert InsufficientBalance(sender, senderBalance, amount);
         }
         _balances[sender] = senderBalance - amount;
-        _balances[recipient] += amount;
+        uint256 fee = amount * transferFeeBps / 10_000;
+        _balances[recipient] += amount - fee;
     }
 }
 
@@ -170,6 +196,7 @@ contract FlashLoanCallbackForwarder {
 contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
     error CallbackReturnedFalse();
     error RepaymentPullReturnedFalse();
+    error OuterTargetFailure(uint8 failurePoint);
 
     enum CallbackMutation {
         None,
@@ -177,7 +204,15 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
         WrongInitiator,
         WrongAsset,
         WrongAmount,
-        WrongParams
+        WrongParams,
+        WrongCalldataLength
+    }
+
+    enum FailurePoint {
+        None,
+        BeforePrincipalTransfer,
+        AfterCallback,
+        AfterRepayment
     }
 
     FlashLoanCallbackForwarder private immutable _callbackForwarder;
@@ -186,6 +221,7 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
     CallbackMutation public callbackMutation;
     bool public skipCallback;
     bool public replayCallback;
+    bool public replayWithDifferentParams;
     bool public pullRepayment = true;
     bool public useCustomPullAmount;
     uint256 public customPullAmount;
@@ -193,6 +229,7 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
     address public forcedCallbackReceiver;
     uint256 public callbackCount;
     bytes32 public lastReceivedCalldataHash;
+    FailurePoint public failurePoint;
 
     constructor() {
         _callbackForwarder = new FlashLoanCallbackForwarder();
@@ -216,6 +253,14 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
 
     function setReplayCallback(bool enabled) external {
         replayCallback = enabled;
+    }
+
+    function setReplayWithDifferentParams(bool enabled) external {
+        replayWithDifferentParams = enabled;
+    }
+
+    function setFailurePoint(FailurePoint newFailurePoint) external {
+        failurePoint = newFailurePoint;
     }
 
     function setPullRepayment(bool enabled) external {
@@ -251,15 +296,18 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
     }
 
     function _runFlashLoan(address receiverAddress, address asset, uint256 amount, bytes calldata params) private {
+        _revertAt(FailurePoint.BeforePrincipalTransfer);
         address callbackReceiver = useForcedCallbackReceiver ? forcedCallbackReceiver : receiverAddress;
         require(FlashLoanAssetMock(asset).transfer(callbackReceiver, amount), "principal transfer failed");
 
         if (!skipCallback) {
             _invokeCallback(callbackReceiver, asset, amount, params);
             if (replayCallback) {
-                _invokeCallback(callbackReceiver, asset, amount, params);
+                bytes memory replayParams = replayWithDifferentParams ? bytes.concat(params, hex"00") : params;
+                _invokeCallback(callbackReceiver, asset, amount, replayParams);
             }
         }
+        _revertAt(FailurePoint.AfterCallback);
 
         if (pullRepayment) {
             uint256 repaymentAmount = useCustomPullAmount ? customPullAmount : amount + premium;
@@ -267,9 +315,10 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
                 revert RepaymentPullReturnedFalse();
             }
         }
+        _revertAt(FailurePoint.AfterRepayment);
     }
 
-    function _invokeCallback(address receiverAddress, address asset, uint256 amount, bytes calldata params) private {
+    function _invokeCallback(address receiverAddress, address asset, uint256 amount, bytes memory params) private {
         address callbackAsset = asset;
         uint256 callbackAmount = amount;
         address callbackInitiator = msg.sender;
@@ -286,7 +335,11 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
         }
 
         bool callbackAccepted;
-        if (callbackMutation == CallbackMutation.WrongSender) {
+        if (callbackMutation == CallbackMutation.WrongCalldataLength) {
+            callbackAccepted = _invokeTruncatedCallback(
+                receiverAddress, callbackAsset, callbackAmount, callbackInitiator, callbackParams
+            );
+        } else if (callbackMutation == CallbackMutation.WrongSender) {
             callbackAccepted = _callbackForwarder.forward(
                 receiverAddress, callbackAsset, callbackAmount, premium, callbackInitiator, callbackParams
             );
@@ -299,5 +352,48 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
             revert CallbackReturnedFalse();
         }
         callbackCount += 1;
+    }
+
+    function _invokeTruncatedCallback(
+        address receiverAddress,
+        address callbackAsset,
+        uint256 callbackAmount,
+        address callbackInitiator,
+        bytes memory callbackParams
+    ) private returns (bool callbackAccepted) {
+        bytes memory callbackCalldata = abi.encodeCall(
+            IDefiSimplify7702Account.executeOperation,
+            (callbackAsset, callbackAmount, premium, callbackInitiator, callbackParams)
+        );
+        assembly ("memory-safe") {
+            mstore(callbackCalldata, sub(mload(callbackCalldata), 1))
+        }
+        (bool callbackSucceeded, bytes memory callbackReturnData) = receiverAddress.call(callbackCalldata);
+        if (!callbackSucceeded) {
+            assembly ("memory-safe") {
+                revert(add(callbackReturnData, 32), mload(callbackReturnData))
+            }
+        }
+        callbackAccepted = abi.decode(callbackReturnData, (bool));
+    }
+
+    function _revertAt(FailurePoint expectedFailurePoint) private view {
+        if (failurePoint == expectedFailurePoint) {
+            revert OuterTargetFailure(uint8(expectedFailurePoint));
+        }
+    }
+}
+
+/// @dev Commits the wrapper as the direct target while the downstream Pool remains
+///      the actual callback sender. The production account must reject this topology.
+contract FlashLoanWrapper {
+    function requestFlashLoan(
+        AaveV3FlashLoanPoolMock pool,
+        address receiver,
+        address asset,
+        uint256 amount,
+        bytes calldata params
+    ) external {
+        pool.flashLoanSimple(receiver, asset, amount, params, 0);
     }
 }

@@ -267,16 +267,16 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     }
 
     function test_NamespacesAndNestedRecordLayoutAreDistinct() external view {
-        (bytes32 lockSlot, bytes32 counterSlot, bytes32 tableNamespace) =
-            _delegatedCheckpointHarnessView().checkpointNamespaces();
-        bytes32 expectedRoot = tableNamespace.deriveMapping(uint256(1)).deriveMapping(CHECKPOINT_A);
+        (bytes32 dynamicExecutionLockSlot, bytes32 invocationCounterSlot, bytes32 checkpointTableRoot) =
+            _delegatedCheckpointHarnessView().transientCheckpointLayout();
+        bytes32 expectedRoot = checkpointTableRoot.deriveMapping(uint256(1)).deriveMapping(CHECKPOINT_A);
         bytes32 actualRoot = _delegatedCheckpointHarnessView().checkpointRecordRoot(1, CHECKPOINT_A);
 
-        assertNotEq(lockSlot, counterSlot, "lock/counter collision");
-        assertNotEq(lockSlot, tableNamespace, "lock/table collision");
-        assertNotEq(counterSlot, tableNamespace, "counter/table collision");
-        assertNotEq(actualRoot, lockSlot, "record/lock collision");
-        assertNotEq(actualRoot, counterSlot, "record/counter collision");
+        assertNotEq(dynamicExecutionLockSlot, invocationCounterSlot, "lock/counter collision");
+        assertNotEq(dynamicExecutionLockSlot, checkpointTableRoot, "lock/table collision");
+        assertNotEq(invocationCounterSlot, checkpointTableRoot, "counter/table collision");
+        assertNotEq(actualRoot, dynamicExecutionLockSlot, "record/lock collision");
+        assertNotEq(actualRoot, invocationCounterSlot, "record/counter collision");
         assertEq(actualRoot, expectedRoot, "nested mapping derivation");
         assertNotEq(bytes32(uint256(actualRoot) + 1), bytes32(uint256(actualRoot) + 2), "field collision");
     }

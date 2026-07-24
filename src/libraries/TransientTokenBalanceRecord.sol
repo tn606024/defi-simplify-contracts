@@ -14,6 +14,7 @@ library TransientTokenBalanceRecord {
     using SlotDerivation for bytes32;
     using TransientSlot for *;
 
+    uint256 private constant _PRESENCE_OFFSET = 0;
     uint256 private constant _TOKEN_OFFSET = 1;
     uint256 private constant _BALANCE_OFFSET = 2;
 
@@ -21,7 +22,7 @@ library TransientTokenBalanceRecord {
     /// @param recordRoot Slot at offset zero of the transient record.
     /// @return present Whether the explicit presence field is set.
     function isPresent(bytes32 recordRoot) internal view returns (bool present) {
-        return recordRoot.asBoolean().tload();
+        return recordRoot.offset(_PRESENCE_OFFSET).asBoolean().tload();
     }
 
     /// @notice Loads the token field without applying caller-specific presence or token validation.
@@ -47,6 +48,6 @@ library TransientTokenBalanceRecord {
     function store(bytes32 recordRoot, address storedToken, uint256 storedBalance) internal {
         recordRoot.offset(_TOKEN_OFFSET).asAddress().tstore(storedToken);
         recordRoot.offset(_BALANCE_OFFSET).asUint256().tstore(storedBalance);
-        recordRoot.asBoolean().tstore(true);
+        recordRoot.offset(_PRESENCE_OFFSET).asBoolean().tstore(true);
     }
 }
