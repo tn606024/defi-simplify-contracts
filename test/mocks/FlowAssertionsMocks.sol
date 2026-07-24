@@ -3,8 +3,8 @@ pragma solidity 0.8.36;
 
 import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {IFlowAssertions} from "../../src/interfaces/IFlowAssertions.sol";
-import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
+import {TransientAssertionSnapshotTable} from "../../src/libraries/TransientAssertionSnapshotTable.sol";
+import {TransientTokenBalanceRecord} from "../../src/libraries/TransientTokenBalanceRecord.sol";
 
 contract AssertionBalanceToken {
     mapping(address account => uint256 balance) private _balances;
@@ -84,11 +84,10 @@ contract AssertionCaller {
 }
 
 contract FlowAssertionsHarness is FlowAssertions {
-    using SlotDerivation for bytes32;
-    using TransientSlot for *;
+    using TransientTokenBalanceRecord for bytes32;
 
-    function snapshotNamespace() external pure returns (bytes32) {
-        return _BALANCE_SNAPSHOT_TABLE_NAMESPACE;
+    function snapshotTableRoot() external pure returns (bytes32) {
+        return TransientAssertionSnapshotTable.root();
     }
 
     function snapshotRecordRoot(address account, bytes32 checkpointId) external pure returns (bytes32) {
@@ -101,8 +100,8 @@ contract FlowAssertionsHarness is FlowAssertions {
         returns (bool present, address token, uint256 balance)
     {
         bytes32 recordRoot = _snapshotRecordRoot(account, checkpointId);
-        present = recordRoot.asBoolean().tload();
-        token = recordRoot.offset(1).asAddress().tload();
-        balance = recordRoot.offset(2).asUint256().tload();
+        present = recordRoot.isPresent();
+        token = recordRoot.token();
+        balance = recordRoot.balance();
     }
 }

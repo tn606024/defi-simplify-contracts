@@ -3,6 +3,7 @@ pragma solidity 0.8.36;
 
 import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
+import {TransientCallbackCommitment} from "../../src/libraries/TransientCallbackCommitment.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {Test} from "forge-std/Test.sol";
 
@@ -10,7 +11,7 @@ contract CallbackCommitmentHarness is DefiSimplify7702Account {
     constructor() DefiSimplify7702Account(IEntryPoint(address(0x4337))) {}
 
     function forceCallbackState(uint256 state) external {
-        bytes32 stateSlot = _CALLBACK_STATE_SLOT;
+        bytes32 stateSlot = TransientCallbackCommitment.root();
         assembly ("memory-safe") {
             tstore(stateSlot, state)
         }

@@ -3,9 +3,11 @@ pragma solidity 0.8.36;
 
 import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
+import {TransientAccountCheckpointTable} from "../../src/libraries/TransientAccountCheckpointTable.sol";
+import {TransientDynamicExecutionLock} from "../../src/libraries/TransientDynamicExecutionLock.sol";
+import {TransientInvocationCounter} from "../../src/libraries/TransientInvocationCounter.sol";
+import {TransientTokenBalanceRecord} from "../../src/libraries/TransientTokenBalanceRecord.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 
 contract CheckpointBalanceToken {
     mapping(address account => uint256 balance) private _balances;
@@ -118,22 +120,25 @@ contract EmptyReturnCheckpointToken {
 }
 
 contract CheckpointTableHarness is DefiSimplify7702Account {
-    using SlotDerivation for bytes32;
-    using TransientSlot for *;
+    using TransientTokenBalanceRecord for bytes32;
 
     constructor(IEntryPoint entryPoint) DefiSimplify7702Account(entryPoint) {}
 
-    function checkpointNamespaces()
+    function transientCheckpointLayout()
         external
         pure
-        returns (bytes32 lockSlot, bytes32 counterSlot, bytes32 tableNamespace)
+        returns (bytes32 dynamicExecutionLockSlot, bytes32 invocationCounterSlot, bytes32 checkpointTableRoot)
     {
-        return (_DYNAMIC_EXECUTION_LOCK_SLOT, _DYNAMIC_INVOCATION_COUNTER_SLOT, _CHECKPOINT_TABLE_NAMESPACE);
+        return (
+            TransientDynamicExecutionLock.slot(),
+            TransientInvocationCounter.slot(),
+            TransientAccountCheckpointTable.root()
+        );
     }
 
     function invocationCounter() external view returns (uint256) {
         _requireForExecute();
-        return _DYNAMIC_INVOCATION_COUNTER_SLOT.asUint256().tload();
+        return TransientInvocationCounter.current();
     }
 
     function checkpointRecord(uint256 invocationId, bytes32 checkpointId)
@@ -170,9 +175,9 @@ contract CheckpointTableHarness is DefiSimplify7702Account {
         returns (bool present, address token, uint256 balance)
     {
         bytes32 recordRoot = _checkpointRecordRoot(invocationId, checkpointId);
-        present = recordRoot.asBoolean().tload();
-        token = recordRoot.offset(1).asAddress().tload();
-        balance = recordRoot.offset(2).asUint256().tload();
+        present = recordRoot.isPresent();
+        token = recordRoot.token();
+        balance = recordRoot.balance();
     }
 }
 
