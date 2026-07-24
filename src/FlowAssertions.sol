@@ -16,7 +16,9 @@ contract FlowAssertions is IFlowAssertions {
     using TransientTokenBalanceRecord for bytes32;
 
     /// @dev Domain-separated root of the sender- and checkpoint-keyed transient snapshot table.
-    bytes32 internal constant _BALANCE_SNAPSHOT_TABLE_NAMESPACE = keccak256("FlowAssertions.balanceSnapshotTable.v1");
+    // keccak256("FlowAssertions.balanceSnapshotTable")
+    bytes32 internal constant _BALANCE_SNAPSHOT_TABLE_SLOT =
+        0xa140f7bcbac33064b18ae2b2aecf05c745c280261f40758c51e4753fae052f7f;
 
     /// @dev Aave V3 `getUserAccountData` returns six statically encoded words.
     uint256 private constant _AAVE_V3_ACCOUNT_DATA_RETURN_LENGTH = 6 * 32;
@@ -84,7 +86,7 @@ contract FlowAssertions is IFlowAssertions {
     /// @param checkpointId Caller-local snapshot identifier.
     /// @return recordRoot Slot at offset zero of the logical transient record.
     function _snapshotRecordRoot(address account, bytes32 checkpointId) internal pure returns (bytes32 recordRoot) {
-        return _BALANCE_SNAPSHOT_TABLE_NAMESPACE.deriveMapping(account).deriveMapping(checkpointId);
+        return _BALANCE_SNAPSHOT_TABLE_SLOT.deriveMapping(account).deriveMapping(checkpointId);
     }
 
     /// @dev Loads a caller-owned snapshot and validates its token before any current-balance read
