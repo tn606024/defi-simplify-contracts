@@ -13,9 +13,16 @@ the independent `StaticCallUint256Assertions` fixed-word checker. The generic
 checker is a lower-level adapter surface with explicit account-binding and
 global-read modes; binding is not an authorization boundary. The SDK and signer
 remain responsible for authenticating exact checker, target, selector, offset,
-and bound semantics. The contracts remain pre-release and are not
-production-ready until the remaining Base flow and security review gates are
-complete.
+and bound semantics.
+
+The pre-release account also implements the final v1 direct Aave V3
+`flashLoanSimple` callback path. A callback-enabled call commits its fully
+patched calldata and direct Pool target in transient storage; `executeOperation`
+authenticates that origin, executes an isolated callback plan, installs an exact
+zero-first-compatible repayment allowance, and requires the Pool to consume the
+allowance completely before the outer batch continues. The contracts are not
+production-ready until the remaining adversarial, Base lifecycle, and external
+security-review gates are complete.
 
 ## Pinned bootstrap toolchain
 

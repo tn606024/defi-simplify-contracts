@@ -31,7 +31,7 @@ contract DynamicGoldenVectorsTest is Test {
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = _buildGoldenDynamicCalls(original);
 
-        assertEq(vm.parseJsonUint(fixture, ".version"), 1, "fixture version");
+        assertEq(vm.parseJsonUint(fixture, ".version"), 2, "fixture version");
         assertEq(vm.parseJsonAddress(fixture, ".token"), FIXTURE_TOKEN, "fixture token");
         assertEq(vm.parseJsonAddress(fixture, ".otherToken"), FIXTURE_OTHER_TOKEN, "fixture other token");
         assertEq(vm.parseJsonAddress(fixture, ".target"), FIXTURE_TARGET, "fixture target");
@@ -217,6 +217,7 @@ contract DynamicGoldenVectorsTest is Test {
             bps: FIXTURE_BPS,
             source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
         });
+        calls[0].expectsCallback = false;
     }
 
     function _assertGoldenErrorEncoding(string memory fixture, string memory errorName, bytes memory actual)

@@ -28,7 +28,11 @@ contract DynamicExecutionTarget {
     }
 
     function callAccountDynamic(address account) external {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](0);
+        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
+        calls[0].target = address(this);
+        calls[0].data = abi.encodeCall(this.record, (0, bytes("reentrant-call-must-not-run")));
+        calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
+        calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
         IDefiSimplify7702Account(account).executeBatchDynamic(calls);
     }
 }

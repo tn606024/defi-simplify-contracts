@@ -11,6 +11,9 @@ import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
 contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
+    bytes4 private constant CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR = 0xecadebe3;
+    bytes4 private constant EXECUTE_OPERATION_SELECTOR = 0x1b11d0ff;
+    bytes4 private constant CALLBACK_ENABLED_DYNAMIC_INTERFACE_ID = 0xf7bc3b1c;
     uint256 private constant REENTRANT_ACCOUNT_AUTHORITY_KEY = 0xD1A1;
     uint256 private constant RETURNDATA_BOMB_SIZE = 2 * 1024 * 1024;
     uint256 private constant RETURNDATA_BOMB_GAS = 30_000_000;
@@ -26,12 +29,22 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         vm.deal(accountUnderTest.delegatedEoa, 10 ether);
     }
 
-    function test_DynamicInterfaceId_EqualsSingleEntrypointSelector_AndOnlyDefiSimplifyAccountSupportsIt() external {
+    function test_DynamicInterfaceIdCombinesTheFinalExecutionAndCallbackSelectors() external {
         DelegatedUpstreamAccount memory upstreamAccount = _deployDelegatedUpstreamAccount(IEntryPoint(address(this)));
 
         assertEq(
-            bytes32(type(IDefiSimplify7702Account).interfaceId),
             bytes32(IDefiSimplify7702Account.executeBatchDynamic.selector),
+            bytes32(CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR),
+            "unexpected executeBatchDynamic selector"
+        );
+        assertEq(
+            bytes32(IDefiSimplify7702Account.executeOperation.selector),
+            bytes32(EXECUTE_OPERATION_SELECTOR),
+            "unexpected executeOperation selector"
+        );
+        assertEq(
+            bytes32(type(IDefiSimplify7702Account).interfaceId),
+            bytes32(CALLBACK_ENABLED_DYNAMIC_INTERFACE_ID),
             "unexpected dynamic interface id"
         );
         assertTrue(IERC165(accountUnderTest.delegatedEoa).supportsInterface(type(IDefiSimplify7702Account).interfaceId));
@@ -399,5 +412,6 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         dynamicCall.data = callData;
         dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
         dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        dynamicCall.expectsCallback = false;
     }
 }

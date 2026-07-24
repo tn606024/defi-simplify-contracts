@@ -294,6 +294,47 @@ forge test --match-path 'test/integration/StaticCallUint256AssertionsBatchIntegr
 forge test --match-path 'test/fork/BaseStaticCallUint256Assertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
 ```
 
+## DSC-78 authenticated Aave V3 callback path
+
+`unit/CallbackAbi.t.sol` proves the final v1 ABI independently from provider
+behavior. Ordinary dynamic batches still execute when every flag is false, two
+outer callback flags report both indices before the first target, random direct
+`executeOperation` calls fail before malformed envelope bytes are decoded, and
+final-selector calldata whose tuple omits `expectsCallback` fails ABI decoding.
+
+`unit/AaveV3FlashLoanCallback.t.sol` exercises the complete direct
+`flashLoanSimple` round trip through a delegated EOA. It covers callback-enabled
+calls at first, middle, and last outer indices; zero, one, and many callback
+calls; commitment to patched calldata; separate callback checkpoint scope with
+outer-scope resumption; exact zero-first repayment; wrong sender, initiator, and
+origin; missing, replayed, nested, and reentrant callbacks; premium and
+arithmetic bounds; callback target failure with dual indices; malformed token
+reads and approvals; failed Pool pulls; residual allowance; and atomic rollback.
+`unit/CallbackCommitmentState.t.sol` directly proves that a new commitment
+cannot overwrite a non-idle callback lifecycle.
+`integration/TransientNamespaceSeparation.t.sol` includes every callback slot in
+the cross-component collision check.
+
+`unit/CallbackGoldenVectors.t.sol` verifies
+`abi/CallbackExecution.golden.json`: the final selectors, final ERC-165 interface
+ID, both boolean encodings, zero/one/many-call callback envelopes, and every
+callback error encoding. `unit/DynamicGoldenVectors.t.sol` updates the existing
+plan fixture to version 2 for the appended boolean.
+
+DSC-79 and DSC-80 were folded into DSC-78 before release so reviewers see one
+complete behavior instead of a sequence of temporary fail-closed artifacts.
+The repository now has 255 passing non-fork tests. DSC-81 remains the separate
+audit-grade fuzz and invariant hardening gate.
+
+Run the focused DSC-78 suites with:
+
+```sh
+forge test --match-path 'test/unit/Callback*.t.sol' -vvv
+forge test --match-path 'test/unit/AaveV3FlashLoanCallback.t.sol' -vvv
+./script/check-minimal-account-surface.sh
+./script/check-abi-fixtures.sh
+```
+
 ### Validation commands
 
 Run the focused verification layers with:
