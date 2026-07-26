@@ -76,3 +76,72 @@ out of the latter two measurements.
 An execution revert atomically restores protocol, token, and allowance state,
 but still consumes gas and nonce. For a first EIP-7702 transaction, a processed
 delegation may remain installed even when the execution portion reverts.
+
+## Guarded Aave V3 WETH-collateral/USDC-debt loop
+
+`BaseAaveV3DynamicStrategy.t.sol` and
+`BaseAaveV3DynamicStrategyGas.t.sol` use the same pinned Base block and Aave
+identities, plus:
+
+- official Uniswap V3 `SwapRouter02`:
+  `0x2626664c2603336E57B271c5C0b26F421741e481`
+- direct USDC/WETH 0.05% pool:
+  `0xd0b53D9277642d899DF5C87A3966A349A798F224`
+- pool fee: `500`
+
+The successful eight-call plan:
+
+1. approves and supplies `1 WETH` to Aave;
+2. checkpoints an existing `37 USDC` sentinel immediately before borrowing
+   `500 USDC`;
+3. patches the Router approval and `exactInputSingle.amountIn` with only that
+   `500 USDC` delta;
+4. checkpoints an existing `0.25 WETH` sentinel immediately before the swap;
+5. enforces `0.26 WETH` minimum output and a nonzero
+   `sqrtPriceLimitX96`;
+6. patches the second Aave approval and supply with the observed
+   `260391696019929066` wei WETH output at the pinned block; and
+7. requires a final Aave V3 health factor of at least `2e18`.
+
+The initial WETH balance is `1.25 WETH`, while the final wallet balance is only
+the `0.25 WETH` sentinel. A flow-start delta would therefore be negative even
+though the pool emitted a positive WETH output; the immediately-before-swap
+checkpoint is required. Swap events, Aave balances, debt tokens, exact
+allowances, and account data prove the producer and consumers use the delegated
+EOA context.
+
+The Base `SwapRouter02.exactInputSingle` ABI exposes `amountOutMinimum` and
+`sqrtPriceLimitX96` but no deadline. The proof calls it directly and does not
+weaken account patch alignment or use nested `multicall` calldata to add a
+deadline. Fresh simulation, short-lived/private submission, and nonce
+replacement are operational mitigations, not on-chain expiry guarantees.
+Base USDC and WETH are treated as conventional ERC20s at the pinned block; this
+proof does not claim fee-on-transfer or rebasing-token compatibility. All
+approvals begin at zero, approve exact observed amounts, and are fully consumed.
+
+Forced failures cover Router slippage, an excessive final health factor,
+unaligned patch metadata, token/checkpoint mismatch, and a downstream Aave
+failure. Each compares native, WETH, USDC, aWETH, variable debt, allowance, and
+Aave account data against an execution-time snapshot to prove full rollback.
+Gas, nonce, and a newly processed EIP-7702 delegation remain outside that
+rollback guarantee.
+
+The language-neutral
+`abi/BaseAaveV3DynamicStrategy.golden.json` fixture freezes all four dynamic ABI
+words: Router approval amount, swap input amount, Aave approval amount, and
+Aave supply amount.
+
+Run this proof and all Base Aave gas baselines with:
+
+```sh
+forge test \
+  --match-path 'test/fork/BaseAaveV3DynamicStrategy*.t.sol' \
+  --fork-url "$BASE_RPC_URL"
+forge snapshot --check \
+  --match-path 'test/fork/BaseAaveV3*Gas.t.sol' \
+  --match-test 'test_Gas_' \
+  --fork-url "$BASE_RPC_URL"
+```
+
+The guarded WETH-collateral/USDC-debt loop baseline is `616,974` gas; setup and
+fork identity checks are outside the measured test body.
