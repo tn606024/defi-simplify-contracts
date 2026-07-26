@@ -31,7 +31,7 @@ contract DynamicGoldenVectorsTest is Test {
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = _buildGoldenDynamicCalls(original);
 
-        assertEq(vm.parseJsonUint(fixture, ".version"), 2, "fixture version");
+        assertEq(vm.parseJsonUint(fixture, ".version"), 3, "fixture version");
         assertEq(vm.parseJsonAddress(fixture, ".token"), FIXTURE_TOKEN, "fixture token");
         assertEq(vm.parseJsonAddress(fixture, ".otherToken"), FIXTURE_OTHER_TOKEN, "fixture other token");
         assertEq(vm.parseJsonAddress(fixture, ".target"), FIXTURE_TARGET, "fixture target");
@@ -54,15 +54,51 @@ contract DynamicGoldenVectorsTest is Test {
     /// @dev Verifies every transient namespace and nested checkpoint record slot.
     function test_GoldenNamespaceAndRecordSlotsMatchIndependentDerivation() external view {
         string memory fixture = vm.readFile(FIXTURE_PATH);
-        bytes32 lockSlot = keccak256("DefiSimplify7702Account.dynamicExecutionLock.v1");
-        bytes32 counterSlot = keccak256("DefiSimplify7702Account.dynamicInvocationCounter.v1");
-        bytes32 tableNamespace = keccak256("DefiSimplify7702Account.checkpointTable.v1");
-        bytes32 invocationRoot = keccak256(abi.encode(INVOCATION_ID, tableNamespace));
+        bytes32 lockSlot = _erc7201Root("DefiSimplify7702Account.transient.dynamicExecutionLock");
+        bytes32 counterSlot = _erc7201Root("DefiSimplify7702Account.transient.dynamicInvocationCounter");
+        bytes32 checkpointTableRoot = _erc7201Root("DefiSimplify7702Account.transient.checkpointTable.v1");
+        bytes32 callbackCommitmentRoot = _erc7201Root("DefiSimplify7702Account.transient.callbackCommitment.v1");
+        bytes32 assertionSnapshotTableRoot = _erc7201Root("FlowAssertions.transient.balanceSnapshotTable.v1");
+        bytes32 invocationRoot = keccak256(abi.encode(INVOCATION_ID, checkpointTableRoot));
         bytes32 recordRoot = keccak256(abi.encode(CHECKPOINT_ID, invocationRoot));
 
         assertEq(vm.parseJsonBytes32(fixture, ".slots.lock"), lockSlot, "fixture lock slot");
         assertEq(vm.parseJsonBytes32(fixture, ".slots.counter"), counterSlot, "fixture counter slot");
-        assertEq(vm.parseJsonBytes32(fixture, ".slots.tableNamespace"), tableNamespace, "fixture table namespace");
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.checkpointTableRoot"),
+            checkpointTableRoot,
+            "fixture checkpoint table root"
+        );
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.callbackCommitmentRoot"),
+            callbackCommitmentRoot,
+            "fixture callback commitment root"
+        );
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.callbackTarget"),
+            bytes32(uint256(callbackCommitmentRoot) + 1),
+            "fixture callback target slot"
+        );
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.callbackCalldataHash"),
+            bytes32(uint256(callbackCommitmentRoot) + 2),
+            "fixture callback calldata hash slot"
+        );
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.callbackCallIndex"),
+            bytes32(uint256(callbackCommitmentRoot) + 3),
+            "fixture callback call index slot"
+        );
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.callbackRepaymentToken"),
+            bytes32(uint256(callbackCommitmentRoot) + 4),
+            "fixture callback repayment token slot"
+        );
+        assertEq(
+            vm.parseJsonBytes32(fixture, ".slots.assertionSnapshotTableRoot"),
+            assertionSnapshotTableRoot,
+            "fixture assertion snapshot table root"
+        );
         assertEq(vm.parseJsonBytes32(fixture, ".slots.invocationRoot"), invocationRoot, "fixture invocation root");
         assertEq(vm.parseJsonBytes32(fixture, ".slots.presence"), recordRoot, "fixture presence slot");
         assertEq(vm.parseJsonBytes32(fixture, ".slots.token"), bytes32(uint256(recordRoot) + 1), "fixture token slot");
@@ -225,5 +261,9 @@ contract DynamicGoldenVectorsTest is Test {
         pure
     {
         assertEq(vm.parseJsonBytes(fixture, string.concat(".errors.", errorName)), actual, errorName);
+    }
+
+    function _erc7201Root(string memory namespace) private pure returns (bytes32) {
+        return keccak256(abi.encode(uint256(keccak256(bytes(namespace))) - 1)) & ~bytes32(uint256(0xff));
     }
 }

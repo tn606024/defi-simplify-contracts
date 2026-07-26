@@ -20,6 +20,25 @@ compared byte-for-byte with their indexed custom errors. A handler-level revert
 therefore represents an unexpected failure and remains fatal under
 `fail_on_revert = true`.
 
+`AaveV3FlashLoanCallbackInvariant.t.sol` is the separate DSC-81 stateful
+campaign for the authenticated Aave callback. Its handler is likewise the
+delegated account's configured EntryPoint and exercises:
+
+- successful callbacks with arbitrary bounded premium, plan length, and
+  preexisting allowance;
+- missing callbacks and reverting callback plans;
+- success, failure, and another success inside one transaction;
+- exact two-scope allocation for each successful outer/callback pair and
+  rollback of both tentative scopes on failure;
+- `Idle`, cleared commitment fields, unlocked execution, and zero Pool
+  allowance after every handled action;
+- persistent target state matching only successful plans; and
+- preservation of the installed EIP-7702 delegation.
+
+The callback handler catches expected execution failures. Any handler-level
+revert therefore remains an unexpected invariant failure under
+`fail_on_revert = true`.
+
 ## Campaign profiles
 
 | Profile | Runs | Depth | Maximum generated actions per invariant |

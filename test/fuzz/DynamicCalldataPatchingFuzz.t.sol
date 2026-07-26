@@ -259,14 +259,15 @@ contract DynamicCalldataPatchingFuzzTest is DelegatedAccountFixture {
         external
         view
     {
-        (bytes32 lockSlot, bytes32 counterSlot, bytes32 tableNamespace) = checkpointTableHarness.checkpointNamespaces();
-        bytes32 invocationRoot = keccak256(abi.encode(invocationId, tableNamespace));
+        (bytes32 dynamicExecutionLockSlot, bytes32 invocationCounterSlot, bytes32 checkpointTableRoot) =
+            checkpointTableHarness.transientCheckpointLayout();
+        bytes32 invocationRoot = keccak256(abi.encode(invocationId, checkpointTableRoot));
         bytes32 expectedRecordRoot = keccak256(abi.encode(checkpointId, invocationRoot));
         bytes32 actualRecordRoot = checkpointTableHarness.checkpointRecordRoot(invocationId, checkpointId);
 
         assertEq(actualRecordRoot, expectedRecordRoot, "manual nested mapping derivation");
-        assertNotEq(actualRecordRoot, lockSlot, "record collided with lock");
-        assertNotEq(actualRecordRoot, counterSlot, "record collided with counter");
+        assertNotEq(actualRecordRoot, dynamicExecutionLockSlot, "record collided with lock");
+        assertNotEq(actualRecordRoot, invocationCounterSlot, "record collided with counter");
         assertNotEq(bytes32(uint256(actualRecordRoot) + 1), bytes32(uint256(actualRecordRoot) + 2), "field collision");
     }
 

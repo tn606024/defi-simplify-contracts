@@ -187,8 +187,8 @@ accessor for the shared physical record shape used by account checkpoints and
 assertion snapshots: presence at offset zero, token at offset one, and balance
 at offset two. The internal-only library is compiler-inlined and introduces no
 creation-time or runtime link references. Each consumer continues to own its
-record-root derivation, scope, lifecycle, validation order, balance reads, and
-custom errors.
+scope, lifecycle, validation order, balance reads, and custom errors; semantic
+table libraries own the frozen roots and record-root derivation.
 
 `unit/TransientTokenBalanceRecord.t.sol` independently verifies the three slot
 offsets through raw transient reads, distinguishes a present zero balance from
@@ -312,19 +312,23 @@ arithmetic bounds; callback target failure with dual indices; malformed token
 reads and approvals; failed Pool pulls; residual allowance; and atomic rollback.
 `unit/CallbackCommitmentState.t.sol` directly proves that a new commitment
 cannot overwrite a non-idle callback lifecycle.
-`integration/TransientNamespaceSeparation.t.sol` includes every callback slot in
-the cross-component collision check.
+`unit/TransientExecutionComponents.t.sol` directly verifies lock transitions,
+checked nonzero invocation allocation, callback field publication, and cleanup.
+`integration/TransientNamespaceSeparation.t.sol` independently reproduces the
+full ERC-7201 derivation and checks every occupied scalar, record, and table slot
+for cross-component collisions.
 
 `unit/CallbackGoldenVectors.t.sol` verifies
 `abi/CallbackExecution.golden.json`: the final selectors, final ERC-165 interface
 ID, both boolean encodings, zero/one/many-call callback envelopes, and every
 callback error encoding. `unit/DynamicGoldenVectors.t.sol` updates the existing
-plan fixture to version 2 for the appended boolean.
+plan fixture to version 3 for the semantic ERC-7201 transient roots and
+five-field callback commitment layout.
 
 DSC-79 and DSC-80 were folded into DSC-78 before release so reviewers see one
 complete behavior instead of a sequence of temporary fail-closed artifacts.
-The repository now has 255 passing non-fork tests. DSC-81 remains the separate
-audit-grade fuzz and invariant hardening gate.
+The DSC-78 implementation baseline had 263 passing non-fork tests. DSC-81 is
+the separate audit-grade fuzz and invariant hardening gate.
 
 Run the focused DSC-78 suites with:
 
@@ -333,6 +337,95 @@ forge test --match-path 'test/unit/Callback*.t.sol' -vvv
 forge test --match-path 'test/unit/AaveV3FlashLoanCallback.t.sol' -vvv
 ./script/check-minimal-account-surface.sh
 ./script/check-abi-fixtures.sh
+```
+
+## DSC-81 callback adversarial, fuzz, and invariant proof
+
+DSC-81 does not expand the callback ABI or supported provider set. It stresses
+the completed Aave V3 callback path as a security boundary:
+
+- `unit/AaveV3FlashLoanAdversarial.t.sol` covers callback attempts before,
+  during, and after a window; wrapper-mediated callbacks; different same-Pool
+  replay; truncated callback calldata; self, inherited static, and public
+  dynamic reentry; outer/callback checkpoint isolation in both directions;
+  Pool failure before callback, after callback, and after repayment; too little,
+  too much, and no repayment pull; fee-on-transfer and reentrant approval
+  tokens; bounded 4 KiB revert-data preservation; and zero permanent account
+  writes;
+- `unit/AaveV3FlashLoanEntryPointBundle.t.sol` uses the real pinned EntryPoint
+  source to execute multiple same-account UserOperations in one bundle. It
+  proves that a failed callback operation between two successes rolls back both
+  tentative invocation scopes while EntryPoint continues to the next nonce,
+  and that a callback plan cannot start nested `handleOps`;
+- `fuzz/AaveV3FlashLoanCallbackFuzz.t.sol` covers patched principal and actual
+  calldata commitment, callback position, bounded plan length, every nested
+  flag index, premium and starting allowance, and origin-field mutation across
+  512 default cases per property;
+- `invariant/AaveV3FlashLoanCallbackInvariant.t.sol` repeatedly interleaves
+  success, missing callback, reverting callback plans, and a
+  success/failure/success same-transaction sequence. Successful completion must
+  restore `Idle`, clear every commitment field, unlock execution, leave zero
+  Pool allowance, and update persistent target state only for successful
+  callback plans; and
+- `unit/AaveV3FlashLoanGas.t.sol` adds deterministic callback-window and exact
+  repayment snapshots.
+
+The final callback gas scenarios are:
+
+| Scenario | Test gas |
+| --- | ---: |
+| Empty callback plan and exact repayment | 162,241 |
+| One ordinary callback call | 261,875 |
+| Four ordinary callback calls | 294,180 |
+| Exact repayment with preexisting allowance | 182,647 |
+
+The repository has 299 passing non-fork tests under the default profile. Each
+callback invariant property runs 256 sequences at depth 128, for 32,768
+generated handler calls per campaign, with zero handler reverts.
+The CI profile passes 10,000 runs for every fuzz property and 512 invariant
+sequences at depth 256, for 131,072 generated calls per callback campaign.
+
+All production contracts and semantic transient libraries retain 100% line,
+statement, branch, and function coverage. The final account runtime is 9,315
+bytes. The reproducible artifact tree is
+`0d8533533daf11398c20c85029dcd85f10b52c0a8cb928f5f181be17b7ae42d6`.
+Dependency-inclusive Slither reports 71 results for manual review; 17 remain
+after filtering pinned libraries, and the project-owned high-severity gate
+reports zero high findings. The remaining project results are the intentional
+checked low-level token/protocol calls, their loop reachability, and reviewed
+assembly word reads/writes.
+
+### Explicit limits of the proof
+
+- A callback outer-call index is not supplied by the Pool and cannot be changed
+  by a production caller independently from the committed call. First, middle,
+  and last placement plus retained-index error attribution are tested; arbitrary
+  internal slot corruption is only meaningful in the dedicated transient
+  harness, not as a production attack path.
+- Keccak-256 collision resistance is a cryptographic assumption. Fuzzing proves
+  that mutated receiver, asset, amount, params, selector, referral code, and
+  calldata length do not execute a plan; tests cannot exhaustively prove that
+  no hash collision exists.
+- v1 still preserves complete target revert data. The suite proves byte-for-byte
+  preservation for bounded 4 KiB data and retains the existing deliberate OOG
+  characterization for an unbounded returndata bomb. It does not claim indexed
+  attribution survives memory-exhaustion OOG.
+- Fee-on-transfer and reentrant tokens are adversarially characterized, not
+  admitted as generally supported assets. The fee-on-transfer fixture fails
+  repayment coverage atomically; a token callback during approval observes
+  `ExecutingCallback` and cannot consume the active callback again.
+- Base protocol behavior and a complete flash-assisted lifecycle remain the
+  separate DSC-82 fork proof. DSC-81 proves the local account boundary and does
+  not claim production readiness or an external audit.
+
+Run the focused DSC-81 suites with:
+
+```sh
+forge test --match-path 'test/unit/AaveV3FlashLoanAdversarial.t.sol' -vvv
+forge test --match-path 'test/unit/AaveV3FlashLoanEntryPointBundle.t.sol' -vvv
+forge test --match-path 'test/fuzz/AaveV3FlashLoanCallbackFuzz.t.sol' -vvv
+forge test --match-path 'test/invariant/AaveV3FlashLoanCallbackInvariant.t.sol' -vvv
+forge test --match-path 'test/unit/AaveV3FlashLoanGas.t.sol' -vvv
 ```
 
 ### Validation commands

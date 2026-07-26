@@ -2,9 +2,9 @@
 pragma solidity 0.8.36;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {IAaveV3Pool} from "./interfaces/IAaveV3Pool.sol";
 import {IFlowAssertions} from "./interfaces/IFlowAssertions.sol";
+import {TransientAssertionSnapshotTable} from "./libraries/TransientAssertionSnapshotTable.sol";
 import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceRecord.sol";
 
 /// @title FlowAssertions
@@ -12,11 +12,7 @@ import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceReco
 /// @dev This direct immutable contract has no owner, asset-moving method, or permanent storage.
 ///      Snapshot records live only for the current transaction and are scoped to `msg.sender`.
 contract FlowAssertions is IFlowAssertions {
-    using SlotDerivation for bytes32;
     using TransientTokenBalanceRecord for bytes32;
-
-    /// @dev Domain-separated root of the sender- and checkpoint-keyed transient snapshot table.
-    bytes32 internal constant _BALANCE_SNAPSHOT_TABLE_NAMESPACE = keccak256("FlowAssertions.balanceSnapshotTable.v1");
 
     /// @dev Aave V3 `getUserAccountData` returns six statically encoded words.
     uint256 private constant _AAVE_V3_ACCOUNT_DATA_RETURN_LENGTH = 6 * 32;
@@ -84,7 +80,7 @@ contract FlowAssertions is IFlowAssertions {
     /// @param checkpointId Caller-local snapshot identifier.
     /// @return recordRoot Slot at offset zero of the logical transient record.
     function _snapshotRecordRoot(address account, bytes32 checkpointId) internal pure returns (bytes32 recordRoot) {
-        return _BALANCE_SNAPSHOT_TABLE_NAMESPACE.deriveMapping(account).deriveMapping(checkpointId);
+        return TransientAssertionSnapshotTable.recordRoot(account, checkpointId);
     }
 
     /// @dev Loads a caller-owned snapshot and validates its token before any current-balance read

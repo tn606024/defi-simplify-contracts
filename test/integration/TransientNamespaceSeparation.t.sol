@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
+import {TransientAccountCheckpointTable} from "../../src/libraries/TransientAccountCheckpointTable.sol";
+import {TransientAssertionSnapshotTable} from "../../src/libraries/TransientAssertionSnapshotTable.sol";
+import {TransientCallbackCommitment} from "../../src/libraries/TransientCallbackCommitment.sol";
+import {TransientDynamicExecutionLock} from "../../src/libraries/TransientDynamicExecutionLock.sol";
+import {TransientInvocationCounter} from "../../src/libraries/TransientInvocationCounter.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {Test} from "forge-std/Test.sol";
 import {FlowAssertionsHarness} from "../mocks/FlowAssertionsMocks.sol";
@@ -9,6 +14,7 @@ contract TransientNamespaceSeparationTest is Test {
     using SlotDerivation for bytes32;
 
     bytes32 private constant CHECKPOINT_ID = keccak256("namespace-separation");
+    uint256 private constant INVOCATION_ID = 7;
 
     FlowAssertionsHarness private flowAssertions;
 
@@ -16,29 +22,76 @@ contract TransientNamespaceSeparationTest is Test {
         flowAssertions = new FlowAssertionsHarness();
     }
 
-    function test_AccountAndAssertionTransientNamespacesAndRecordLayoutRemainSeparated() external view {
-        bytes32[] memory namespaces = new bytes32[](9);
-        namespaces[0] = keccak256("DefiSimplify7702Account.dynamicExecutionLock.v1");
-        namespaces[1] = keccak256("DefiSimplify7702Account.dynamicInvocationCounter.v1");
-        namespaces[2] = keccak256("DefiSimplify7702Account.checkpointTable.v1");
-        namespaces[3] = keccak256("DefiSimplify7702Account.callbackState.v1");
-        namespaces[4] = keccak256("DefiSimplify7702Account.callbackTarget.v1");
-        namespaces[5] = keccak256("DefiSimplify7702Account.callbackCalldataHash.v1");
-        namespaces[6] = keccak256("DefiSimplify7702Account.callbackCallIndex.v1");
-        namespaces[7] = keccak256("DefiSimplify7702Account.callbackRepaymentToken.v1");
-        namespaces[8] = keccak256("FlowAssertions.balanceSnapshotTable.v1");
+    function test_SemanticTransientNamespaces_MatchIndependentErc7201Derivation() external pure {
+        assertEq(
+            TransientDynamicExecutionLock.slot(),
+            _erc7201Root("DefiSimplify7702Account.transient.dynamicExecutionLock"),
+            "dynamic execution lock slot"
+        );
+        assertEq(
+            TransientInvocationCounter.slot(),
+            _erc7201Root("DefiSimplify7702Account.transient.dynamicInvocationCounter"),
+            "dynamic invocation counter slot"
+        );
+        assertEq(
+            TransientAccountCheckpointTable.root(),
+            _erc7201Root("DefiSimplify7702Account.transient.checkpointTable.v1"),
+            "account checkpoint table root"
+        );
+        assertEq(
+            TransientCallbackCommitment.root(),
+            _erc7201Root("DefiSimplify7702Account.transient.callbackCommitment.v1"),
+            "callback commitment root"
+        );
+        assertEq(
+            TransientAssertionSnapshotTable.root(),
+            _erc7201Root("FlowAssertions.transient.balanceSnapshotTable.v1"),
+            "assertion snapshot table root"
+        );
+    }
 
-        for (uint256 firstIndex = 0; firstIndex < namespaces.length; ++firstIndex) {
-            for (uint256 secondIndex = firstIndex + 1; secondIndex < namespaces.length; ++secondIndex) {
-                assertNotEq(namespaces[firstIndex], namespaces[secondIndex], "transient namespace collision");
+    function test_AllOccupiedTransientSlots_ArePairwiseSeparated() external view {
+        bytes32 callbackRoot = TransientCallbackCommitment.root();
+        bytes32 checkpointRecordRoot = TransientAccountCheckpointTable.recordRoot(INVOCATION_ID, CHECKPOINT_ID);
+        bytes32 assertionRecordRoot = TransientAssertionSnapshotTable.recordRoot(address(this), CHECKPOINT_ID);
+
+        bytes32[] memory occupiedSlots = new bytes32[](15);
+        occupiedSlots[0] = TransientDynamicExecutionLock.slot();
+        occupiedSlots[1] = TransientInvocationCounter.slot();
+        occupiedSlots[2] = callbackRoot;
+        occupiedSlots[3] = callbackRoot.offset(1);
+        occupiedSlots[4] = callbackRoot.offset(2);
+        occupiedSlots[5] = callbackRoot.offset(3);
+        occupiedSlots[6] = callbackRoot.offset(4);
+        occupiedSlots[7] = checkpointRecordRoot;
+        occupiedSlots[8] = checkpointRecordRoot.offset(1);
+        occupiedSlots[9] = checkpointRecordRoot.offset(2);
+        occupiedSlots[10] = assertionRecordRoot;
+        occupiedSlots[11] = assertionRecordRoot.offset(1);
+        occupiedSlots[12] = assertionRecordRoot.offset(2);
+        occupiedSlots[13] = TransientAccountCheckpointTable.root();
+        occupiedSlots[14] = TransientAssertionSnapshotTable.root();
+
+        for (uint256 firstIndex = 0; firstIndex < occupiedSlots.length; ++firstIndex) {
+            for (uint256 secondIndex = firstIndex + 1; secondIndex < occupiedSlots.length; ++secondIndex) {
+                assertNotEq(occupiedSlots[firstIndex], occupiedSlots[secondIndex], "transient slot collision");
             }
         }
+    }
 
-        bytes32 expectedRoot = namespaces[8].deriveMapping(address(this)).deriveMapping(CHECKPOINT_ID);
-        bytes32 actualRoot = flowAssertions.snapshotRecordRoot(address(this), CHECKPOINT_ID);
-        assertEq(flowAssertions.snapshotNamespace(), namespaces[8], "assertion namespace");
-        assertEq(actualRoot, expectedRoot, "assertion nested mapping derivation");
-        assertNotEq(actualRoot, actualRoot.offset(1), "presence/token slot collision");
-        assertNotEq(actualRoot.offset(1), actualRoot.offset(2), "token/balance slot collision");
+    function test_AssertionSnapshotRecord_UsesFrozenCallerScopedTableRoot() external view {
+        bytes32 expectedTableRoot = _erc7201Root("FlowAssertions.transient.balanceSnapshotTable.v1");
+        bytes32 expectedRecordRoot = expectedTableRoot.deriveMapping(address(this)).deriveMapping(CHECKPOINT_ID);
+
+        assertEq(flowAssertions.snapshotTableRoot(), expectedTableRoot, "assertion table root");
+        assertEq(
+            flowAssertions.snapshotRecordRoot(address(this), CHECKPOINT_ID),
+            expectedRecordRoot,
+            "assertion caller-scoped record root"
+        );
+    }
+
+    function _erc7201Root(string memory namespace) private pure returns (bytes32) {
+        return keccak256(abi.encode(uint256(keccak256(bytes(namespace))) - 1)) & ~bytes32(uint256(0xff));
     }
 }

@@ -6,10 +6,12 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {Exec} from "@account-abstraction/contracts/utils/Exec.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-import {TransientSlot} from "@openzeppelin/contracts/utils/TransientSlot.sol";
 import {IAaveV3FlashLoanSimplePool} from "./interfaces/IAaveV3FlashLoanSimplePool.sol";
 import {IDefiSimplify7702Account} from "./interfaces/IDefiSimplify7702Account.sol";
+import {TransientAccountCheckpointTable} from "./libraries/TransientAccountCheckpointTable.sol";
+import {TransientCallbackCommitment} from "./libraries/TransientCallbackCommitment.sol";
+import {TransientDynamicExecutionLock} from "./libraries/TransientDynamicExecutionLock.sol";
+import {TransientInvocationCounter} from "./libraries/TransientInvocationCounter.sol";
 import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceRecord.sol";
 
 /// @title DefiSimplify7702Account
@@ -19,38 +21,7 @@ import {TransientTokenBalanceRecord} from "./libraries/TransientTokenBalanceReco
 ///      deployment address. The immutable EntryPoint and all account behavior are inherited from
 ///      the pinned upstream Simple7702Account v0.9.0 implementation.
 contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account {
-    using SlotDerivation for bytes32;
-    using TransientSlot for *;
     using TransientTokenBalanceRecord for bytes32;
-
-    /// @dev Transient reentrancy-lock slot shared by every dynamic execution frame of this account.
-    bytes32 internal constant _DYNAMIC_EXECUTION_LOCK_SLOT =
-        keccak256("DefiSimplify7702Account.dynamicExecutionLock.v1");
-    /// @dev Transient monotonically increasing counter that scopes invocations within one transaction.
-    bytes32 internal constant _DYNAMIC_INVOCATION_COUNTER_SLOT =
-        keccak256("DefiSimplify7702Account.dynamicInvocationCounter.v1");
-    /// @dev Domain-separated root of the invocation- and checkpoint-keyed transient record table.
-    bytes32 internal constant _CHECKPOINT_TABLE_NAMESPACE = keccak256("DefiSimplify7702Account.checkpointTable.v1");
-    /// @dev Transient callback-state slot. Ordinals are frozen as Idle=0, Awaiting=1, Executing=2, Consumed=3.
-    bytes32 internal constant _CALLBACK_STATE_SLOT = keccak256("DefiSimplify7702Account.callbackState.v1");
-    /// @dev Direct outer target that is permitted to call back exactly once.
-    bytes32 internal constant _CALLBACK_TARGET_SLOT = keccak256("DefiSimplify7702Account.callbackTarget.v1");
-    /// @dev Hash of the fully patched outer calldata actually sent to the committed target.
-    bytes32 internal constant _CALLBACK_CALLDATA_HASH_SLOT =
-        keccak256("DefiSimplify7702Account.callbackCalldataHash.v1");
-    /// @dev Outer call index used for callback authentication and error attribution.
-    bytes32 internal constant _CALLBACK_CALL_INDEX_SLOT = keccak256("DefiSimplify7702Account.callbackCallIndex.v1");
-    /// @dev Flash asset whose Pool allowance must be zero after the outer target returns.
-    bytes32 internal constant _CALLBACK_REPAYMENT_TOKEN_SLOT =
-        keccak256("DefiSimplify7702Account.callbackRepaymentToken.v1");
-
-    /// @dev Single-use callback lifecycle shared by the outer executor and Aave receiver.
-    enum CallbackState {
-        Idle,
-        AwaitingCallback,
-        ExecutingCallback,
-        Consumed
-    }
 
     /// @dev Per-call memory cache shared by patch resolution and checkpoint creation.
     /// @param tokens ERC20 addresses stored in insertion order.
@@ -74,11 +45,10 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         if (callsLength == 0) {
             revert EmptyDynamicBatch();
         }
-        TransientSlot.BooleanSlot lockSlot = _DYNAMIC_EXECUTION_LOCK_SLOT.asBoolean();
-        if (lockSlot.tload()) {
+        if (TransientDynamicExecutionLock.isLocked()) {
             revert DynamicExecutionReentered();
         }
-        lockSlot.tstore(true);
+        TransientDynamicExecutionLock.lock();
 
         _validateOuterCallbackCount(calls);
         uint256 invocationId = _allocateInvocationId();
@@ -87,7 +57,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             _executeDynamicCall(invocationId, i, calls[i], false, 0);
         }
 
-        lockSlot.tstore(false);
+        TransientDynamicExecutionLock.unlock();
     }
 
     /// @inheritdoc IDefiSimplify7702Account
@@ -120,17 +90,17 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         view
         returns (uint256 outerCallIndex)
     {
-        if (!_DYNAMIC_EXECUTION_LOCK_SLOT.asBoolean().tload()) {
+        if (!TransientDynamicExecutionLock.isLocked()) {
             revert CallbackOutsideDynamicExecution();
         }
 
-        outerCallIndex = _CALLBACK_CALL_INDEX_SLOT.asUint256().tload();
-        CallbackState state = _callbackState();
-        if (state != CallbackState.AwaitingCallback) {
+        outerCallIndex = TransientCallbackCommitment.callIndex();
+        TransientCallbackCommitment.CallbackState state = TransientCallbackCommitment.state();
+        if (state != TransientCallbackCommitment.CallbackState.AwaitingCallback) {
             revert CallbackNotAwaiting(outerCallIndex, uint8(state));
         }
 
-        address expectedTarget = _CALLBACK_TARGET_SLOT.asAddress().tload();
+        address expectedTarget = TransientCallbackCommitment.target();
         if (msg.sender != expectedTarget) {
             revert UnexpectedCallbackSender(outerCallIndex, expectedTarget, msg.sender);
         }
@@ -138,7 +108,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             revert UnexpectedCallbackInitiator(outerCallIndex, address(this), initiator);
         }
 
-        bytes32 expectedCalldataHash = _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tload();
+        bytes32 expectedCalldataHash = TransientCallbackCommitment.calldataHash();
         bytes32 actualCalldataHash = keccak256(
             abi.encodeCall(
                 IAaveV3FlashLoanSimplePool.flashLoanSimple, (address(this), asset, amount, params, uint16(0))
@@ -153,7 +123,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     /// @param outerCallIndex Callback-enabled outer call index used for dual-index errors.
     /// @param callbackCalls Prevalidated ordinary dynamic calls decoded from the envelope.
     function _executeCallbackPlan(uint256 outerCallIndex, DynamicCall[] memory callbackCalls) private {
-        _setCallbackState(CallbackState.ExecutingCallback);
+        TransientCallbackCommitment.setState(TransientCallbackCommitment.CallbackState.ExecutingCallback);
         uint256 callbackInvocationId = _allocateInvocationId();
         uint256 callbackCallsLength = callbackCalls.length;
         for (uint256 callbackCallIndex = 0; callbackCallIndex < callbackCallsLength; ++callbackCallIndex) {
@@ -186,8 +156,8 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
 
         _approveFlashLoanRepayment(outerCallIndex, asset, pool, requiredRepayment);
-        _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tstore(asset);
-        _setCallbackState(CallbackState.Consumed);
+        TransientCallbackCommitment.setRepaymentToken(asset);
+        TransientCallbackCommitment.setState(TransientCallbackCommitment.CallbackState.Consumed);
     }
 
     /// @dev Prevalidates that an outer batch requests at most one callback window.
@@ -266,28 +236,25 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
     /// @param target Direct target that must later be the callback sender.
     /// @param calldataHash Hash of the fully patched bytes passed to the target.
     function _openCallbackCommitment(uint256 callIndex, address target, bytes32 calldataHash) internal {
-        CallbackState state = _callbackState();
-        if (state != CallbackState.Idle) {
+        TransientCallbackCommitment.CallbackState state = TransientCallbackCommitment.state();
+        if (state != TransientCallbackCommitment.CallbackState.Idle) {
             revert CallbackNotAwaiting(callIndex, uint8(state));
         }
 
-        _CALLBACK_TARGET_SLOT.asAddress().tstore(target);
-        _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tstore(calldataHash);
-        _CALLBACK_CALL_INDEX_SLOT.asUint256().tstore(callIndex);
-        _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tstore(address(0));
-        _setCallbackState(CallbackState.AwaitingCallback);
+        TransientCallbackCommitment.storeFields(target, calldataHash, callIndex, address(0));
+        TransientCallbackCommitment.setState(TransientCallbackCommitment.CallbackState.AwaitingCallback);
     }
 
     /// @dev Requires one consumed callback, proves exact allowance consumption, and clears its commitment.
     /// @param callIndex Index of the callback-enabled outer call.
     /// @param target Committed Pool whose repayment allowance must be zero.
     function _finalizeCallbackCommitment(uint256 callIndex, address target) private {
-        CallbackState state = _callbackState();
-        if (state != CallbackState.Consumed) {
+        TransientCallbackCommitment.CallbackState state = TransientCallbackCommitment.state();
+        if (state != TransientCallbackCommitment.CallbackState.Consumed) {
             revert CallbackNotConsumed(callIndex, target, uint8(state));
         }
 
-        address repaymentToken = _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tload();
+        address repaymentToken = TransientCallbackCommitment.repaymentToken();
         (bool allowanceReadSuccess, bytes memory allowanceReturnData, uint256 remainingAllowance) =
             _readAllowance(repaymentToken, target);
         if (!allowanceReadSuccess || allowanceReturnData.length < 32) {
@@ -297,11 +264,7 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
             revert ResidualFlashLoanAllowance(callIndex, repaymentToken, target, remainingAllowance);
         }
 
-        _CALLBACK_TARGET_SLOT.asAddress().tstore(address(0));
-        _CALLBACK_CALLDATA_HASH_SLOT.asBytes32().tstore(bytes32(0));
-        _CALLBACK_CALL_INDEX_SLOT.asUint256().tstore(0);
-        _CALLBACK_REPAYMENT_TOKEN_SLOT.asAddress().tstore(address(0));
-        _setCallbackState(CallbackState.Idle);
+        TransientCallbackCommitment.reset();
     }
 
     /// @dev Installs an exact repayment allowance with an explicit zero-first sequence.
@@ -359,25 +322,11 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
     }
 
-    /// @dev Returns the current transient callback-state ordinal.
-    /// @return state Current callback lifecycle state.
-    function _callbackState() private view returns (CallbackState) {
-        return CallbackState(_CALLBACK_STATE_SLOT.asUint256().tload());
-    }
-
-    /// @dev Stores one reviewed callback-state transition.
-    /// @param state New callback lifecycle state.
-    function _setCallbackState(CallbackState state) private {
-        _CALLBACK_STATE_SLOT.asUint256().tstore(uint256(state));
-    }
-
     /// @dev Increments the transaction-scoped transient counter and returns this frame's checkpoint scope.
     ///      EVM revert semantics roll back the allocation together with the containing execution.
     /// @return invocationId Nonzero identifier retained by the active dynamic execution frame.
     function _allocateInvocationId() internal returns (uint256 invocationId) {
-        TransientSlot.Uint256Slot counterSlot = _DYNAMIC_INVOCATION_COUNTER_SLOT.asUint256();
-        invocationId = counterSlot.tload() + 1;
-        counterSlot.tstore(invocationId);
+        return TransientInvocationCounter.increment();
     }
 
     /// @dev Validates and applies every patch in strict offset order before same-call checkpoints are created.
@@ -521,16 +470,6 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         }
     }
 
-    /// @dev Derives the root slot of the transient checkpoint record scoped by
-    ///      `(invocationId, checkpointId)`. The logical record layout is:
-    ///      offset 0 = presence, offset 1 = token, offset 2 = checkpoint balance.
-    /// @param invocationId Active invocation scope containing the checkpoint.
-    /// @param checkpointId Invocation-local checkpoint identifier.
-    /// @return recordRoot Slot at offset zero of the logical transient record.
-    function _checkpointRecordRoot(uint256 invocationId, bytes32 checkpointId) internal pure returns (bytes32) {
-        return _CHECKPOINT_TABLE_NAMESPACE.deriveMapping(invocationId).deriveMapping(checkpointId);
-    }
-
     /// @dev Loads and token-validates a checkpoint from the active invocation's transient table.
     /// @param invocationId Active invocation scope containing the checkpoint.
     /// @param callIndex Index of the call containing the consuming patch.
@@ -662,6 +601,20 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
                 tokenBalance := mload(add(returnData, 32))
             }
         }
+    }
+
+    /// @dev Derives the transient checkpoint record scoped by `(invocationId, checkpointId)`.
+    ///      `TransientAccountCheckpointTable` owns the frozen ERC-7201-derived table root;
+    ///      `TransientTokenBalanceRecord` owns field offsets zero through two.
+    /// @param invocationId Active invocation scope containing the checkpoint.
+    /// @param checkpointId Invocation-local checkpoint identifier.
+    /// @return recordRoot Slot at record offset zero for presence.
+    function _checkpointRecordRoot(uint256 invocationId, bytes32 checkpointId)
+        internal
+        pure
+        returns (bytes32 recordRoot)
+    {
+        return TransientAccountCheckpointTable.recordRoot(invocationId, checkpointId);
     }
 
     /// @inheritdoc Simple7702Account
