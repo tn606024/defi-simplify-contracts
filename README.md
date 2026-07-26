@@ -93,17 +93,17 @@ GitHub Actions runs the separate Base fork workflow automatically for pull
 requests whose head branch belongs to this repository, using the repository
 `BASE_RPC_URL` secret. The workflow remains manually dispatchable; pull requests
 from external forks skip it because repository secrets are not exposed to them.
-The same workflow checks the pinned Base Aave static and guarded dynamic flow
-gas baselines stored in `.gas-snapshot`.
+The same workflow checks the pinned Base Aave static and guarded
+WETH-collateral/USDC-debt loop gas baselines stored in `.gas-snapshot`.
 
-The guarded dynamic proof at Base block `48,961,870` supplies WETH, checkpoints
-and borrows USDC, swaps only the observed USDC delta through the official
-Uniswap V3 `SwapRouter02`, supplies only the observed WETH output, and finishes
-with an Aave V3 health-factor assertion. Existing WETH, USDC, and native
-inventory act as sentinels. The direct Base `exactInputSingle` entrypoint
-provides `amountOutMinimum` and `sqrtPriceLimitX96` but no deadline; fresh
-simulation and short-lived submission do not create an on-chain expiry
-guarantee.
+The guarded WETH-collateral/USDC-debt loop proof at Base block `48,961,870`
+supplies WETH, checkpoints and borrows USDC, swaps only the observed USDC delta
+through the official Uniswap V3 `SwapRouter02`, supplies only the observed WETH
+output, and finishes with an Aave V3 health-factor assertion. Existing WETH,
+USDC, and native inventory act as sentinels. The direct Base
+`exactInputSingle` entrypoint provides `amountOutMinimum` and
+`sqrtPriceLimitX96` but no deadline; fresh simulation and short-lived
+submission do not create an on-chain expiry guarantee.
 
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are

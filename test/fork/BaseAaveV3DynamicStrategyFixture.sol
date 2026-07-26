@@ -83,7 +83,8 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
     uint256 internal constant EXISTING_NATIVE_INVENTORY = 0.125 ether;
     uint256 internal constant GUARDED_USDC_BORROW_AMOUNT = 500e6;
     uint256 internal constant MINIMUM_WETH_SWAP_OUTPUT = 0.26 ether;
-    uint256 internal constant EXPECTED_WETH_SWAP_OUTPUT_AT_PINNED_BLOCK = 260_391_696_019_929_066;
+    /// @dev Exact Swap event output for 500 USDC at the pinned block, independently matched by the V3 Quoter.
+    uint256 internal constant OBSERVED_WETH_SWAP_OUTPUT_AT_PINNED_BLOCK = 260_391_696_019_929_066;
     uint160 internal constant MAXIMUM_ACCEPTED_SQRT_PRICE_X96 = 3_600_000_000_000_000_000_000_000;
     uint256 internal constant MINIMUM_FINAL_HEALTH_FACTOR = 2 ether;
 
@@ -99,7 +100,7 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
     bytes32 internal constant UNISWAP_V3_SWAP_EVENT_SIGNATURE =
         keccak256("Swap(address,address,int256,int256,uint160,uint128,int24)");
 
-    struct StrategyState {
+    struct WethCollateralUsdcDebtLoopState {
         uint256 nativeBalance;
         uint256 wethBalance;
         uint256 usdcBalance;
@@ -146,13 +147,13 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
         assertGt(IBaseUniswapV3Pool(BASE_UNISWAP_V3_USDC_WETH_500_POOL).liquidity(), 0, "Uniswap pool liquidity");
     }
 
-    function _fundGuardedStrategyInventory(address payable delegatedEoa) internal {
+    function _fundWethCollateralUsdcDebtLoopInventory(address payable delegatedEoa) internal {
         _wrapNativeAsDelegatedEoa(delegatedEoa, INITIAL_WETH_SUPPLY_AMOUNT + EXISTING_WETH_INVENTORY);
         deal(BASE_USDC, delegatedEoa, EXISTING_USDC_INVENTORY);
         vm.deal(delegatedEoa, EXISTING_NATIVE_INVENTORY);
     }
 
-    function _buildGuardedAaveDynamicStrategy(
+    function _buildWethCollateralUsdcDebtLoopStrategy(
         address delegatedEoa,
         FlowAssertions flowAssertions,
         uint256 minimumSwapOutput,
@@ -290,22 +291,27 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
         patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 
-    function _executeDynamicStrategy(address payable delegatedEoa, IDefiSimplify7702Account.DynamicCall[] memory calls)
-        internal
-    {
+    function _executeDynamicCallsAsDelegatedEoa(
+        address payable delegatedEoa,
+        IDefiSimplify7702Account.DynamicCall[] memory calls
+    ) internal {
         vm.prank(delegatedEoa, delegatedEoa);
         _dynamicExecutionInterfaceView(delegatedEoa).executeBatchDynamic(calls);
     }
 
-    function _invokeDynamicStrategy(address payable delegatedEoa, IDefiSimplify7702Account.DynamicCall[] memory calls)
-        internal
-        returns (bool success, bytes memory returnData)
-    {
+    function _invokeDynamicCallsAsDelegatedEoa(
+        address payable delegatedEoa,
+        IDefiSimplify7702Account.DynamicCall[] memory calls
+    ) internal returns (bool success, bytes memory returnData) {
         vm.prank(delegatedEoa, delegatedEoa);
         return delegatedEoa.call(abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls)));
     }
 
-    function _readStrategyState(address delegatedEoa) internal view returns (StrategyState memory state) {
+    function _readWethCollateralUsdcDebtLoopState(address delegatedEoa)
+        internal
+        view
+        returns (WethCollateralUsdcDebtLoopState memory state)
+    {
         state.nativeBalance = delegatedEoa.balance;
         state.wethBalance = IERC20(BASE_WETH).balanceOf(delegatedEoa);
         state.usdcBalance = IERC20(BASE_USDC).balanceOf(delegatedEoa);
@@ -323,8 +329,11 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
         state.aave = _readAaveAccountData(delegatedEoa);
     }
 
-    function _assertStrategyStateEquals(StrategyState memory expected, address delegatedEoa) internal view {
-        StrategyState memory actual = _readStrategyState(delegatedEoa);
+    function _assertWethCollateralUsdcDebtLoopStateEquals(
+        WethCollateralUsdcDebtLoopState memory expected,
+        address delegatedEoa
+    ) internal view {
+        WethCollateralUsdcDebtLoopState memory actual = _readWethCollateralUsdcDebtLoopState(delegatedEoa);
         assertEq(actual.nativeBalance, expected.nativeBalance, "native balance rollback");
         assertEq(actual.wethBalance, expected.wethBalance, "WETH balance rollback");
         assertEq(actual.usdcBalance, expected.usdcBalance, "USDC balance rollback");

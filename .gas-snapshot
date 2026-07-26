@@ -60,7 +60,7 @@ AaveV3FlashLoanGasTest:test_Gas_CallbackWindowWithEmptyPlanAndExactRepayment() (
 AaveV3FlashLoanGasTest:test_Gas_CallbackWindowWithFourOrdinaryCallbackCalls() (gas: 294180)
 AaveV3FlashLoanGasTest:test_Gas_CallbackWindowWithOneOrdinaryCallbackCall() (gas: 261875)
 AaveV3FlashLoanGasTest:test_Gas_ExactRepaymentClearsPreexistingAllowance() (gas: 182647)
-BaseAaveV3DynamicStrategyGasForkTest:test_Gas_GuardedBaseAaveDynamicStrategy() (gas: 617084)
+BaseAaveV3DynamicStrategyGasForkTest:test_Gas_BaseAaveWethCollateralUsdcDebtLoop() (gas: 616974)
 BaseAaveV3DynamicStrategyGoldenVectorsTest:test_GoldenEveryStrategyPatchedWordMatchesStructuredAbiEncoding() (gas: 240690)
 BaseAaveV3DynamicStrategyGoldenVectorsTest:test_GoldenMalformedRouterApprovalOffsetMatchesIndexedAccountError() (gas: 13722)
 BaseAaveV3DynamicStrategyGoldenVectorsTest:test_GoldenStrategyIdentitiesCheckpointsAndTemporalLimitationAreExplicit() (gas: 28999)

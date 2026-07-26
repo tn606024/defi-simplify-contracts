@@ -24,13 +24,13 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         accountUnderTest = _deployDelegatedDefiSimplifyAccount(_baseEntryPoint(), BASE_DYNAMIC_STRATEGY_AUTHORITY_KEY);
         flowAssertions = new FlowAssertions();
         _assertNoAavePosition(accountUnderTest.delegatedEoa);
-        _fundGuardedStrategyInventory(accountUnderTest.delegatedEoa);
+        _fundWethCollateralUsdcDebtLoopInventory(accountUnderTest.delegatedEoa);
     }
 
-    function test_GuardedDynamicStrategy_UsesObservedDeltasAndKeepsExistingInventory() external {
+    function test_WethCollateralUsdcDebtLoop_UsesObservedDeltasAndKeepsExistingInventory() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         uint256 startingWethBalance = IERC20(BASE_WETH).balanceOf(delegatedEoa);
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _standardGuardedStrategy();
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildPinnedWethCollateralUsdcDebtLoopStrategy();
 
         IBaseUniswapV3SwapRouter02.ExactInputSingleParams memory expectedSwap =
             IBaseUniswapV3SwapRouter02.ExactInputSingleParams({
@@ -49,17 +49,17 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.supply,
-                (BASE_WETH, EXPECTED_WETH_SWAP_OUTPUT_AT_PINNED_BLOCK, delegatedEoa, NO_REFERRAL_CODE)
+                (BASE_WETH, OBSERVED_WETH_SWAP_OUTPUT_AT_PINNED_BLOCK, delegatedEoa, NO_REFERRAL_CODE)
             )
         );
 
         vm.recordLogs();
-        _executeDynamicStrategy(delegatedEoa, calls);
+        _executeDynamicCallsAsDelegatedEoa(delegatedEoa, calls);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 actualUsdcInput, uint256 actualWethOutput) = _readSwapAmounts(logs, delegatedEoa);
         assertEq(actualUsdcInput, GUARDED_USDC_BORROW_AMOUNT, "swap consumes only borrowed USDC delta");
-        assertEq(actualWethOutput, EXPECTED_WETH_SWAP_OUTPUT_AT_PINNED_BLOCK, "swap output at pinned Base block");
+        assertEq(actualWethOutput, OBSERVED_WETH_SWAP_OUTPUT_AT_PINNED_BLOCK, "swap output at pinned Base block");
         assertEq(
             IERC20(BASE_USDC).balanceOf(delegatedEoa), EXISTING_USDC_INVENTORY, "pre-existing USDC remains untouched"
         );
@@ -103,15 +103,16 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _assertNoCustomAccountOrAssertionEvents(logs, delegatedEoa, flowAssertions);
     }
 
-    function test_GuardedDynamicStrategy_WhenSwapMinimumIsUnreachable_RollsBackEveryStateChange() external {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildGuardedAaveDynamicStrategy(
+    function test_WethCollateralUsdcDebtLoop_WhenSwapMinimumIsUnreachable_RollsBackEveryStateChange() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildWethCollateralUsdcDebtLoopStrategy(
             accountUnderTest.delegatedEoa,
             flowAssertions,
             1 ether,
             MAXIMUM_ACCEPTED_SQRT_PRICE_X96,
             MINIMUM_FINAL_HEALTH_FACTOR
         );
-        (bytes memory revertData, StrategyState memory beforeState) = _invokeExpectingRollback(calls);
+        (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState) =
+            _invokeWethCollateralUsdcDebtLoopExpectingRollback(calls);
         bytes memory routerReason =
             _assertDynamicCallFailure(revertData, SWAP_CALL_INDEX, BASE_UNISWAP_V3_SWAP_ROUTER_02);
 
@@ -120,18 +121,21 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
             abi.encodeWithSignature("Error(string)", "Too little received"),
             "complete Uniswap slippage failure"
         );
-        _assertStrategyStateEquals(beforeState, accountUnderTest.delegatedEoa);
+        _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
-    function test_GuardedDynamicStrategy_WhenFinalHealthFactorMinimumIsExcessive_RollsBackEveryStateChange() external {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildGuardedAaveDynamicStrategy(
+    function test_WethCollateralUsdcDebtLoop_WhenFinalHealthFactorMinimumIsExcessive_RollsBackEveryStateChange()
+        external
+    {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildWethCollateralUsdcDebtLoopStrategy(
             accountUnderTest.delegatedEoa,
             flowAssertions,
             MINIMUM_WETH_SWAP_OUTPUT,
             MAXIMUM_ACCEPTED_SQRT_PRICE_X96,
             type(uint256).max
         );
-        (bytes memory revertData, StrategyState memory beforeState) = _invokeExpectingRollback(calls);
+        (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState) =
+            _invokeWethCollateralUsdcDebtLoopExpectingRollback(calls);
         bytes memory assertionReason =
             _assertDynamicCallFailure(revertData, HEALTH_FACTOR_ASSERTION_CALL_INDEX, address(flowAssertions));
 
@@ -140,15 +144,16 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
             IFlowAssertions.AaveV3HealthFactorTooLow.selector,
             "final failure is the typed Aave health-factor assertion"
         );
-        _assertStrategyStateEquals(beforeState, accountUnderTest.delegatedEoa);
+        _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
-    function test_GuardedDynamicStrategy_WhenRouterApprovalOffsetIsUnaligned_RollsBackEveryStateChange() external {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _standardGuardedStrategy();
+    function test_WethCollateralUsdcDebtLoop_WhenRouterApprovalOffsetIsUnaligned_RollsBackEveryStateChange() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildPinnedWethCollateralUsdcDebtLoopStrategy();
         uint32 invalidOffset = ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET + 1;
         calls[ROUTER_APPROVE_CALL_INDEX].patches[0].offset = invalidOffset;
         uint256 approvalCalldataLength = calls[ROUTER_APPROVE_CALL_INDEX].data.length;
-        (bytes memory revertData, StrategyState memory beforeState) = _invokeExpectingRollback(calls);
+        (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState) =
+            _invokeWethCollateralUsdcDebtLoopExpectingRollback(calls);
 
         assertEq(
             revertData,
@@ -161,13 +166,14 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
             ),
             "indexed malformed Router approval offset"
         );
-        _assertStrategyStateEquals(beforeState, accountUnderTest.delegatedEoa);
+        _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
-    function test_GuardedDynamicStrategy_WhenPatchTokenDiffersFromCheckpoint_RollsBackEveryStateChange() external {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _standardGuardedStrategy();
+    function test_WethCollateralUsdcDebtLoop_WhenPatchTokenDiffersFromCheckpoint_RollsBackEveryStateChange() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildPinnedWethCollateralUsdcDebtLoopStrategy();
         calls[ROUTER_APPROVE_CALL_INDEX].patches[0].token = BASE_WETH;
-        (bytes memory revertData, StrategyState memory beforeState) = _invokeExpectingRollback(calls);
+        (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState) =
+            _invokeWethCollateralUsdcDebtLoopExpectingRollback(calls);
 
         assertEq(
             revertData,
@@ -181,16 +187,19 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
             ),
             "indexed token/checkpoint mismatch"
         );
-        _assertStrategyStateEquals(beforeState, accountUnderTest.delegatedEoa);
+        _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
-    function test_GuardedDynamicStrategy_WhenPatchedDownstreamAaveAmountIsInvalid_RollsBackEveryStateChange() external {
+    function test_WethCollateralUsdcDebtLoop_WhenPatchedDownstreamAaveAmountIsInvalid_RollsBackEveryStateChange()
+        external
+    {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
-        IDefiSimplify7702Account.DynamicCall[] memory calls = _standardGuardedStrategy();
+        IDefiSimplify7702Account.DynamicCall[] memory calls = _buildPinnedWethCollateralUsdcDebtLoopStrategy();
         calls[OUTPUT_SUPPLY_CALL_INDEX].data = abi.encodeCall(
             IBaseAaveV3Pool.borrow, (BASE_USDC, 0, VARIABLE_INTEREST_RATE_MODE, NO_REFERRAL_CODE, delegatedEoa)
         );
-        (bytes memory revertData, StrategyState memory beforeState) = _invokeExpectingRollback(calls);
+        (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState) =
+            _invokeWethCollateralUsdcDebtLoopExpectingRollback(calls);
         bytes memory aaveReason = _assertDynamicCallFailure(revertData, OUTPUT_SUPPLY_CALL_INDEX, AAVE_V3_POOL);
 
         assertEq(
@@ -198,11 +207,15 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
             abi.encodePacked(AAVE_INVALID_AMOUNT_SELECTOR),
             "complete downstream Aave invalid-amount failure"
         );
-        _assertStrategyStateEquals(beforeState, delegatedEoa);
+        _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, delegatedEoa);
     }
 
-    function _standardGuardedStrategy() private view returns (IDefiSimplify7702Account.DynamicCall[] memory calls) {
-        return _buildGuardedAaveDynamicStrategy(
+    function _buildPinnedWethCollateralUsdcDebtLoopStrategy()
+        private
+        view
+        returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
+    {
+        return _buildWethCollateralUsdcDebtLoopStrategy(
             accountUnderTest.delegatedEoa,
             flowAssertions,
             MINIMUM_WETH_SWAP_OUTPUT,
@@ -211,12 +224,13 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         );
     }
 
-    function _invokeExpectingRollback(IDefiSimplify7702Account.DynamicCall[] memory calls)
+    function _invokeWethCollateralUsdcDebtLoopExpectingRollback(IDefiSimplify7702Account.DynamicCall[] memory calls)
         private
-        returns (bytes memory revertData, StrategyState memory beforeState)
+        returns (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState)
     {
-        beforeState = _readStrategyState(accountUnderTest.delegatedEoa);
-        (bool success, bytes memory returnedData) = _invokeDynamicStrategy(accountUnderTest.delegatedEoa, calls);
+        beforeState = _readWethCollateralUsdcDebtLoopState(accountUnderTest.delegatedEoa);
+        (bool success, bytes memory returnedData) =
+            _invokeDynamicCallsAsDelegatedEoa(accountUnderTest.delegatedEoa, calls);
         assertFalse(success, "forced-failure strategy unexpectedly succeeded");
         return (returnedData, beforeState);
     }

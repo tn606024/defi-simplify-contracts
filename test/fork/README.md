@@ -77,7 +77,7 @@ An execution revert atomically restores protocol, token, and allowance state,
 but still consumes gas and nonce. For a first EIP-7702 transaction, a processed
 delegation may remain installed even when the execution portion reverts.
 
-## Guarded Aave V3 dynamic strategy
+## Guarded Aave V3 WETH-collateral/USDC-debt loop
 
 `BaseAaveV3DynamicStrategy.t.sol` and
 `BaseAaveV3DynamicStrategyGas.t.sol` use the same pinned Base block and Aave
@@ -143,5 +143,5 @@ forge snapshot --check \
   --fork-url "$BASE_RPC_URL"
 ```
 
-The guarded dynamic strategy baseline is `617,084` gas; setup and fork identity
-checks are outside the measured test body.
+The guarded WETH-collateral/USDC-debt loop baseline is `616,974` gas; setup and
+fork identity checks are outside the measured test body.
