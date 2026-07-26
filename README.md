@@ -83,12 +83,18 @@ Base fork tests are intentionally separate from the default suite and require
 
 ```sh
 forge test --match-path 'test/fork/**/*.t.sol' --fork-url "$BASE_RPC_URL"
+forge snapshot --check \
+  --match-path 'test/fork/BaseAaveV3StaticFlowGas.t.sol' \
+  --match-test 'test_Gas_' \
+  --fork-url "$BASE_RPC_URL"
 ```
 
 GitHub Actions runs the separate Base fork workflow automatically for pull
 requests whose head branch belongs to this repository, using the repository
 `BASE_RPC_URL` secret. The workflow remains manually dispatchable; pull requests
 from external forks skip it because repository secrets are not exposed to them.
+The same workflow checks the pinned Base Aave static-flow gas baselines stored in
+`.gas-snapshot`.
 
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are
