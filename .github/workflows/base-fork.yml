@@ -37,3 +37,10 @@ jobs:
 
       - name: Run Base fork tests
         run: forge test --match-path 'test/fork/**/*.t.sol' --fork-url "$BASE_RPC_URL" -vvv
+
+      - name: Check Base Aave static-flow gas snapshot
+        run: >-
+          forge snapshot --check
+          --match-path 'test/fork/BaseAaveV3StaticFlowGas.t.sol'
+          --match-test 'test_Gas_'
+          --fork-url "$BASE_RPC_URL"
