@@ -145,3 +145,102 @@ forge snapshot --check \
 
 The guarded WETH-collateral/USDC-debt loop baseline is `616,974` gas; setup and
 fork identity checks are outside the measured test body.
+
+## Flash-assisted Aave V3 cbETH/WETH lifecycle
+
+`BaseAaveV3FlashLifecycle.t.sol` and
+`BaseAaveV3FlashLifecycleGas.t.sol` pin Base block `48,961,870` and reuse the
+frozen EntryPoint and Aave V3 Pool identities. They additionally verify:
+
+- Base cbETH:
+  `0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22`
+- Aave Base aCBETH:
+  `0xcf3D55c10DB69f28fD1A75Bd73f3D8A2d9c595ad`
+- Aave Base variable-debt WETH:
+  `0x24e6e0795b3c7c71D965fCc4f371803d1c1DcA1E`
+- official Uniswap V3 `SwapRouter02`:
+  `0x2626664c2603336E57B271c5C0b26F421741e481`
+- direct cbETH/WETH 0.05% pool:
+  `0x10648BA41B8565907Cfa1496765fA4D95390aa0d`
+- Aave's reported simple-flash-loan premium: `5` basis points.
+
+The fixture freezes the cbETH, reserve-token, Router, and pool runtime code
+hashes; checks the Router factory and wrapped-native identity; checks the
+Uniswap factory mapping, pool token order, fee, and nonzero liquidity; and
+checks each Aave reserve token's underlying asset. These are reproducible fork
+identities, not a claim that the externally governed Aave Pool proxy or token
+contracts are immutable.
+
+The three successful plans are:
+
+1. **Leverage open:** supply `0.3 cbETH`, flash-borrow `0.2 WETH`, swap that
+   WETH for exactly `176117556140503803` wei cbETH at the pinned state, patch
+   only the checkpoint delta into Aave approval and supply calls, then borrow
+   `0.2001 WETH` to fund principal plus premium.
+2. **Partial deleverage:** start with `0.5 cbETH` collateral and `0.2 WETH`
+   nominal variable debt, flash-borrow and repay `0.05 WETH`, withdraw
+   `0.05 cbETH`, sell exactly `44096587638647255` wei cbETH for
+   `0.050025 WETH`, and resupply only the
+   `5903412361352745` wei outer-checkpoint remainder after the callback.
+3. **Full close:** patch the visible variable-debt-token balance
+   (`200000000000000001` wei at the pinned state) into
+   `flashLoanSimple.amount` and the callback's Aave repayment approval, repay
+   all debt, withdraw all visible collateral, sell only
+   `176388991438775042` wei cbETH for principal plus the rounded-up
+   `100000000000001` wei premium, and retain the unused collateral.
+
+The full-close flash principal is resolved on-chain from the current debt-token
+balance, while its exact-output repayment quote and `maxPremium` are signed
+plan inputs. If debt accrual makes those inputs stale before execution, the
+sentinel and repayment checks revert the whole batch; this v1 reference plan
+does not perform on-chain arithmetic to reprice the callback envelope.
+
+All three plans preserve pre-existing WETH and cbETH sentinels. They check
+Aave and Uniswap events, delegated-EOA position ownership, final Aave account
+data, exact Pool repayment, and zero residual Aave Pool and Router allowances.
+The leverage and partial-deleverage plans end with typed health-factor
+assertions. The full close ends with generic reviewed fixed-word assertions
+that debt is zero and Aave reports the canonical no-position health factor.
+
+The direct Base `SwapRouter02` entrypoints have `amountOutMinimum` or
+`amountInMaximum` and a nonzero `sqrtPriceLimitX96`, but no deadline. This proof
+does not turn dynamic patch BPS into slippage protection and does not claim an
+on-chain expiry guarantee. Quotes, premiums, proxy implementations, market
+liquidity, and token behavior must be re-simulated and revalidated against
+production admission policy.
+
+Fork failures cover a premium above the signed maximum, impossible
+exact-input minimum output, excessive final health factor, insufficient
+repayment balance, malformed callback envelope, nested callback request, and
+an exact-output input cap below the pinned quote. Each compares native, token,
+allowance, Aave position, and Uniswap pool state against its execution-time
+snapshot. The faithful callback unit and invariant suites separately cover
+wrong sender, wrong initiator and origin reconstruction, a callback-enabled
+call returning without consumption, replay, public-entrypoint reentrancy,
+Pool repayment-pull failure, residual allowance, invocation isolation, and
+transient rollback. Together they prove the provider-specific Base integration
+and provider-independent callback state machine without trying to induce
+impossible Pool behavior on the live fork.
+
+`abi/BaseAaveV3FlashLifecycle.golden.json` freezes every lifecycle patch offset,
+original word, resolved word, and patched calldata. It also freezes the
+complete full-close `CallbackEnvelope`, complete original and patched
+`flashLoanSimple` calldata, and the hash of the actual patched origin for the
+Go SDK boundary.
+
+Run the proof and its committed gas baselines with:
+
+```sh
+forge test \
+  --match-path 'test/fork/BaseAaveV3FlashLifecycle*.t.sol' \
+  --fork-url "$BASE_RPC_URL"
+forge snapshot --check \
+  --match-path 'test/fork/BaseAaveV3FlashLifecycleGas.t.sol' \
+  --match-test 'test_Gas_' \
+  --fork-url "$BASE_RPC_URL"
+```
+
+The measured execution-only baselines are `688,660` gas for leverage open,
+`413,937` for partial deleverage, and `300,545` for full close. Position setup,
+fork identity checks, plan construction, and observed-debt reads are paused out
+of the measured bodies.
