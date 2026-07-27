@@ -25,6 +25,90 @@ suite unchanged as a regression gate when dynamic execution is introduced; add
 new cases only when the inherited upstream surface or a documented static
 invariant expands.
 
+## Final v1 suite ownership
+
+DSC-83 consolidates the completed v1 suite without changing production source,
+public ABI, transient layout, or runtime behavior. Generic dynamic-call
+allocation belongs to `utils/DynamicCallTestBuilder.sol`; protocol fixtures
+continue to own strategy order, asset roles, callback behavior, economic bounds,
+and post-conditions.
+
+The same invariant may intentionally appear in more than one layer when each
+layer proves a different boundary:
+
+| Layer | Canonical responsibility |
+| --- | --- |
+| Unit | One contract rule, validation order, indexed error, or state transition |
+| Fuzz/property | The same rule over arbitrary bounded values or byte layouts |
+| Stateful invariant | Behavior across randomized sequences, rollback, and repeated invocations |
+| Integration | Atomic composition of the account and independent assertion contracts |
+| Differential | Compatibility with the pinned upstream static account |
+| Golden vector | Exact ABI, calldata, error, slot, and Go/Solidity boundary bytes |
+| Base fork | Compatibility and rollback against immutable deployed protocol code |
+| Gas snapshot | Deterministic regression evidence, not a behavioral substitute |
+
+The concrete suite families own these final-v1 properties:
+
+| Suite family | Property ownership |
+| --- | --- |
+| `DefiSimplify7702Account`, `UpstreamEntryPointCompilation`, `UpstreamCompatibility` | Minimal direct deployment and differential preservation of the pinned upstream static account |
+| `DynamicExecution`, `DynamicEntryPointTarget`, `BaseDynamicEntryPoint` | Authorization, target policy, call/value execution, failure attribution, rollback, lock, event surface, and EntryPoint-as-target behavior |
+| `CheckpointEngine`, `CheckpointEntryPointBundle`, `DynamicCalldataPatching` | Invocation-scoped checkpoint records, validation order, balance sources, exact word patching, and same-account bundle isolation |
+| `DynamicCalldataPatchingFuzz`, `DynamicExecutionAdversarialFuzz`, `DynamicEngineInvariant` | Arbitrary amount/offset/revert-data properties and stateful execution/rollback models |
+| `DynamicGoldenVectors`, `DynamicEngineGas`, `CheckpointRepresentationBenchmark` | Exact cross-repository bytes/slots/errors and deterministic checkpoint/patch cost evidence |
+| `AaveV3FlashLoanCallback`, `CallbackCommitmentState`, `TransientExecutionComponents` | Authenticated single-use Aave callback lifecycle, origin commitment, repayment, and low-level transient component transitions |
+| `AaveV3FlashLoanAdversarial`, `AaveV3FlashLoanEntryPointBundle` | Malicious callback/reentry/repayment boundaries and same-account EntryPoint bundle isolation |
+| `AaveV3FlashLoanCallbackFuzz`, `AaveV3FlashLoanCallbackInvariant` | Arbitrary patched origins, callback positions, repayment allowances, and stateful callback rollback/cleanup |
+| `CallbackGoldenVectors`, `AaveV3FlashLoanGas` | Exact callback ABI/errors and deterministic callback-window cost evidence |
+| `FlowAssertions`, `FlowAssertionsAaveV3`, `StaticCallUint256Assertions` | Caller-bound typed balance/Aave post-conditions and independent reviewed generic uint256 reads |
+| Assertion fuzz, integration, golden-vector, and Base fork suites | Arithmetic properties, account/checker atomicity, exact SDK bytes, and deployed Base compatibility |
+| Base Aave static, dynamic, and flash lifecycle suites | Pinned protocol identities, complete reference strategies, economic guard failures, atomic rollback, emitted protocol evidence, and gas |
+| `TransientTokenBalanceRecord`, `TransientNamespaceSeparation` | Canonical record shape and pairwise separation of every occupied transient namespace |
+| `DelegatedAccountFixture`, `DynamicCallTestBuilder`, focused protocol fixtures and mocks | Canonical test construction and controlled dependencies; these support the properties above rather than claiming production behavior themselves |
+
+Complex strategy fixtures document their complete ordered flow where calls are
+built. In particular, the static Aave lifecycle, dynamic WETH/USDC loop, and
+flash-assisted leverage-open, partial-deleverage, and full-close builders state
+their starting assumptions, checkpoint/patch flow, native swap bounds, repayment
+steps, and final assertions.
+
+The following transition-only coverage was retired after mapping its behavior
+to the final suites:
+
+| Retired test | Preserved evidence |
+| --- | --- |
+| `unit/ProjectBootstrap.t.sol` | Pinned toolchain/build scripts and every compiled production suite |
+| `fuzz/ProjectBootstrapFuzz.t.sol` | Production-specific fuzz properties under `fuzz/` |
+| `unit/CallbackAbi.t.sol`: ordinary callback-free batch | `unit/DynamicExecution.t.sol` ordinary one/many-call execution |
+| `unit/CallbackAbi.t.sol`: two outer callback flags | `unit/AaveV3FlashLoanCallback.t.sol` prevalidation before Pool or ordinary targets |
+| `unit/CallbackAbi.t.sol`: direct malformed callback | `unit/AaveV3FlashLoanAdversarial.t.sol` authorization before params decoding |
+| `unit/CallbackAbi.t.sol`: zero/one/many envelope encoding | `unit/CallbackGoldenVectors.t.sol` exact encoded fixtures |
+| `unit/CallbackAbi.t.sol`: tuple missing `expectsCallback` | Final ABI/interface fixtures; the pre-release tuple is not a supported selector |
+
+`unit/DynamicExecutionScaffold.t.sol` was renamed
+`unit/DynamicExecution.t.sol` because the implementation is no longer a
+scaffold. After these removals and one relocated security regression, the final
+non-fork suite contains 299 tests.
+
+`.gas-snapshot` was regenerated because the names and test-only builder
+construction changed. The resulting drift is test-harness allocation/inlining
+cost, including refreshed Base dynamic/flash fixture construction; no production
+source or runtime bytecode changed, and the static Base flow entries are
+unchanged.
+
+Run the consolidated local baseline with:
+
+```sh
+forge test --no-match-path 'test/fork/**'
+forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
+```
+
+When `BASE_RPC_URL` is available, run the protocol reference flows with:
+
+```sh
+forge test --match-path 'test/fork/BaseAaveV3*.t.sol' --fork-url "$BASE_RPC_URL"
+```
+
 `mocks/CheckpointBalanceToken.sol` includes the test-only delegated checkpoint
 harness. Its authorization-protected inspectors verify transient slot layout,
 invocation isolation, rollback, and lookup cost without adding a getter to the
@@ -54,10 +138,10 @@ retain their conventional prefixes. Generic ABI field names such as `target`,
 small generic builders where the surrounding scope already supplies their
 meaning.
 
-This refactor intentionally changes only test code, fixture topology, names, and
+This refactor intentionally changed only test code, fixture topology, names, and
 deterministic test gas. Production source, public ABI fixtures, runtime bytecode,
-and contract behavior remain unchanged. The non-fork regression suite remains
-210 tests.
+and contract behavior remained unchanged. At the DSC-77 merge point, the
+non-fork regression suite contained 210 tests.
 
 ## DSC-51 dynamic-engine verification report
 
@@ -296,16 +380,11 @@ forge test --match-path 'test/fork/BaseStaticCallUint256Assertions.t.sol' --fork
 
 ## DSC-78 authenticated Aave V3 callback path
 
-`unit/CallbackAbi.t.sol` proves the final v1 ABI independently from provider
-behavior. Ordinary dynamic batches still execute when every flag is false, two
-outer callback flags report both indices before the first target, random direct
-`executeOperation` calls fail before malformed envelope bytes are decoded, and
-final-selector calldata whose tuple omits `expectsCallback` fails ABI decoding.
-
 `unit/AaveV3FlashLoanCallback.t.sol` exercises the complete direct
 `flashLoanSimple` round trip through a delegated EOA. It covers callback-enabled
 calls at first, middle, and last outer indices; zero, one, and many callback
-calls; commitment to patched calldata; separate callback checkpoint scope with
+calls; rejection of two outer callback flags before any target; commitment to
+patched calldata; separate callback checkpoint scope with
 outer-scope resumption; exact zero-first repayment; wrong sender, initiator, and
 origin; missing, replayed, nested, and reentrant callbacks; premium and
 arithmetic bounds; callback target failure with dual indices; malformed token
@@ -324,6 +403,11 @@ ID, both boolean encodings, zero/one/many-call callback envelopes, and every
 callback error encoding. `unit/DynamicGoldenVectors.t.sol` updates the existing
 plan fixture to version 3 for the semantic ERC-7201 transient roots and
 five-field callback commitment layout.
+
+DSC-83 later retired the transition-only `unit/CallbackAbi.t.sol`; the final
+unit, adversarial, and golden-vector suites listed above preserve its supported
+properties. Calldata for the pre-release tuple without `expectsCallback` is not
+a compatibility surface.
 
 DSC-79 and DSC-80 were folded into DSC-78 before release so reviewers see one
 complete behavior instead of a sequence of temporary fail-closed artifacts.
