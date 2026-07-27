@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.36;
+
+import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import {Test} from "forge-std/Test.sol";
+import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
+import {FlowAssertions} from "../../src/FlowAssertions.sol";
+import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
+
+/// @title BaseDeploymentFactoryTest
+/// @notice Proves the candidate payloads against the actual Base factory inside
+///         a disposable local fork. This test never broadcasts to Base.
+contract BaseDeploymentFactoryTest is Test {
+    string internal constant MANIFEST_PATH = "deployments/base-v1.candidate.json";
+
+    string private manifest;
+
+    function setUp() public {
+        manifest = vm.readFile(MANIFEST_PATH);
+    }
+
+    function test_BaseDeploymentPrerequisites_HaveFrozenRuntimeIdentities() public view {
+        assertEq(block.chainid, vm.parseJsonUint(manifest, ".network.chainId"), "Base chain");
+
+        address factory = vm.parseJsonAddress(manifest, ".factory.address");
+        assertGt(factory.code.length, 0, "factory runtime missing");
+        assertEq(factory.codehash, vm.parseJsonBytes32(manifest, ".factory.runtimeCodeHash"), "factory runtime hash");
+
+        address entryPoint = vm.parseJsonAddress(manifest, ".entryPoint.address");
+        assertGt(entryPoint.code.length, 0, "EntryPoint runtime missing");
+        assertEq(
+            entryPoint.codehash, vm.parseJsonBytes32(manifest, ".entryPoint.runtimeCodeHash"), "EntryPoint runtime hash"
+        );
+    }
+
+    function test_BaseFactory_WithCandidatePayload_DeploysExactDirectRuntimesOnFork() public {
+        address entryPoint = vm.parseJsonAddress(manifest, ".entryPoint.address");
+
+        _deployOrVerifyOnFork(
+            "DefiSimplify7702Account",
+            abi.encodePacked(type(DefiSimplify7702Account).creationCode, abi.encode(IEntryPoint(entryPoint)))
+        );
+        _deployOrVerifyOnFork("FlowAssertions", type(FlowAssertions).creationCode);
+        _deployOrVerifyOnFork("StaticCallUint256Assertions", type(StaticCallUint256Assertions).creationCode);
+    }
+
+    /// @dev If DSC-56 has not yet been broadcast, the call mutates only this
+    ///      local fork. Once deployed on Base, the same test verifies the
+    ///      existing code and remains a stable regression.
+    function _deployOrVerifyOnFork(string memory contractName, bytes memory initcode) private {
+        string memory artifactRoot = string.concat(".artifacts.", contractName);
+        bytes32 expectedInitcodeHash = vm.parseJsonBytes32(manifest, string.concat(artifactRoot, ".initcodeHash"));
+        assertEq(keccak256(initcode), expectedInitcodeHash, string.concat(contractName, " initcode hash"));
+
+        address expectedAddress = vm.parseJsonAddress(manifest, string.concat(artifactRoot, ".expectedAddress"));
+        if (expectedAddress.code.length == 0) {
+            address factory = vm.parseJsonAddress(manifest, ".factory.address");
+            bytes32 salt = vm.parseJsonBytes32(manifest, string.concat(artifactRoot, ".salt.value"));
+            (bool success, bytes memory reason) = factory.call(abi.encodePacked(salt, initcode));
+            assertTrue(success, string.concat(contractName, " factory deployment failed"));
+            assertEq(reason.length, 20, string.concat(contractName, " factory return length"));
+        }
+
+        assertGt(expectedAddress.code.length, 0, string.concat(contractName, " runtime missing"));
+        assertEq(
+            expectedAddress.codehash,
+            vm.parseJsonBytes32(manifest, string.concat(artifactRoot, ".runtimeCodeHash")),
+            string.concat(contractName, " direct-runtime hash")
+        );
+    }
+}

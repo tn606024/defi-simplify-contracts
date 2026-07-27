@@ -46,15 +46,25 @@ jobs:
           ./script/check-static-call-uint256-assertions-surface.sh
           ./script/check-direct-immutable-artifacts.sh
           ./script/check-abi-fixtures.sh
+          ./script/check-base-v1-candidate-manifest.sh
 
       - name: Run non-fork tests
         run: forge test --no-match-path 'test/fork/**' -vvv
 
       - name: Check gas snapshot
-        run: forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
+        run: >-
+          forge snapshot --check
+          --no-match-test 'testFuzz|invariant_'
+          --no-match-contract 'BaseDeploymentManifestTest'
+          --no-match-path 'test/fork/**'
 
       - name: Generate coverage summary
-        run: forge coverage --no-match-path 'test/fork/**' --report summary
+        run: >-
+          forge coverage
+          --no-match-path 'test/fork/**'
+          --no-match-contract 'BaseDeploymentManifestTest'
+          --no-match-coverage 'script/'
+          --report summary
 
       - name: Check reproducible artifacts
         run: ./script/check-reproducible-build.sh
