@@ -17,6 +17,11 @@
   generic checker to expose exactly `IStaticCallUint256Assertions`, rejects
   permanent and transient storage access, and rejects events, payable paths,
   asset-moving calls, delegated execution, contract creation, and destruction.
+- `check-direct-immutable-artifacts.sh` verifies that the account and both
+  checkers are unlinked direct artifacts with no permanent storage, custom
+  events, or `DELEGATECALL`/`CALLCODE` proxy runtime. It also freezes the
+  account's sole immutable EntryPoint constructor input and keeps both checkers
+  constructor-free.
 - `check-abi-fixtures.sh` verifies the committed account, typed-assertion, and
   generic-assertion interface ABIs used by the Go SDK remain byte-for-byte
   synchronized with Solidity.

@@ -36,7 +36,14 @@ jobs:
         run: test -n "$BASE_RPC_URL"
 
       - name: Run Base fork tests
-        run: forge test --match-path 'test/fork/**/*.t.sol' --fork-url "$BASE_RPC_URL" -vvv
+        run: >-
+          forge test
+          --match-path 'test/fork/**/*.t.sol'
+          --no-match-path 'test/fork/BaseAaveV3*Gas.t.sol'
+          --fork-url "$BASE_RPC_URL"
+          --fork-retries 5
+          --fork-retry-backoff 1000
+          -vvv
 
       - name: Check Base Aave flow gas snapshots
         run: >-
@@ -44,3 +51,5 @@ jobs:
           --match-path 'test/fork/BaseAaveV3*Gas.t.sol'
           --match-test 'test_Gas_'
           --fork-url "$BASE_RPC_URL"
+          --fork-retries 5
+          --fork-retry-backoff 1000
