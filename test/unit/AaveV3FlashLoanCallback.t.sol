@@ -64,6 +64,18 @@ contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
         _assertFlashLoanWasRepaidExactly();
     }
 
+    function test_MultipleOuterCallbackFlagsReportBothIndicesBeforeAnyTargetExecutes() external {
+        IDefiSimplify7702Account.DynamicCall[] memory calls =
+            _buildOuterCallsWithFlashLoanAtIndex(0, DynamicCallTestBuilder.noCalls());
+        calls[2].expectsCallback = true;
+
+        vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.MultipleExpectedCallbacks.selector, 0, 2));
+        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
+
+        assertEq(recordingTarget.count(), 0, "prevalidation should run before the first target");
+        assertEq(pool.callbackCount(), 0, "prevalidation should run before the flash-loan target");
+    }
+
     function test_CallbackPlanExecutesOneOrdinaryCall() external {
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
         callbackCalls[0] = _recordingCall(11, "callback-one");
