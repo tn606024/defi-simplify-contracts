@@ -73,31 +73,6 @@ independent reproduction commands are in
 [`deployments/base-v1.json`](deployments/base-v1.json) and
 [`deployments/README.md`](deployments/README.md).
 
-### Source-verification note
-
-The first BaseScan verification submission used a repository-wide compiler
-input, so BaseScan currently displays test files that were not needed by these
-contracts. Those test files were unused compiler inputs: they are not imports
-of the deployed contracts and did not contribute to their creation or runtime
-bytecode.
-
-The contract artifacts record the actual source closures:
-
-- `DefiSimplify7702Account`: 34 source files;
-- `FlowAssertions`: 8 source files;
-- `StaticCallUint256Assertions`: 2 source files.
-
-The `lib/` files inside those closures are required because the account inherits
-the pinned upstream account and uses OpenZeppelin libraries. The `test/` files
-are not required dependencies.
-
-Future explorer submissions are generated with
-`script/generate-base-v1-verification-inputs.sh`. It creates one Standard JSON
-input per contract and rejects `test/`, `script/`, build output, and unrelated
-contracts. BaseScan does not normally replace an already verified source bundle
-through resubmission, so correcting the existing displayed file list requires
-BaseScan support; it does not require redeployment.
-
 ## Implementation scope
 
 The v1 implementation targets Base, inherits the pinned account-abstraction
