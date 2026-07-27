@@ -35,6 +35,9 @@ jobs:
       - name: Require Base RPC secret
         run: test -n "$BASE_RPC_URL"
 
+      - name: Verify official Base deployment transactions and runtimes
+        run: ./script/check-base-v1-onchain-deployment.sh
+
       - name: Run Base fork tests
         run: >-
           forge test
