@@ -311,21 +311,3 @@ inclusion.
   `balanceOf`/`allowance`/`approve`. Unusual tokens require separate review.
 - Assertions check only their stated post-condition. They do not validate
   profitability, fair pricing, oracle quality, or every intermediate action.
-
-## Building and testing
-
-This section is for contributors and independent reviewers:
-
-```sh
-git submodule update --init
-make check
-```
-
-Base fork and deployed-contract checks require `BASE_RPC_URL`:
-
-```sh
-make check-base
-```
-
-Use `make help` to list focused validation targets. Deployment-specific
-reproduction instructions are in [`deployments/README.md`](deployments/README.md).
