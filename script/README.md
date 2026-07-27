@@ -1,5 +1,10 @@
 # Scripts
 
+The root `Makefile` is the canonical validation interface. Use `make check` for
+the complete non-RPC suite, `make check-base` for the `BASE_RPC_URL`-dependent
+suite, or `make help` to list focused targets. The scripts below remain
+independently callable implementation units used by those targets.
+
 - `check-foundry-version.sh` rejects an unpinned local Foundry toolchain.
 - `check-account-abstraction-revision.sh` verifies the account-abstraction and
   OpenZeppelin submodule checkouts, committed gitlinks, and clean upstream
