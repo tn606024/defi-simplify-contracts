@@ -59,9 +59,9 @@ while IFS= read -r source_file; do
     echo "Repository source $source_file does not use exact Solidity $local_solidity" >&2
     exit 1
   fi
-done < <(find src test -type f -name '*.sol' -print)
+done < <(find src test script -type f -name '*.sol' -print)
 
-echo "Verified local Solidity $local_solidity across foundry.toml and repository sources"
+echo "Verified local Solidity $local_solidity across foundry.toml and repository sources and scripts"
 
 readonly entry_point="$(jq -r '.base.entryPointAddress' "$lock_file")"
 readonly runtime_hash="$(jq -r '.base.entryPointRuntimeCodeHash' "$lock_file")"

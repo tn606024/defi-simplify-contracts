@@ -36,8 +36,9 @@ The Solidity implementation and its Base reference flows have reached the
 DSC-58 internal review candidate. This does **not** mean the contracts are
 audited or production-ready. The project has deliberately chosen an unaudited
 experimental v1 release policy. The cross-repository SDK callback compiler,
-target-policy and golden-vector gates, and the deployment-manifest gate remain
-incomplete.
+target-policy, and golden-vector gates remain incomplete. DSC-56 now provides a
+reproducible Base deployment candidate, but no Base deployment has been
+broadcast and no official deployed manifest or release has been published.
 
 ## v1 security analysis boundary
 
@@ -108,9 +109,17 @@ forge build --sizes
 ./script/check-static-call-uint256-assertions-surface.sh
 ./script/check-direct-immutable-artifacts.sh
 ./script/check-abi-fixtures.sh
+./script/check-base-v1-candidate-manifest.sh
 FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
-forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
-forge coverage --no-match-path 'test/fork/**' --report summary
+forge snapshot --check \
+  --no-match-test 'testFuzz|invariant_' \
+  --no-match-contract 'BaseDeploymentManifestTest' \
+  --no-match-path 'test/fork/**'
+forge coverage \
+  --no-match-path 'test/fork/**' \
+  --no-match-contract 'BaseDeploymentManifestTest' \
+  --no-match-coverage 'script/' \
+  --report summary
 ./script/check-reproducible-build.sh
 slither . --fail-none
 slither . --filter-paths 'lib/' --fail-high
@@ -119,6 +128,14 @@ slither . --filter-paths 'lib/' --fail-high
 The first Slither run keeps pinned dependency findings visible for manual
 review. The second run gates high-severity findings owned by this repository;
 it does not replace review of inherited risk.
+
+Coverage recompiles without the release optimizer and `viaIR`, so the
+production-bytecode deployment identity test is intentionally excluded from
+that one command and is run by the normal test suite instead. Its JSON/build
+verification gas is also excluded from `.gas-snapshot` because it is not a
+product execution baseline. Deployment scripts are omitted from the coverage
+denominator; production contracts and transient libraries retain their
+explicit coverage evidence.
 
 Base fork tests are intentionally separate from the default suite and require
 `BASE_RPC_URL`:
@@ -144,7 +161,9 @@ requests whose head branch belongs to this repository, using the repository
 from external forks skip it because repository secrets are not exposed to them.
 The same workflow checks the pinned Base Aave static, guarded
 WETH-collateral/USDC-debt loop, and flash-assisted cbETH/WETH lifecycle gas
-baselines stored in `.gas-snapshot`.
+baselines stored in `.gas-snapshot`. It also verifies the live Arachnid factory
+and performs all three deterministic candidate deployments only inside a
+disposable Base fork.
 
 The guarded WETH-collateral/USDC-debt loop proof at Base block `48,961,870`
 supplies WETH, checkpoints and borrows USDC, swaps only the observed USDC delta
@@ -168,6 +187,16 @@ router-native amount and price bounds but no deadline.
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are
 expected to be committed.
+
+## Base v1 deployment candidate
+
+The reproducible candidate and its generation, independent check, and
+non-broadcast Base simulation instructions are in
+[`deployments/README.md`](deployments/README.md). The candidate addresses are
+not deployed addresses. Its machine-readable status is `candidate`,
+`not-broadcast`, `unaudited`, and `not-integrated`; it deliberately omits
+transaction hashes, source-verification URLs, audit URLs, and an assigned trust
+level until those facts exist.
 
 ## DSC-58 security evidence
 
