@@ -164,7 +164,7 @@ The review candidate is backed by these reproducible gates:
 
 | Gate | Evidence |
 | --- | --- |
-| Non-fork regression | 299 tests pass under the CI profile |
+| Non-fork regression | 301 tests pass under the CI profile |
 | Fuzz/property | Every fuzz property runs 10,000 cases, including exact patch byte isolation and full-precision `mulDiv` agreement |
 | Stateful invariants | Both dynamic-engine and callback campaigns run 512 sequences at depth 256, up to 131,072 generated calls per invariant, with zero unexpected reverts |
 | Production coverage | 100% line, statement, branch, and function coverage for all three contracts and all transient libraries |
@@ -249,9 +249,13 @@ review the inherited and custom bytecode together.
 - Dynamic patch offsets describe reviewed ABI words, but the account cannot
   distinguish an amount from a pointer or length. Structured ABI derivation,
   golden vectors, signer policy, and exact simulation are required.
-- A nonzero no-code dynamic target can return EVM success, and a call with value
-  can intentionally transfer native ETH to an EOA. The SDK and signer must
-  reject unexpected code absence and admit pure transfers explicitly.
+- Inherited static execution and custom dynamic execution retain generic EVM
+  `CALL` behavior: a nonzero no-code target can return success, and a call with
+  value can transfer native ETH. The frozen v1 policy deliberately adds no
+  partial on-chain code-existence guard. The SDK/signer must recursively admit
+  static, dynamic, and callback targets by chain, reviewed manifest, runtime
+  identity, and selector policy. Code existence and simulation success alone
+  are insufficient; pure EOA transfers must be explicit and bounded.
 - Conventional ERC20 `balanceOf`, `allowance`, and `approve` behavior is
   assumed. Fee-on-transfer, rebasing, blocklisted, callback-enabled, malformed,
   or unusual approval tokens require separate admission evidence.
@@ -263,8 +267,9 @@ review the inherited and custom bytecode together.
   submission does not create on-chain expiry.
 - Native-balance patching, return-data piping, multi-asset Aave flash loans,
   nested callbacks, and non-Aave callback providers are outside v1.
-- DS-54 must still prove the Go SDK's callback envelope and fully patched
-  origin bytes against the committed Solidity vectors. DSC-56 must still
-  produce and verify the official Base direct-deployment manifests.
+- DS-55 must implement recursive SDK/signer target admission, and DS-54 must
+  prove the callback envelope and fully patched origin bytes against committed
+  Solidity vectors. DSC-56 must still produce and verify the official Base
+  direct-deployment manifests.
 - The custom account remains high risk until independent review, remediation,
   controlled canary operation, and real-world maturity are complete.
