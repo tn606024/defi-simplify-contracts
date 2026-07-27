@@ -93,8 +93,9 @@ GitHub Actions runs the separate Base fork workflow automatically for pull
 requests whose head branch belongs to this repository, using the repository
 `BASE_RPC_URL` secret. The workflow remains manually dispatchable; pull requests
 from external forks skip it because repository secrets are not exposed to them.
-The same workflow checks the pinned Base Aave static and guarded
-WETH-collateral/USDC-debt loop gas baselines stored in `.gas-snapshot`.
+The same workflow checks the pinned Base Aave static, guarded
+WETH-collateral/USDC-debt loop, and flash-assisted cbETH/WETH lifecycle gas
+baselines stored in `.gas-snapshot`.
 
 The guarded WETH-collateral/USDC-debt loop proof at Base block `48,961,870`
 supplies WETH, checkpoints and borrows USDC, swaps only the observed USDC delta
@@ -104,6 +105,16 @@ USDC, and native inventory act as sentinels. The direct Base
 `exactInputSingle` entrypoint provides `amountOutMinimum` and
 `sqrtPriceLimitX96` but no deadline; fresh simulation and short-lived
 submission do not create an on-chain expiry guarantee.
+
+The flash-assisted proof at the same pinned block covers a cbETH/WETH
+correlated E-Mode leverage open, partial deleverage, and full close through
+Aave V3 `flashLoanSimple` and the direct Uniswap V3 cbETH/WETH 0.05% pool. It
+checks exact premium-aware repayment, zero residual Aave Pool and Router
+allowances, final health-factor or zero-debt assertions, delegated-EOA
+ownership, and atomic rollback under forced failures. The full-close flow
+patches Aave's visible variable-debt-token balance into both the flash
+principal and callback repayment approval. The direct swap calls provide
+router-native amount and price bounds but no deadline.
 
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are
