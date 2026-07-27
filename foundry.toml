@@ -14,7 +14,11 @@ optimizer_runs = 200
 via_ir = true
 bytecode_hash = "ipfs"
 use_literal_content = true
-fs_permissions = [{ access = "read", path = "./abi" }]
+fs_permissions = [
+  { access = "read", path = "./abi" },
+  { access = "read", path = "./config" },
+  { access = "read", path = "./deployments" },
+]
 
 gas_reports = ["*"]
 

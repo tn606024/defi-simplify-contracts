@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly account_fixture="abi/IDefiSimplify7702Account.json"
-readonly assertions_fixture="abi/IFlowAssertions.json"
-readonly generic_assertions_fixture="abi/IStaticCallUint256Assertions.json"
-readonly generated_account="$(mktemp)"
-readonly generated_assertions="$(mktemp)"
-readonly generated_generic_assertions="$(mktemp)"
+readonly contracts=(
+  "IDefiSimplify7702Account"
+  "IFlowAssertions"
+  "IStaticCallUint256Assertions"
+  "DefiSimplify7702Account"
+  "FlowAssertions"
+  "StaticCallUint256Assertions"
+)
+readonly fixtures=(
+  "abi/IDefiSimplify7702Account.json"
+  "abi/IFlowAssertions.json"
+  "abi/IStaticCallUint256Assertions.json"
+  "abi/DefiSimplify7702Account.json"
+  "abi/FlowAssertions.json"
+  "abi/StaticCallUint256Assertions.json"
+)
+readonly generated_directory="$(mktemp -d)"
 
 cleanup() {
-  rm -f "$generated_account" "$generated_assertions" "$generated_generic_assertions"
+  rm -rf "$generated_directory"
 }
 trap cleanup EXIT
 
@@ -18,31 +29,27 @@ command -v jq >/dev/null || {
   exit 1
 }
 
-forge inspect IDefiSimplify7702Account abi --json \
-  | jq -cS 'sort_by(.type + ":" + (.name // "") + ":" + ((.inputs // []) | map(.type) | join(",")))' \
-  > "$generated_account"
+for index in "${!contracts[@]}"; do
+  contract="${contracts[$index]}"
+  fixture="${fixtures[$index]}"
+  generated_fixture="$generated_directory/$contract.json"
 
-if ! diff -u "$account_fixture" "$generated_account"; then
-  echo "IDefiSimplify7702Account ABI fixture is stale" >&2
-  exit 1
-fi
+  forge inspect "$contract" abi --json \
+    | jq -cS '
+        sort_by(
+          .type
+          + ":"
+          + (.name // "")
+          + ":"
+          + ((.inputs // []) | map(.type) | join(","))
+        )
+      ' \
+    > "$generated_fixture"
 
-forge inspect IFlowAssertions abi --json \
-  | jq -cS 'sort_by(.type + ":" + (.name // "") + ":" + ((.inputs // []) | map(.type) | join(",")))' \
-  > "$generated_assertions"
+  if ! diff -u "$fixture" "$generated_fixture"; then
+    echo "$contract ABI fixture is stale" >&2
+    exit 1
+  fi
+done
 
-if ! diff -u "$assertions_fixture" "$generated_assertions"; then
-  echo "IFlowAssertions ABI fixture is stale" >&2
-  exit 1
-fi
-
-forge inspect IStaticCallUint256Assertions abi --json \
-  | jq -cS 'sort_by(.type + ":" + (.name // "") + ":" + ((.inputs // []) | map(.type) | join(",")))' \
-  > "$generated_generic_assertions"
-
-if ! diff -u "$generic_assertions_fixture" "$generated_generic_assertions"; then
-  echo "IStaticCallUint256Assertions ABI fixture is stale" >&2
-  exit 1
-fi
-
-echo "Checked-in account and assertion ABI fixtures match their Solidity interfaces"
+echo "Checked-in interface and complete deployment ABI fixtures match Solidity"
