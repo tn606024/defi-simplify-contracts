@@ -62,11 +62,15 @@ Run the lifecycle suite and its committed gas baselines with:
 ```sh
 forge test \
   --match-path 'test/fork/BaseAaveV3StaticFlow*.t.sol' \
-  --fork-url "$BASE_RPC_URL"
+  --fork-url "$BASE_RPC_URL" \
+  --fork-retries 5 \
+  --fork-retry-backoff 1000
 forge snapshot --check \
   --match-path 'test/fork/BaseAaveV3StaticFlowGas.t.sol' \
   --match-test 'test_Gas_' \
-  --fork-url "$BASE_RPC_URL"
+  --fork-url "$BASE_RPC_URL" \
+  --fork-retries 5 \
+  --fork-retry-backoff 1000
 ```
 
 The gas baselines are `182,769` for approve-plus-supply, `381,138` for
@@ -136,14 +140,18 @@ Run this proof and all Base Aave gas baselines with:
 ```sh
 forge test \
   --match-path 'test/fork/BaseAaveV3DynamicStrategy*.t.sol' \
-  --fork-url "$BASE_RPC_URL"
+  --fork-url "$BASE_RPC_URL" \
+  --fork-retries 5 \
+  --fork-retry-backoff 1000
 forge snapshot --check \
   --match-path 'test/fork/BaseAaveV3*Gas.t.sol' \
   --match-test 'test_Gas_' \
-  --fork-url "$BASE_RPC_URL"
+  --fork-url "$BASE_RPC_URL" \
+  --fork-retries 5 \
+  --fork-retry-backoff 1000
 ```
 
-The guarded WETH-collateral/USDC-debt loop baseline is `616,974` gas; setup and
+The guarded WETH-collateral/USDC-debt loop baseline is `621,217` gas; setup and
 fork identity checks are outside the measured test body.
 
 ## Flash-assisted Aave V3 cbETH/WETH lifecycle
@@ -233,14 +241,18 @@ Run the proof and its committed gas baselines with:
 ```sh
 forge test \
   --match-path 'test/fork/BaseAaveV3FlashLifecycle*.t.sol' \
-  --fork-url "$BASE_RPC_URL"
+  --fork-url "$BASE_RPC_URL" \
+  --fork-retries 5 \
+  --fork-retry-backoff 1000
 forge snapshot --check \
   --match-path 'test/fork/BaseAaveV3FlashLifecycleGas.t.sol' \
   --match-test 'test_Gas_' \
-  --fork-url "$BASE_RPC_URL"
+  --fork-url "$BASE_RPC_URL" \
+  --fork-retries 5 \
+  --fork-retry-backoff 1000
 ```
 
-The measured execution-only baselines are `688,660` gas for leverage open,
-`413,937` for partial deleverage, and `300,545` for full close. Position setup,
+The measured execution-only baselines are `688,723` gas for leverage open,
+`414,017` for partial deleverage, and `300,587` for full close. Position setup,
 fork identity checks, plan construction, and observed-debt reads are paused out
 of the measured bodies.
