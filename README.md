@@ -28,6 +28,9 @@ upgrade function, withdrawal function, or protocol registry.
 ## Base deployment
 
 Base is the only supported chain in this version.
+The official deployment is published as the experimental, unaudited
+[`v1.0.0`](https://github.com/tn606024/defi-simplify-contracts/releases/tag/v1.0.0)
+release.
 
 | Contract | Address |
 | --- | --- |

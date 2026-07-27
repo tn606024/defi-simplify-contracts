@@ -19,7 +19,7 @@ fi
 jq -e '
   .manifestStatus == "deployed"
   and .trustLevel == "official"
-  and .releaseStatus == "unreleased"
+  and .releaseStatus == "released"
   and (has("intendedTrustLevel") | not)
   and .network.deploymentStatus == "deployed"
   and .security.status == "unaudited"
