@@ -31,6 +31,12 @@
   EntryPoint into account runtime bytecode, derives the three direct artifact
   hashes and CREATE2 addresses, and combines them with mined transaction and
   exact source-verification evidence.
+- `generate-base-v1-verification-inputs.sh` derives one Solidity Standard JSON
+  input per deployed contract from that artifact's exact metadata source
+  closure. It rejects non-production source roots and guarantees that
+  `test/`, `script/`, build output, and unrelated contracts are not included in
+  explorer submissions. Generated inputs are written under the ignored `out/`
+  tree by default.
 - `check-base-v1-manifest.sh` independently regenerates the official manifest
   and rejects stale output, incomplete deployment evidence, or misleading
   audit, release, trust-level, warranty, security, and SDK-readiness claims.

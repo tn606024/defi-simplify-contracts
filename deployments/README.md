@@ -54,6 +54,18 @@ CREATE2 addresses. The checker rejects any difference from the checked-in
 manifest or any overstatement of audit, release, SDK, warranty, or security
 status.
 
+Generate explorer verification inputs separately for each direct artifact:
+
+```sh
+./script/generate-base-v1-verification-inputs.sh
+```
+
+The generated Standard JSON files under `out/verification/base-v1/` contain
+only the selected contract and its actual transitive imports, as recorded in
+that contract's compiler metadata. They deliberately exclude `test/`,
+`script/`, build output, and unrelated production contracts. Do not submit a
+repository-wide Foundry build-info file to an explorer.
+
 The checked-in complete deployment ABIs are:
 
 - `abi/DefiSimplify7702Account.json`, including inherited and custom account
