@@ -26,49 +26,28 @@ jobs:
           version: v1.7.1
 
       - name: Verify Foundry version
-        run: ./script/check-foundry-version.sh
+        run: make check-foundry
 
       - name: Verify dependency revisions
-        run: |
-          ./script/check-account-abstraction-revision.sh
-          ./script/check-forge-std-revision.sh
+        run: make check-dependencies
 
       - name: Check formatting
-        run: forge fmt --check
-
-      - name: Build contracts
-        run: forge build --sizes
+        run: make format
 
       - name: Verify contract ABIs, storage layouts, and direct artifacts
-        run: |
-          ./script/check-minimal-account-surface.sh
-          ./script/check-flow-assertions-surface.sh
-          ./script/check-static-call-uint256-assertions-surface.sh
-          ./script/check-direct-immutable-artifacts.sh
-          ./script/check-abi-fixtures.sh
-          ./script/generate-base-v1-verification-inputs.sh
-          ./script/check-base-v1-manifest.sh
+        run: make check-artifacts
 
       - name: Run non-fork tests
-        run: forge test --no-match-path 'test/fork/**' -vvv
+        run: make test
 
       - name: Check gas snapshot
-        run: >-
-          forge snapshot --check
-          --no-match-test 'testFuzz|invariant_'
-          --no-match-contract 'BaseDeploymentManifestTest'
-          --no-match-path 'test/fork/**'
+        run: make snapshot
 
       - name: Generate coverage summary
-        run: >-
-          forge coverage
-          --no-match-path 'test/fork/**'
-          --no-match-contract 'BaseDeploymentManifestTest'
-          --no-match-coverage 'script/'
-          --report summary
+        run: make coverage
 
       - name: Check reproducible artifacts
-        run: ./script/check-reproducible-build.sh
+        run: make reproducible
 
   slither:
     name: Slither
@@ -90,15 +69,13 @@ jobs:
           version: v1.7.1
 
       - name: Verify dependency revisions
-        run: |
-          ./script/check-account-abstraction-revision.sh
-          ./script/check-forge-std-revision.sh
+        run: make check-dependencies
 
       - name: Install pinned Slither
         run: python -m pip install --disable-pip-version-check slither-analyzer==0.11.4
 
       - name: Run dependency-inclusive Slither review
-        run: slither . --fail-none
+        run: make slither-review
 
       - name: Reject project-owned high-severity findings
-        run: slither . --filter-paths 'lib/' --fail-high
+        run: make slither-gate

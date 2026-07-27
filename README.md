@@ -152,32 +152,13 @@ This project does not claim the v0.9.0 baseline is audited.
 Install the pinned Foundry release, then run:
 
 ```sh
-./script/check-foundry-version.sh
-./script/check-account-abstraction-revision.sh
-./script/check-forge-std-revision.sh
-forge fmt --check
-forge build --sizes
-./script/check-minimal-account-surface.sh
-./script/check-flow-assertions-surface.sh
-./script/check-static-call-uint256-assertions-surface.sh
-./script/check-direct-immutable-artifacts.sh
-./script/check-abi-fixtures.sh
-./script/generate-base-v1-verification-inputs.sh
-./script/check-base-v1-manifest.sh
-FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
-forge snapshot --check \
-  --no-match-test 'testFuzz|invariant_' \
-  --no-match-contract 'BaseDeploymentManifestTest' \
-  --no-match-path 'test/fork/**'
-forge coverage \
-  --no-match-path 'test/fork/**' \
-  --no-match-contract 'BaseDeploymentManifestTest' \
-  --no-match-coverage 'script/' \
-  --report summary
-./script/check-reproducible-build.sh
-slither . --fail-none
-slither . --filter-paths 'lib/' --fail-high
+make check
 ```
+
+`make check` runs the pinned toolchain and dependency checks, formatting,
+contract build and surface gates, ABI and deployment identity checks, non-fork
+tests, gas snapshots, coverage, reproducibility, and both Slither passes. Use
+`make help` to list the individual targets.
 
 The first Slither run keeps pinned dependency findings visible for manual
 review. The second run gates high-severity findings owned by this repository;
@@ -195,18 +176,7 @@ Base fork tests are intentionally separate from the default suite and require
 `BASE_RPC_URL`:
 
 ```sh
-forge test \
-  --match-path 'test/fork/**/*.t.sol' \
-  --no-match-path 'test/fork/BaseAaveV3*Gas.t.sol' \
-  --fork-url "$BASE_RPC_URL" \
-  --fork-retries 5 \
-  --fork-retry-backoff 1000
-forge snapshot --check \
-  --match-path 'test/fork/BaseAaveV3*Gas.t.sol' \
-  --match-test 'test_Gas_' \
-  --fork-url "$BASE_RPC_URL" \
-  --fork-retries 5 \
-  --fork-retry-backoff 1000
+make check-base
 ```
 
 GitHub Actions runs the separate Base fork workflow automatically for pull
