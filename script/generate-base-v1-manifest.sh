@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly config_path="config/base-v1-deployment.json"
-readonly output_path="${1:-deployments/base-v1.candidate.json}"
+readonly output_path="${1:-deployments/base-v1.json}"
 readonly account_artifact="out/DefiSimplify7702Account.sol/DefiSimplify7702Account.json"
 readonly flow_assertions_artifact="out/FlowAssertions.sol/FlowAssertions.json"
 readonly static_assertions_artifact="out/StaticCallUint256Assertions.sol/StaticCallUint256Assertions.json"
@@ -10,7 +10,7 @@ readonly static_assertions_artifact="out/StaticCallUint256Assertions.sol/StaticC
 require_command() {
   local command_name="$1"
   command -v "$command_name" >/dev/null || {
-    echo "$command_name is required to generate the Base v1 candidate manifest" >&2
+    echo "$command_name is required to generate the official Base v1 manifest" >&2
     exit 1
   }
 }
@@ -155,7 +155,9 @@ artifact_manifest() {
   local constructor_arguments="$6"
   local creation_code runtime_code initcode
   local creation_code_hash runtime_code_hash initcode_hash
-  local salt expected_address
+  local salt expected_address deployed_address
+  local transaction_hash block_number deployment_timestamp
+  local transaction_url verification_url
 
   creation_code="$(jq -er '.bytecode.object' "$artifact_path")"
   if [[ "$contract_name" == "DefiSimplify7702Account" ]]; then
@@ -170,6 +172,28 @@ artifact_manifest() {
   runtime_code_hash="$(hash_bytes "$runtime_code")"
   salt="$(salt_value "$contract_name")"
   expected_address="$(predict_address "$salt" "$initcode_hash")"
+  deployed_address="$(
+    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].address' "$config_path"
+  )"
+  if [[ "$deployed_address" != "$expected_address" ]]; then
+    echo "$contract_name deployed address does not match the reconstructed CREATE2 address" >&2
+    exit 1
+  fi
+  transaction_hash="$(
+    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].transactionHash' "$config_path"
+  )"
+  block_number="$(
+    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].blockNumber' "$config_path"
+  )"
+  deployment_timestamp="$(
+    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].timestamp' "$config_path"
+  )"
+  transaction_url="$(
+    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].transactionUrl' "$config_path"
+  )"
+  verification_url="$(
+    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].verificationUrl' "$config_path"
+  )"
 
   jq -n \
     --arg contractName "$contract_name" \
@@ -184,7 +208,13 @@ artifact_manifest() {
       jq -er --arg name "$contract_name" '.salts[$name].preimage' "$config_path"
     )" \
     --arg salt "$salt" \
+    --arg address "$deployed_address" \
     --arg expectedAddress "$expected_address" \
+    --arg deploymentTransactionHash "$transaction_hash" \
+    --argjson deploymentBlockNumber "$block_number" \
+    --arg deploymentTimestamp "$deployment_timestamp" \
+    --arg deploymentTransactionUrl "$transaction_url" \
+    --arg verificationUrl "$verification_url" \
     --argjson creationCodeSize "$(byte_length "$creation_code")" \
     --argjson initcodeSize "$(byte_length "$initcode")" \
     --argjson runtimeCodeSize "$(byte_length "$runtime_code")" \
@@ -200,6 +230,7 @@ artifact_manifest() {
         preimage: $saltPreimage,
         value: $salt
       },
+      address: $address,
       creationCodeHash: $creationCodeHash,
       creationCodeSize: $creationCodeSize,
       initcodeHash: $initcodeHash,
@@ -207,7 +238,13 @@ artifact_manifest() {
       expectedAddress: $expectedAddress,
       runtimeCodeHash: $runtimeCodeHash,
       runtimeCodeSize: $runtimeCodeSize,
-      deploymentStatus: "not-broadcast"
+      deploymentStatus: "deployed",
+      deploymentTransactionHash: $deploymentTransactionHash,
+      deploymentBlockNumber: $deploymentBlockNumber,
+      deploymentTimestamp: $deploymentTimestamp,
+      deploymentTransactionUrl: $deploymentTransactionUrl,
+      verificationStatus: "exact-match",
+      verificationUrl: $verificationUrl
     }'
 }
 
@@ -243,17 +280,21 @@ mkdir -p "$(dirname "$output_path")"
 jq -nS \
   --argjson schemaVersion "$(jq -er '.schemaVersion' "$config_path")" \
   --arg manifestStatus "$(jq -er '.manifestStatus' "$config_path")" \
-  --arg intendedTrustLevel "$(jq -er '.intendedTrustLevel' "$config_path")" \
+  --arg trustLevel "$(jq -er '.trustLevel' "$config_path")" \
+  --arg releaseStatus "$(jq -er '.releaseStatus' "$config_path")" \
   --arg addressFamilyId "$(jq -er '.addressFamilyId' "$config_path")" \
   --arg sourceRepository "$(jq -er '.sourceRepository' "$config_path")" \
-  --argjson network "$(jq -ec '.network + {deploymentStatus: "not-broadcast"}' "$config_path")" \
+  --arg deploymentSourceCommit "$(jq -er '.deploymentSourceCommit' "$config_path")" \
+  --argjson network "$(jq -ec '.network + {deploymentStatus: "deployed"}' "$config_path")" \
   --argjson factory "$(jq -ec '.factory' "$config_path")" \
   --argjson entryPoint "$(jq -ec '.entryPoint' "$config_path")" \
   --argjson upstreamAccount "$(jq -ec '.upstreamAccount' "$config_path")" \
   --argjson build "$(jq -ec '.build' "$config_path")" \
+  --argjson scope "$(jq -ec '.scope' "$config_path")" \
+  --argjson deployment "$(jq -ec '.deployment | del(.artifacts)' "$config_path")" \
   --argjson security "$(
     jq -ec '.security + {
-      notice: "Experimental and unaudited; tests and reproducibility are not a security guarantee."
+      notice: "Experimental and unaudited; tests, static analysis, fork proofs, source verification, and reproducibility are not an audit or security guarantee. Total and irreversible loss is possible. Use at your own risk; no warranty is provided."
     }' "$config_path"
   )" \
   --argjson account "$account_manifest" \
@@ -262,12 +303,16 @@ jq -nS \
   '{
     schemaVersion: $schemaVersion,
     manifestStatus: $manifestStatus,
-    intendedTrustLevel: $intendedTrustLevel,
+    trustLevel: $trustLevel,
+    releaseStatus: $releaseStatus,
     security: $security,
     sdkIntegrationStatus: "not-integrated",
+    scope: $scope,
     addressFamilyId: $addressFamilyId,
     sourceRepository: $sourceRepository,
+    deploymentSourceCommit: $deploymentSourceCommit,
     network: $network,
+    deployment: $deployment,
     factory: $factory,
     entryPoint: $entryPoint,
     upstreamAccount: $upstreamAccount,
@@ -279,4 +324,4 @@ jq -nS \
     }
   }' > "$output_path"
 
-echo "Generated Base v1 candidate manifest at $output_path"
+echo "Generated official Base v1 deployment manifest at $output_path"

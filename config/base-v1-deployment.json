@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "manifestStatus": "candidate",
-  "intendedTrustLevel": "official",
+  "manifestStatus": "deployed",
+  "trustLevel": "official",
+  "releaseStatus": "unreleased",
   "addressFamilyId": "defi-simplify-v1-arachnid-entrypoint-v0.9.0",
   "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
+  "deploymentSourceCommit": "23e9baa94d3fd406e3c95127bd49dc9cc42165b9",
   "network": {
     "name": "Base",
     "chainId": 8453
@@ -37,7 +39,45 @@
   "security": {
     "status": "unaudited",
     "experimental": true,
-    "independentAuditPlanned": false
+    "independentAuditPlanned": false,
+    "securityGuarantee": false,
+    "warranty": "none",
+    "totalLossRisk": true
+  },
+  "scope": {
+    "chain": "Base-only",
+    "strategyClaims": "documented Base Aave proofs only"
+  },
+  "deployment": {
+    "deployerAddress": "0xb5FD9f60Fc6ca7662Ff22D09ec7832CD221fbcdD",
+    "startedAt": "2026-07-27T05:48:25Z",
+    "completedAt": "2026-07-27T05:48:29Z",
+    "artifacts": {
+      "DefiSimplify7702Account": {
+        "address": "0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA",
+        "transactionHash": "0xa69ad7e56a4937966cf7d30dfcee4e5458e208ec2e87423db5f60e87726f982d",
+        "blockNumber": 49170979,
+        "timestamp": "2026-07-27T05:48:25Z",
+        "transactionUrl": "https://basescan.org/tx/0xa69ad7e56a4937966cf7d30dfcee4e5458e208ec2e87423db5f60e87726f982d",
+        "verificationUrl": "https://basescan.org/address/0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA#code"
+      },
+      "FlowAssertions": {
+        "address": "0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5",
+        "transactionHash": "0x720d38a30f78acf37f5321f66eb421f84974830905da586b0623f33257add301",
+        "blockNumber": 49170980,
+        "timestamp": "2026-07-27T05:48:27Z",
+        "transactionUrl": "https://basescan.org/tx/0x720d38a30f78acf37f5321f66eb421f84974830905da586b0623f33257add301",
+        "verificationUrl": "https://basescan.org/address/0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5#code"
+      },
+      "StaticCallUint256Assertions": {
+        "address": "0x034ee940A644323463AB074DCA99504BF5a666EA",
+        "transactionHash": "0x90278c7af9e0e2acffb61be6cc84118e1a86d500d440dcc33b2895b2b4acdf0d",
+        "blockNumber": 49170981,
+        "timestamp": "2026-07-27T05:48:29Z",
+        "transactionUrl": "https://basescan.org/tx/0x90278c7af9e0e2acffb61be6cc84118e1a86d500d440dcc33b2895b2b4acdf0d",
+        "verificationUrl": "https://basescan.org/address/0x034ee940A644323463AB074DCA99504BF5a666EA#code"
+      }
+    }
   },
   "salts": {
     "DefiSimplify7702Account": {

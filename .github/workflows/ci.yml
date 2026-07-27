@@ -46,7 +46,7 @@ jobs:
           ./script/check-static-call-uint256-assertions-surface.sh
           ./script/check-direct-immutable-artifacts.sh
           ./script/check-abi-fixtures.sh
-          ./script/check-base-v1-candidate-manifest.sh
+          ./script/check-base-v1-manifest.sh
 
       - name: Run non-fork tests
         run: forge test --no-match-path 'test/fork/**' -vvv

@@ -9,36 +9,37 @@ import {FlowAssertions} from "../src/FlowAssertions.sol";
 import {StaticCallUint256Assertions} from "../src/StaticCallUint256Assertions.sol";
 
 /// @title DeployBaseV1
-/// @notice Reproduces and deploys the three Base v1 artifacts through the pinned
-///         Arachnid Deterministic Deployment Proxy.
-/// @dev The script treats the checked-in candidate manifest as untrusted input:
-///      it reconstructs every initcode and CREATE2 address before broadcasting,
-///      verifies the factory and EntryPoint runtime identities, and verifies
-///      every deployed runtime after the factory call. Running without
-///      `--broadcast` performs only Foundry's local simulation.
+/// @notice Reproduces and verifies the three official Base v1 artifacts against
+///         the pinned Arachnid Deterministic Deployment Proxy.
+/// @dev The script treats the checked-in official manifest as untrusted input:
+///      it reconstructs every initcode and CREATE2 address before any potential
+///      factory call, verifies the factory and EntryPoint runtime identities,
+///      and verifies every artifact runtime. The vacancy branch preserves the
+///      original deployment path for historical-fork reproduction. Do not
+///      broadcast against Base; the official addresses are already deployed.
 contract DeployBaseV1 is Script {
-    string internal constant MANIFEST_PATH = "deployments/base-v1.candidate.json";
+    string internal constant MANIFEST_PATH = "deployments/base-v1.json";
 
     /// @notice The deployment script was run on a chain other than the manifest chain.
-    /// @param expectedChainId Chain ID frozen by the candidate manifest.
+    /// @param expectedChainId Chain ID frozen by the official manifest.
     /// @param actualChainId Chain ID reported by the active RPC.
     error DeploymentChainMismatch(uint256 expectedChainId, uint256 actualChainId);
 
     /// @notice An on-chain prerequisite or deployed artifact has unexpected runtime code.
     /// @param target Address whose runtime identity was checked.
-    /// @param expectedHash Runtime code hash frozen by the candidate manifest.
+    /// @param expectedHash Runtime code hash frozen by the official manifest.
     /// @param actualHash Runtime code hash observed on the active chain.
     error DeploymentRuntimeCodeHashMismatch(address target, bytes32 expectedHash, bytes32 actualHash);
 
-    /// @notice Reconstructed artifact initcode does not match the candidate manifest.
+    /// @notice Reconstructed artifact initcode does not match the official manifest.
     /// @param contractName Human-readable artifact name.
-    /// @param expectedHash Initcode hash frozen by the candidate manifest.
+    /// @param expectedHash Initcode hash frozen by the official manifest.
     /// @param actualHash Hash of the initcode reconstructed from the current build.
     error DeploymentInitcodeHashMismatch(string contractName, bytes32 expectedHash, bytes32 actualHash);
 
-    /// @notice Independently predicted CREATE2 address does not match the candidate manifest.
+    /// @notice Independently predicted CREATE2 address does not match the official manifest.
     /// @param contractName Human-readable artifact name.
-    /// @param expectedAddress Address frozen by the candidate manifest.
+    /// @param expectedAddress Address frozen by the official manifest.
     /// @param actualAddress Address predicted from factory, salt, and initcode hash.
     error DeploymentAddressMismatch(string contractName, address expectedAddress, address actualAddress);
 
@@ -55,9 +56,10 @@ contract DeployBaseV1 is Script {
         bytes32 runtimeCodeHash;
     }
 
-    /// @notice Simulates or broadcasts the three idempotent Base v1 deployments.
-    /// @dev Invoke with the pinned Foundry release. Omit `--broadcast` for the
-    ///      required dry run; adding it sends up to three factory calls.
+    /// @notice Reproduces the three official Base v1 deployment identities.
+    /// @dev Invoke with the pinned Foundry release and omit `--broadcast`.
+    ///      Current Base state performs no factory calls because all three exact
+    ///      runtimes already exist.
     /// @return account Expected and verified account implementation address.
     /// @return flowAssertions Expected and verified typed checker address.
     /// @return staticCallAssertions Expected and verified generic checker address.
@@ -78,7 +80,7 @@ contract DeployBaseV1 is Script {
     }
 
     /// @dev Verifies the active chain, factory runtime, and immutable EntryPoint runtime.
-    /// @param manifest Complete candidate manifest JSON.
+    /// @param manifest Complete official manifest JSON.
     /// @return factory Verified Arachnid deterministic deployment proxy.
     /// @return entryPoint Verified immutable account EntryPoint.
     function _requireDeploymentPrerequisites(string memory manifest)
@@ -98,7 +100,7 @@ contract DeployBaseV1 is Script {
     }
 
     /// @dev Rejects every stale initcode or address before any broadcastable call is recorded.
-    /// @param manifest Complete candidate manifest JSON.
+    /// @param manifest Complete official manifest JSON.
     /// @param factory Verified Arachnid deterministic deployment proxy.
     /// @param entryPoint Verified immutable account EntryPoint.
     function _requireAllArtifactIdentities(string memory manifest, address factory, address entryPoint) private pure {
@@ -115,8 +117,8 @@ contract DeployBaseV1 is Script {
         );
     }
 
-    /// @dev Deploys or verifies the account after all three candidates pass prevalidation.
-    /// @param manifest Complete candidate manifest JSON.
+    /// @dev Deploys or verifies the account after all three artifacts pass prevalidation.
+    /// @param manifest Complete official manifest JSON.
     /// @param factory Verified Arachnid deterministic deployment proxy.
     /// @param entryPoint Verified immutable account EntryPoint.
     /// @return deployedAddress Expected address whose runtime was verified.
@@ -129,8 +131,8 @@ contract DeployBaseV1 is Script {
         return identity.expectedAddress;
     }
 
-    /// @dev Deploys or verifies the typed checker after all three candidates pass prevalidation.
-    /// @param manifest Complete candidate manifest JSON.
+    /// @dev Deploys or verifies the typed checker after all three artifacts pass prevalidation.
+    /// @param manifest Complete official manifest JSON.
     /// @param factory Verified Arachnid deterministic deployment proxy.
     /// @return deployedAddress Expected address whose runtime was verified.
     function _deployFlowAssertions(string memory manifest, address factory) private returns (address deployedAddress) {
@@ -139,8 +141,8 @@ contract DeployBaseV1 is Script {
         return identity.expectedAddress;
     }
 
-    /// @dev Deploys or verifies the generic checker after all three candidates pass prevalidation.
-    /// @param manifest Complete candidate manifest JSON.
+    /// @dev Deploys or verifies the generic checker after all three artifacts pass prevalidation.
+    /// @param manifest Complete official manifest JSON.
     /// @param factory Verified Arachnid deterministic deployment proxy.
     /// @return deployedAddress Expected address whose runtime was verified.
     function _deployStaticAssertions(string memory manifest, address factory)
@@ -159,8 +161,8 @@ contract DeployBaseV1 is Script {
         return abi.encodePacked(type(DefiSimplify7702Account).creationCode, abi.encode(IEntryPoint(entryPoint)));
     }
 
-    /// @dev Loads one generated artifact identity from the candidate manifest.
-    /// @param manifest Complete candidate manifest JSON.
+    /// @dev Loads one generated artifact identity from the official manifest.
+    /// @param manifest Complete official manifest JSON.
     /// @param contractName Object key and human-readable artifact name.
     /// @return identity Salt, hashes, and expected address used by deployment checks.
     function _loadArtifactIdentity(string memory manifest, string memory contractName)
@@ -179,9 +181,9 @@ contract DeployBaseV1 is Script {
     }
 
     /// @dev Recomputes the initcode hash and CREATE2 address without trusting
-    ///      the corresponding generated values in the candidate manifest.
+    ///      the corresponding generated values in the official manifest.
     /// @param factory Pinned Arachnid factory address.
-    /// @param identity Candidate identity for the selected artifact.
+    /// @param identity Official deployment identity for the selected artifact.
     /// @param initcode Reconstructed creation code and constructor arguments.
     function _requireArtifactIdentity(address factory, ArtifactIdentity memory identity, bytes memory initcode)
         private
@@ -203,7 +205,7 @@ contract DeployBaseV1 is Script {
     /// @dev Sends `salt || initcode` only when the predicted address is vacant,
     ///      then requires the exact expected direct-runtime identity.
     /// @param factory Verified Arachnid deterministic deployment proxy.
-    /// @param identity Candidate identity for the selected artifact.
+    /// @param identity Official deployment identity for the selected artifact.
     /// @param initcode Reconstructed creation code and constructor arguments.
     function _deployOrVerify(address factory, ArtifactIdentity memory identity, bytes memory initcode) private {
         if (identity.expectedAddress.code.length == 0) {
