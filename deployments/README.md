@@ -9,11 +9,13 @@
 ## Base v1 official deployment
 
 `base-v1.json` is the official machine-readable manifest for three direct,
-immutable Base deployments. `official` means that this repository publishes and
-reproduces their exact artifact and deployment identities. It does **not** mean
-audited, safe, released, SDK-integrated, or production-ready.
+immutable Base deployments published as the experimental
+[`v1.0.0`](https://github.com/tn606024/defi-simplify-contracts/releases/tag/v1.0.0)
+release. `official` means that this repository publishes and reproduces their
+exact artifact and deployment identities. It does **not** mean audited, safe,
+SDK-integrated, production-ready, or recommended for capital.
 
-The manifest deliberately records `unreleased`, `unaudited`, `experimental`,
+The manifest deliberately records `released`, `unaudited`, `experimental`,
 `not-integrated`, no independent audit plan, no security guarantee, no warranty,
 and total-loss risk.
 

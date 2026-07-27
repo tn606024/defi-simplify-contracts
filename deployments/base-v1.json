@@ -119,7 +119,7 @@
     "deploymentStatus": "deployed",
     "name": "Base"
   },
-  "releaseStatus": "unreleased",
+  "releaseStatus": "released",
   "schemaVersion": 1,
   "scope": {
     "chain": "Base-only",

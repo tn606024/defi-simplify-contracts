@@ -32,7 +32,7 @@ contract BaseDeploymentManifestTest is Test {
         assertEq(vm.parseJsonUint(manifest, ".schemaVersion"), 1, "schema version");
         assertEq(vm.parseJsonString(manifest, ".manifestStatus"), "deployed", "manifest status");
         assertEq(vm.parseJsonString(manifest, ".trustLevel"), "official", "trust level");
-        assertEq(vm.parseJsonString(manifest, ".releaseStatus"), "unreleased", "release status");
+        assertEq(vm.parseJsonString(manifest, ".releaseStatus"), "released", "release status");
         assertEq(vm.parseJsonUint(manifest, ".network.chainId"), BASE_CHAIN_ID, "Base chain ID");
         assertEq(vm.parseJsonString(manifest, ".network.deploymentStatus"), "deployed", "network deployment status");
         assertEq(vm.parseJsonString(manifest, ".security.status"), "unaudited", "security status");

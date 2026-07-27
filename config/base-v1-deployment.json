@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestStatus": "deployed",
   "trustLevel": "official",
-  "releaseStatus": "unreleased",
+  "releaseStatus": "released",
   "addressFamilyId": "defi-simplify-v1-arachnid-entrypoint-v0.9.0",
   "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
   "deploymentSourceCommit": "23e9baa94d3fd406e3c95127bd49dc9cc42165b9",
