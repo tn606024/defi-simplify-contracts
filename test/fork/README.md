@@ -7,11 +7,13 @@ The workflow requires the `BASE_RPC_URL` GitHub Actions secret and never stores
 RPC credentials in the repository.
 
 `BaseDeploymentFactory.t.sol` runs at current Base state. It freezes the
-Arachnid deterministic deployment proxy and EntryPoint runtime identities, then
-submits each candidate `salt || initcode` payload to the actual factory inside
-the disposable fork. Before the real deployment it proves the predicted
-addresses receive the exact direct runtimes; after deployment it verifies the
-already-existing runtimes. Neither path broadcasts a Base transaction.
+Arachnid deterministic deployment proxy and EntryPoint runtime identities,
+reconstructs every official `salt || initcode` payload, and verifies the
+already-existing direct runtimes. The vacancy branch retains an equivalent
+disposable-fork factory proof for earlier chain state. The separate
+`script/check-base-v1-onchain-deployment.sh` RPC check verifies the three
+historical transactions and receipts against the official manifest. No test or
+check broadcasts a Base transaction.
 
 `BaseAaveV3FlowAssertions.t.sol` pins Base block `48,961,870` and the Aave V3
 Base Pool `0xA238Dd80C259a72e81d7e4664a9801593F98d1c5`. The Pool address is sourced

@@ -8,10 +8,10 @@ import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
 
 /// @title BaseDeploymentFactoryTest
-/// @notice Proves the candidate payloads against the actual Base factory inside
-///         a disposable local fork. This test never broadcasts to Base.
+/// @notice Proves the official deployment payloads and current runtime identities
+///         against Base inside a local fork. This test never broadcasts to Base.
 contract BaseDeploymentFactoryTest is Test {
-    string internal constant MANIFEST_PATH = "deployments/base-v1.candidate.json";
+    string internal constant MANIFEST_PATH = "deployments/base-v1.json";
 
     string private manifest;
 
@@ -33,7 +33,7 @@ contract BaseDeploymentFactoryTest is Test {
         );
     }
 
-    function test_BaseFactory_WithCandidatePayload_DeploysExactDirectRuntimesOnFork() public {
+    function test_BaseFactory_OfficialPayloadsResolveToExactDirectRuntimes() public {
         address entryPoint = vm.parseJsonAddress(manifest, ".entryPoint.address");
 
         _deployOrVerifyOnFork(
@@ -44,9 +44,9 @@ contract BaseDeploymentFactoryTest is Test {
         _deployOrVerifyOnFork("StaticCallUint256Assertions", type(StaticCallUint256Assertions).creationCode);
     }
 
-    /// @dev If DSC-56 has not yet been broadcast, the call mutates only this
-    ///      local fork. Once deployed on Base, the same test verifies the
-    ///      existing code and remains a stable regression.
+    /// @dev Verifies the existing official Base runtime. The vacancy branch
+    ///      preserves the same disposable-fork proof for a fresh equivalent
+    ///      chain state without broadcasting a transaction.
     function _deployOrVerifyOnFork(string memory contractName, bytes memory initcode) private {
         string memory artifactRoot = string.concat(".artifacts.", contractName);
         bytes32 expectedInitcodeHash = vm.parseJsonBytes32(manifest, string.concat(artifactRoot, ".initcodeHash"));
