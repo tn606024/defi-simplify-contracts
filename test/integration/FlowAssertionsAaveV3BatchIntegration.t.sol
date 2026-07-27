@@ -9,6 +9,7 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {AaveV3PoolMock} from "../mocks/AaveV3PoolMocks.sol";
 import {AssertionBalanceToken} from "../mocks/FlowAssertionsMocks.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
     UpstreamCompatibilityFixture private compatibilityFixture;
@@ -106,23 +107,12 @@ contract FlowAssertionsAaveV3BatchIntegrationTest is DelegatedAccountFixture {
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(producedToken), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
         );
-        calls[1] = _buildUnpatchedDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (address(aavePool), minimumHealthFactor))
         );
-    }
-
-    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-    {
-        dynamicCall.target = callTarget;
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 }

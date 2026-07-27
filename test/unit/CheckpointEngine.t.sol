@@ -17,6 +17,7 @@ import {
 } from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract CheckpointEngineTest is DelegatedAccountFixture {
     using SlotDerivation for bytes32;
@@ -46,7 +47,9 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         PreCallCheckpointToken preCallToken =
             new PreCallCheckpointToken(accountUnderTest.delegatedEoa, address(executionTarget), 0, 101);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(11, "one", _oneCheckpoint(address(preCallToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            11, "one", DynamicCallTestBuilder.singleCheckpoint(address(preCallToken), CHECKPOINT_A)
+        );
 
         _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
@@ -61,8 +64,12 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         PreCallCheckpointToken secondToken =
             new PreCallCheckpointToken(accountUnderTest.delegatedEoa, address(executionTarget), 1, 202);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildRecordingCall(13, "first", _oneCheckpoint(address(firstToken), CHECKPOINT_A));
-        calls[1] = _buildRecordingCall(17, "second", _oneCheckpoint(address(secondToken), CHECKPOINT_B));
+        calls[0] = _buildRecordingCall(
+            13, "first", DynamicCallTestBuilder.singleCheckpoint(address(firstToken), CHECKPOINT_A)
+        );
+        calls[1] = _buildRecordingCall(
+            17, "second", DynamicCallTestBuilder.singleCheckpoint(address(secondToken), CHECKPOINT_B)
+        );
 
         _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
 
@@ -72,7 +79,9 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
 
     function test_ZeroBalanceHasIndependentPresenceTokenAndBalanceFields() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(19, "zero", _oneCheckpoint(address(checkpointToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            19, "zero", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
+        );
 
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
 
@@ -86,10 +95,10 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_ZeroTokenRevertsWithCallAndCheckpointIndices() external {
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
-        checkpoints[0] = _checkpoint(address(checkpointToken), CHECKPOINT_A);
-        checkpoints[1] = _checkpoint(address(0), CHECKPOINT_B);
+        checkpoints[0] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_A);
+        checkpoints[1] = DynamicCallTestBuilder.checkpoint(address(0), CHECKPOINT_B);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildRecordingCall(23, "rolled-back", _noCheckpoints());
+        calls[0] = _buildRecordingCall(23, "rolled-back", DynamicCallTestBuilder.noCheckpoints());
         calls[1] = _buildRecordingCall(29, "invalid", checkpoints);
 
         vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.InvalidCheckpointToken.selector, 1, 1));
@@ -101,8 +110,8 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_ZeroIdRevertsWithCallAndCheckpointIndices() external {
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
-        checkpoints[0] = _checkpoint(address(checkpointToken), CHECKPOINT_A);
-        checkpoints[1] = _checkpoint(address(checkpointToken), bytes32(0));
+        checkpoints[0] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_A);
+        checkpoints[1] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), bytes32(0));
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _buildRecordingCall(31, "invalid", checkpoints);
 
@@ -115,8 +124,8 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_DuplicateIdOnSameTokenRevertsAtSecondCheckpoint() external {
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
-        checkpoints[0] = _checkpoint(address(checkpointToken), CHECKPOINT_A);
-        checkpoints[1] = _checkpoint(address(checkpointToken), CHECKPOINT_A);
+        checkpoints[0] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_A);
+        checkpoints[1] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_A);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _buildRecordingCall(37, "duplicate", checkpoints);
 
@@ -129,8 +138,12 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_DuplicateIdAcrossDifferentTokensAndCallsRevertsInActiveScope() external {
         CheckpointBalanceToken otherToken = new CheckpointBalanceToken();
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildRecordingCall(41, "first", _oneCheckpoint(address(checkpointToken), CHECKPOINT_A));
-        calls[1] = _buildRecordingCall(43, "duplicate", _oneCheckpoint(address(otherToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            41, "first", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
+        );
+        calls[1] = _buildRecordingCall(
+            43, "duplicate", DynamicCallTestBuilder.singleCheckpoint(address(otherToken), CHECKPOINT_A)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointAlreadyExists.selector, 1, 0, CHECKPOINT_A)
@@ -144,8 +157,8 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         checkpointToken.setBalance(accountUnderTest.delegatedEoa, 47);
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
-        checkpoints[0] = _checkpoint(address(checkpointToken), CHECKPOINT_A);
-        checkpoints[1] = _checkpoint(address(checkpointToken), CHECKPOINT_B);
+        checkpoints[0] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_A);
+        checkpoints[1] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_B);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _buildRecordingCall(47, "same-token", checkpoints);
 
@@ -157,11 +170,15 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_SequentialInvocationsUseDisjointScopesAndMayReuseId() external {
         checkpointToken.setBalance(harnessAccount, 53);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(53, "first", _oneCheckpoint(address(checkpointToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            53, "first", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
+        );
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
 
         checkpointToken.setBalance(harnessAccount, 59);
-        calls[0] = _buildRecordingCall(59, "second", _oneCheckpoint(address(checkpointToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            59, "second", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
+        );
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
 
         assertEq(_delegatedCheckpointHarnessView().invocationCounter(), 2, "invocation counter");
@@ -179,14 +196,16 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_RevertedInvocationRollsBackCounterAndRecordsTogether() external {
         checkpointToken.setBalance(harnessAccount, 61);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(61, "first", _oneCheckpoint(address(checkpointToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            61, "first", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
+        );
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
 
         checkpointToken.setBalance(harnessAccount, 67);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
             address(executionTarget),
             abi.encodeCall(DynamicExecutionTarget.fail, (67, bytes("rollback"))),
-            _oneCheckpoint(address(checkpointToken), CHECKPOINT_B)
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_B)
         );
         (bool success,) = harnessAccount.call(abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (calls)));
         assertFalse(success, "failing invocation succeeded");
@@ -195,7 +214,9 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         (bool revertedPresent,,) = _delegatedCheckpointHarnessView().checkpointRecord(2, CHECKPOINT_B);
         assertFalse(revertedPresent, "reverted checkpoint persisted");
 
-        calls[0] = _buildRecordingCall(71, "recovered", _oneCheckpoint(address(checkpointToken), CHECKPOINT_B));
+        calls[0] = _buildRecordingCall(
+            71, "recovered", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_B)
+        );
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
         assertEq(_delegatedCheckpointHarnessView().invocationCounter(), 2, "counter did not reuse rolled-back scope");
         (bool recoveredPresent,, uint256 recoveredBalance) =
@@ -211,10 +232,10 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
             _attachCheckpointHarnessDelegation(address(implementation), CONTAINED_HARNESS_AUTHORITY_KEY);
         checkpointToken.setBalance(account, 73);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
             address(executionTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (73, bytes("contained"))),
-            _oneCheckpoint(address(checkpointToken), CHECKPOINT_A)
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
         );
 
         (bool success,) =
@@ -233,10 +254,10 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         TransientProbeTarget probeTarget = new TransientProbeTarget();
         bytes32 recordRoot = _delegatedCheckpointHarnessView().checkpointRecordRoot(1, CHECKPOINT_A);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
             address(probeTarget),
             abi.encodeCall(TransientProbeTarget.probe, (recordRoot)),
-            _oneCheckpoint(address(checkpointToken), CHECKPOINT_A)
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
         );
 
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
@@ -249,10 +270,10 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_CallbackCannotQueryCheckpointHarness() external {
         TransientProbeTarget probeTarget = new TransientProbeTarget();
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
             address(probeTarget),
             abi.encodeCall(TransientProbeTarget.queryCheckpointHarness, (harnessAccount, 1, CHECKPOINT_A)),
-            _oneCheckpoint(address(checkpointToken), CHECKPOINT_A)
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
         );
         bytes memory authorizationReason = abi.encodeWithSelector(
             BaseAccount.NotFromEntryPoint.selector, address(probeTarget), harnessAccount, address(this)
@@ -287,17 +308,19 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         checkpointToken.setBalance(harnessAccount, 79);
         checkpointToken.setBalance(secondAccount, 83);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(79, "first-account", _oneCheckpoint(address(checkpointToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            79, "first-account", DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
+        );
         _delegatedCheckpointHarnessView().executeBatchDynamic(calls);
 
         assertEq(CheckpointTableHarness(secondAccount).invocationCounter(), 0, "counter leaked to second EOA");
         (bool leaked,,) = CheckpointTableHarness(secondAccount).checkpointRecord(1, CHECKPOINT_A);
         assertFalse(leaked, "checkpoint leaked to second EOA");
 
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
             address(executionTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (83, bytes("second-account"))),
-            _oneCheckpoint(address(checkpointToken), CHECKPOINT_A)
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CHECKPOINT_A)
         );
         CheckpointTableHarness(secondAccount).executeBatchDynamic(calls);
         (, address secondToken, uint256 secondBalance) =
@@ -312,10 +335,10 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         bytes memory reason = abi.encodeWithSelector(RevertingCheckpointToken.BalanceReadFailure.selector, 89, payload);
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
-        checkpoints[0] = _checkpoint(address(checkpointToken), CHECKPOINT_A);
-        checkpoints[1] = _checkpoint(address(revertingToken), CHECKPOINT_B);
+        checkpoints[0] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), CHECKPOINT_A);
+        checkpoints[1] = DynamicCallTestBuilder.checkpoint(address(revertingToken), CHECKPOINT_B);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildRecordingCall(89, "rolled-back", _noCheckpoints());
+        calls[0] = _buildRecordingCall(89, "rolled-back", DynamicCallTestBuilder.noCheckpoints());
         calls[1] = _buildRecordingCall(97, "revert", checkpoints);
 
         vm.expectRevert(
@@ -330,7 +353,9 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_ShortSuccessfulBalanceReadPreservesMalformedBytes() external {
         ShortReturnCheckpointToken shortToken = new ShortReturnCheckpointToken();
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(97, "short", _oneCheckpoint(address(shortToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            97, "short", DynamicCallTestBuilder.singleCheckpoint(address(shortToken), CHECKPOINT_A)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -343,7 +368,9 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
     function test_EmptySuccessfulBalanceReadFailsWithEmptyReason() external {
         EmptyReturnCheckpointToken emptyToken = new EmptyReturnCheckpointToken();
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(101, "empty", _oneCheckpoint(address(emptyToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            101, "empty", DynamicCallTestBuilder.singleCheckpoint(address(emptyToken), CHECKPOINT_A)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -357,7 +384,9 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         address randomCaller = address(0xCA11E2);
         RevertingCheckpointToken revertingToken = new RevertingCheckpointToken(107, bytes("must-not-read"));
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(107, "unauthorized", _oneCheckpoint(address(revertingToken), CHECKPOINT_A));
+        calls[0] = _buildRecordingCall(
+            107, "unauthorized", DynamicCallTestBuilder.singleCheckpoint(address(revertingToken), CHECKPOINT_A)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -416,7 +445,7 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         for (uint256 i = 0; i < checkpointCount; ++i) {
             bytes32 checkpointId = bytes32(i + 1);
             checkpointIds[i] = checkpointId;
-            checkpoints[i] = _checkpoint(address(checkpointToken), checkpointId);
+            checkpoints[i] = DynamicCallTestBuilder.checkpoint(address(checkpointToken), checkpointId);
         }
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
@@ -448,40 +477,8 @@ contract CheckpointEngineTest is DelegatedAccountFixture {
         bytes memory payload,
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints
     ) private view returns (IDefiSimplify7702Account.DynamicCall memory) {
-        return _buildDynamicCall(
+        return DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
             address(executionTarget), abi.encodeCall(DynamicExecutionTarget.record, (amount, payload)), checkpoints
         );
-    }
-
-    function _buildDynamicCall(
-        address callTarget,
-        bytes memory callData,
-        IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints
-    ) private pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall.target = callTarget;
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = checkpoints;
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-    }
-
-    function _oneCheckpoint(address checkpointTokenAddress, bytes32 id)
-        private
-        pure
-        returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
-    {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = _checkpoint(checkpointTokenAddress, id);
-    }
-
-    function _noCheckpoints() private pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-    }
-
-    function _checkpoint(address checkpointTokenAddress, bytes32 id)
-        private
-        pure
-        returns (IDefiSimplify7702Account.BalanceCheckpoint memory)
-    {
-        return IDefiSimplify7702Account.BalanceCheckpoint({token: checkpointTokenAddress, id: id});
     }
 }

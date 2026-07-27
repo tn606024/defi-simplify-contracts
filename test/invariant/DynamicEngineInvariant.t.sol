@@ -8,6 +8,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {CheckpointTableHarness, DynamicPatchTarget, PatchBalanceToken} from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 /// @dev Stateful action handler configured as the delegated account's mock EntryPoint.
 ///      Each action executes one transaction-local scenario and checks the active
@@ -53,7 +54,11 @@ contract DynamicEngineInvariantHandler {
         balanceToken.setBalance(address(delegatedAccount), balance);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(_onePatch(_currentBalancePatch(4, bps)));
+        calls[0] = _buildRecordingCall(
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.currentBalancePatch(address(balanceToken), 4, bps)
+            )
+        );
         delegatedAccount.executeBatchDynamic(calls);
 
         expectedSuccessfulCallCount += 1;
@@ -71,13 +76,17 @@ contract DynamicEngineInvariantHandler {
         balanceToken.setBalance(address(delegatedAccount), inventory);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             address(balanceToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(produced))),
-            _oneCheckpoint(checkpointId),
-            _noPatches()
+            DynamicCallTestBuilder.singleCheckpoint(address(balanceToken), checkpointId),
+            DynamicCallTestBuilder.noPatches()
         );
-        calls[1] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(checkpointId, 4, bps)));
+        calls[1] = _buildRecordingCall(
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.checkpointDeltaPatch(address(balanceToken), checkpointId, 4, bps)
+            )
+        );
         delegatedAccount.executeBatchDynamic(calls);
 
         expectedSuccessfulCallCount += 1;
@@ -123,11 +132,11 @@ contract DynamicEngineInvariantHandler {
         _requireRecord(baseline + 1, checkpointId, firstBalance);
 
         balanceToken.setBalance(address(delegatedAccount), failedBalance);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.fail, (uint256(51), bytes("invariant-rollback"))),
-            _oneCheckpoint(checkpointId),
-            _noPatches()
+            DynamicCallTestBuilder.singleCheckpoint(address(balanceToken), checkpointId),
+            DynamicCallTestBuilder.noPatches()
         );
         bytes memory targetReason =
             abi.encodeWithSelector(DynamicExecutionTarget.TargetFailure.selector, 51, bytes("invariant-rollback"));
@@ -162,7 +171,11 @@ contract DynamicEngineInvariantHandler {
         _requireRecord(baseline + 1, checkpointId, firstBalance);
 
         calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(checkpointId, 4, 10_000)));
+        calls[0] = _buildRecordingCall(
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.checkpointDeltaPatch(address(balanceToken), checkpointId, 4, 10_000)
+            )
+        );
         _requireExecutionRevert(
             calls, abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointNotFound.selector, 0, 0, checkpointId)
         );
@@ -189,13 +202,17 @@ contract DynamicEngineInvariantHandler {
         balanceToken.setBalance(address(delegatedAccount), checkpointBalance);
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             address(balanceToken),
             abi.encodeCall(PatchBalanceToken.consume, (consumed)),
-            _oneCheckpoint(checkpointId),
-            _noPatches()
+            DynamicCallTestBuilder.singleCheckpoint(address(balanceToken), checkpointId),
+            DynamicCallTestBuilder.noPatches()
         );
-        calls[1] = _buildRecordingCall(_onePatch(_checkpointDeltaPatch(checkpointId, 4, 10_000)));
+        calls[1] = _buildRecordingCall(
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.checkpointDeltaPatch(address(balanceToken), checkpointId, 4, 10_000)
+            )
+        );
         _requireExecutionRevert(
             calls,
             abi.encodeWithSelector(
@@ -228,10 +245,12 @@ contract DynamicEngineInvariantHandler {
 
         IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints =
             new IDefiSimplify7702Account.BalanceCheckpoint[](2);
-        checkpoints[0] = _checkpoint(checkpointId);
-        checkpoints[1] = _checkpoint(checkpointId);
+        checkpoints[0] = DynamicCallTestBuilder.checkpoint(address(balanceToken), checkpointId);
+        checkpoints[1] = DynamicCallTestBuilder.checkpoint(address(balanceToken), checkpointId);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildDynamicCall(address(calldataCaptureTarget), hex"deadbeef", checkpoints, _noPatches());
+        calls[0] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
+            address(calldataCaptureTarget), hex"deadbeef", checkpoints, DynamicCallTestBuilder.noPatches()
+        );
 
         _requireExecutionRevert(
             calls, abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointAlreadyExists.selector, 0, 1, checkpointId)
@@ -248,17 +267,17 @@ contract DynamicEngineInvariantHandler {
         uint256 targetTotalBefore = recordingTarget.total();
         bytes memory payload = abi.encodePacked(rawPayload);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(amount), bytes("must-roll-back"))),
-            _noCheckpoints(),
-            _noPatches()
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches()
         );
-        calls[1] = _buildDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.fail, (uint256(52), payload)),
-            _noCheckpoints(),
-            _noPatches()
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches()
         );
         bytes memory targetReason = abi.encodeWithSelector(DynamicExecutionTarget.TargetFailure.selector, 52, payload);
         _requireExecutionRevert(
@@ -296,8 +315,11 @@ contract DynamicEngineInvariantHandler {
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildDynamicCall(
-            address(calldataCaptureTarget), hex"deadbeef", _oneCheckpoint(checkpointId), _noPatches()
+        calls[0] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
+            address(calldataCaptureTarget),
+            hex"deadbeef",
+            DynamicCallTestBuilder.singleCheckpoint(address(balanceToken), checkpointId),
+            DynamicCallTestBuilder.noPatches()
         );
     }
 
@@ -306,86 +328,12 @@ contract DynamicEngineInvariantHandler {
         view
         returns (IDefiSimplify7702Account.DynamicCall memory)
     {
-        return _buildDynamicCall(
+        return DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("invariant"))),
-            _noCheckpoints(),
+            DynamicCallTestBuilder.noCheckpoints(),
             patches
         );
-    }
-
-    function _buildDynamicCall(
-        address callTarget,
-        bytes memory callData,
-        IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints,
-        IDefiSimplify7702Account.BalancePatch[] memory patches
-    ) private pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall.target = callTarget;
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = checkpoints;
-        dynamicCall.patches = patches;
-    }
-
-    function _checkpoint(bytes32 checkpointId)
-        private
-        view
-        returns (IDefiSimplify7702Account.BalanceCheckpoint memory)
-    {
-        return IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: checkpointId});
-    }
-
-    function _oneCheckpoint(bytes32 checkpointId)
-        private
-        view
-        returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
-    {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = _checkpoint(checkpointId);
-    }
-
-    function _noCheckpoints() private pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-    }
-
-    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
-        private
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
-    {
-        patches = new IDefiSimplify7702Account.BalancePatch[](1);
-        patches[0] = patch;
-    }
-
-    function _noPatches() private pure returns (IDefiSimplify7702Account.BalancePatch[] memory patches) {
-        patches = new IDefiSimplify7702Account.BalancePatch[](0);
-    }
-
-    function _currentBalancePatch(uint32 offset, uint16 bps)
-        private
-        view
-        returns (IDefiSimplify7702Account.BalancePatch memory)
-    {
-        return IDefiSimplify7702Account.BalancePatch({
-            token: address(balanceToken),
-            checkpointId: bytes32(0),
-            offset: offset,
-            bps: bps,
-            source: IDefiSimplify7702Account.BalanceSource.CurrentBalance
-        });
-    }
-
-    function _checkpointDeltaPatch(bytes32 checkpointId, uint32 offset, uint16 bps)
-        private
-        view
-        returns (IDefiSimplify7702Account.BalancePatch memory)
-    {
-        return IDefiSimplify7702Account.BalancePatch({
-            token: address(balanceToken),
-            checkpointId: checkpointId,
-            offset: offset,
-            bps: bps,
-            source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
-        });
     }
 
     function _validBps(uint16 rawBps) private pure returns (uint16) {

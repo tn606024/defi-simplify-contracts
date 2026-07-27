@@ -9,6 +9,7 @@ import {IFlowAssertions} from "../../src/interfaces/IFlowAssertions.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseAaveV3FlashLifecycleFixture, IBaseAaveV3FlashLifecyclePool} from "./BaseAaveV3FlashLifecycleFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
     uint256 private constant BASE_FLASH_LIFECYCLE_AUTHORITY_KEY = 0xD5C8201;
@@ -281,14 +282,14 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
     function test_FlashLoan_WhenCallbackEnvelopeIsMalformed_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _dynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IAaveV3FlashLoanSimplePool.flashLoanSimple,
                 (delegatedEoa, BASE_WETH, PARTIAL_FLASH_WETH, hex"1234", NO_REFERRAL_CODE)
             ),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             true
         );
         (bytes memory revertData, FlashLifecycleState memory beforeState) =
@@ -302,12 +303,18 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
     function test_FlashLoan_WhenCallbackPlanRequestsNestedCallback_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         IDefiSimplify7702Account.DynamicCall[] memory nestedCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        nestedCalls[0] = _plainDynamicCall(BASE_WETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0)));
+        nestedCalls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            BASE_WETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0))
+        );
         nestedCalls[0].expectsCallback = true;
 
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0] = _flashLoanCall(
-            delegatedEoa, PARTIAL_FLASH_WETH, _aaveFlashPremium(PARTIAL_FLASH_WETH), nestedCalls, _noPatches()
+            delegatedEoa,
+            PARTIAL_FLASH_WETH,
+            _aaveFlashPremium(PARTIAL_FLASH_WETH),
+            nestedCalls,
+            DynamicCallTestBuilder.noPatches()
         );
         (bytes memory revertData, FlashLifecycleState memory beforeState) =
             _invokeExpectingRollback(delegatedEoa, calls);

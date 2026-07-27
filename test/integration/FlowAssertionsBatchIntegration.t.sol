@@ -7,6 +7,7 @@ import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {AssertionBalanceToken, FlowAssertionsHarness} from "../mocks/FlowAssertionsMocks.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
     bytes32 private constant STATIC_ASSERTION_CHECKPOINT_ID = keccak256("static-flow-assertion");
@@ -147,29 +148,18 @@ contract FlowAssertionsBatchIntegrationTest is DelegatedAccountFixture {
         returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
     {
         calls = new IDefiSimplify7702Account.DynamicCall[](3);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.snapshotBalance, (address(balanceToken), checkpointId))
         );
-        calls[1] = _buildUnpatchedDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(balanceToken), abi.encodeCall(AssertionBalanceToken.produce, (producedAmount))
         );
-        calls[2] = _buildUnpatchedDynamicCall(
+        calls[2] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(
                 IFlowAssertions.assertBalanceIncreaseAtLeast, (address(balanceToken), checkpointId, minimumDelta)
             )
         );
-    }
-
-    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-    {
-        dynamicCall.target = callTarget;
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 }

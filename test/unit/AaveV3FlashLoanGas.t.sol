@@ -4,6 +4,7 @@ pragma solidity 0.8.36;
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {AaveV3FlashLoanFixture} from "../utils/AaveV3FlashLoanFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract AaveV3FlashLoanGasTest is AaveV3FlashLoanFixture {
     function setUp() external {
@@ -11,7 +12,7 @@ contract AaveV3FlashLoanGasTest is AaveV3FlashLoanFixture {
     }
 
     function test_Gas_CallbackWindowWithEmptyPlanAndExactRepayment() external {
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         _assertFlashLoanRepaidExactly(flashAsset, FLASH_PRINCIPAL, FLASH_PREMIUM);
     }
@@ -41,7 +42,7 @@ contract AaveV3FlashLoanGasTest is AaveV3FlashLoanFixture {
         flashAsset.setRequireZeroFirstApproval(true);
         flashAsset.setAllowance(accountUnderTest.delegatedEoa, address(flashLoanPool), 123 ether);
 
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         assertEq(flashAsset.approvalAmount(0), 0, "first approval clears allowance");
         assertEq(flashAsset.approvalAmount(1), FLASH_PRINCIPAL + FLASH_PREMIUM, "second approval is exact");

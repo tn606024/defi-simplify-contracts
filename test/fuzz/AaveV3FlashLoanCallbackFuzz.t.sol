@@ -7,6 +7,7 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {AaveV3FlashLoanPoolMock, FlashLoanAssetMock} from "../mocks/AaveV3FlashLoanMocks.sol";
 import {PatchBalanceToken} from "../mocks/CheckpointBalanceToken.sol";
 import {AaveV3FlashLoanFixture} from "../utils/AaveV3FlashLoanFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract AaveV3FlashLoanCallbackFuzzTest is AaveV3FlashLoanFixture {
     function setUp() external {
@@ -28,10 +29,13 @@ contract AaveV3FlashLoanCallbackFuzzTest is AaveV3FlashLoanFixture {
         flashLoanPool.setPremium(0);
 
         IDefiSimplify7702Account.DynamicCall memory flashLoanCall =
-            _buildFlashLoanCall(address(patchedFlashAsset), 777, 0, _emptyCallbackPlan());
-        flashLoanCall.patches = _onePatch(_currentBalancePatch(address(amountSource), 68, basisPoints));
+            _buildFlashLoanCall(address(patchedFlashAsset), 777, 0, DynamicCallTestBuilder.noCalls());
+        flashLoanCall.patches = DynamicCallTestBuilder.singlePatch(
+            DynamicCallTestBuilder.currentBalancePatch(address(amountSource), 68, basisPoints)
+        );
 
-        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(_singleDynamicCall(flashLoanCall));
+        _dynamicExecutionInterfaceView(accountUnderTest)
+            .executeBatchDynamic(DynamicCallTestBuilder.singleCall(flashLoanCall));
 
         bytes memory expectedPatchedCalldata = abi.encodeCall(
             IAaveV3FlashLoanSimplePool.flashLoanSimple,
@@ -39,7 +43,7 @@ contract AaveV3FlashLoanCallbackFuzzTest is AaveV3FlashLoanFixture {
                 accountUnderTest.delegatedEoa,
                 address(patchedFlashAsset),
                 patchedPrincipal,
-                abi.encode(_buildCallbackEnvelope(0, _emptyCallbackPlan())),
+                abi.encode(_buildCallbackEnvelope(0, DynamicCallTestBuilder.noCalls())),
                 uint16(0)
             )
         );
@@ -132,7 +136,7 @@ contract AaveV3FlashLoanCallbackFuzzTest is AaveV3FlashLoanFixture {
         fuzzedAsset.setRequireZeroFirstApproval(true);
         flashLoanPool.setPremium(premium);
 
-        _executeFlashLoanWithAsset(fuzzedAsset, principal, _emptyCallbackPlan(), premium);
+        _executeFlashLoanWithAsset(fuzzedAsset, principal, DynamicCallTestBuilder.noCalls(), premium);
 
         assertEq(fuzzedAsset.approvalAmount(0), 0, "zero-first approval clears arbitrary preexisting allowance");
         assertEq(fuzzedAsset.approvalAmount(1), principal + premium, "second approval is exact repayment");

@@ -11,6 +11,7 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {AaveV3FlashLoanPoolMock, FlashLoanAssetMock} from "../mocks/AaveV3FlashLoanMocks.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract CallbackInvariantAccountHarness is DefiSimplify7702Account {
     constructor(IEntryPoint entryPoint) DefiSimplify7702Account(entryPoint) {}
@@ -92,7 +93,8 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         uint256 counterBefore = _invocationCounter();
         (bool succeeded,) = delegatedEoa.call(
             abi.encodeCall(
-                IDefiSimplify7702Account.executeBatchDynamic, (_singleCall(_flashLoanCall(premium, callbackCalls)))
+                IDefiSimplify7702Account.executeBatchDynamic,
+                (DynamicCallTestBuilder.singleCall(_flashLoanCall(premium, callbackCalls)))
             )
         );
         require(succeeded, "modeled successful flash reverted");
@@ -117,7 +119,7 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         (bool succeeded,) = delegatedEoa.call(
             abi.encodeCall(
                 IDefiSimplify7702Account.executeBatchDynamic,
-                (_singleCall(_flashLoanCall(premium, _emptyCallbackPlan())))
+                (DynamicCallTestBuilder.singleCall(_flashLoanCall(premium, DynamicCallTestBuilder.noCalls())))
             )
         );
         require(!succeeded, "missing callback unexpectedly succeeded");
@@ -142,7 +144,8 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         callbackCalls[1] = _failingCall();
         (bool succeeded,) = delegatedEoa.call(
             abi.encodeCall(
-                IDefiSimplify7702Account.executeBatchDynamic, (_singleCall(_flashLoanCall(0, callbackCalls)))
+                IDefiSimplify7702Account.executeBatchDynamic,
+                (DynamicCallTestBuilder.singleCall(_flashLoanCall(0, callbackCalls)))
             )
         );
         require(!succeeded, "failing callback plan unexpectedly succeeded");
@@ -165,7 +168,10 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         IDefiSimplify7702Account.DynamicCall[] memory failingPlan = new IDefiSimplify7702Account.DynamicCall[](1);
         failingPlan[0] = _failingCall();
         (bool failedCallSucceeded,) = delegatedEoa.call(
-            abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (_singleCall(_flashLoanCall(0, failingPlan))))
+            abi.encodeCall(
+                IDefiSimplify7702Account.executeBatchDynamic,
+                (DynamicCallTestBuilder.singleCall(_flashLoanCall(0, failingPlan)))
+            )
         );
         require(!failedCallSucceeded, "middle callback failure unexpectedly succeeded");
         require(_invocationCounter() == counterAfterFirstSuccess, "middle failure consumed scopes");
@@ -181,7 +187,8 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
     function _requireFlashSuccess(IDefiSimplify7702Account.DynamicCall[] memory callbackCalls) private {
         (bool succeeded,) = delegatedEoa.call(
             abi.encodeCall(
-                IDefiSimplify7702Account.executeBatchDynamic, (_singleCall(_flashLoanCall(0, callbackCalls)))
+                IDefiSimplify7702Account.executeBatchDynamic,
+                (DynamicCallTestBuilder.singleCall(_flashLoanCall(0, callbackCalls)))
             )
         );
         require(succeeded, "sequential flash unexpectedly reverted");
@@ -250,19 +257,6 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
     {
         callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
         callbackCalls[0] = _recordingCall(amount);
-    }
-
-    function _singleCall(IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
-    {
-        calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = dynamicCall;
-    }
-
-    function _emptyCallbackPlan() private pure returns (IDefiSimplify7702Account.DynamicCall[] memory callbackCalls) {
-        callbackCalls = new IDefiSimplify7702Account.DynamicCall[](0);
     }
 }
 

@@ -14,6 +14,7 @@ import {PatchBalanceToken} from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionAdversary} from "../mocks/DynamicExecutionAdversary.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {AaveV3FlashLoanFixture} from "../utils/AaveV3FlashLoanFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
     bytes32 private constant OUTER_CHECKPOINT_ID = keccak256("outer-only-callback-adversarial");
@@ -32,7 +33,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
     }
 
     function test_ExecuteOperationAfterCompletedOuterFrameIsRejectedAsOutsideDynamicExecution() external {
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         vm.expectRevert(IDefiSimplify7702Account.CallbackOutsideDynamicExecution.selector);
         _dynamicExecutionInterfaceView(accountUnderTest)
@@ -45,7 +46,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         FlashLoanCallbackForwarder ordinaryCallbackCaller = new FlashLoanCallbackForwarder();
         bytes memory callbackFailure =
             abi.encodeWithSelector(IDefiSimplify7702Account.CallbackNotAwaiting.selector, 0, uint8(0));
-        IDefiSimplify7702Account.DynamicCall memory ordinaryCall = _buildDynamicCall(
+        IDefiSimplify7702Account.DynamicCall memory ordinaryCall = DynamicCallTestBuilder.buildZeroValueCall(
             address(ordinaryCallbackCaller),
             abi.encodeCall(
                 FlashLoanCallbackForwarder.forward,
@@ -58,8 +59,8 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
                     bytes("")
                 )
             ),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
 
@@ -68,20 +69,21 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(ordinaryCallbackCaller), callbackFailure
             )
         );
-        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(_singleDynamicCall(ordinaryCall));
+        _dynamicExecutionInterfaceView(accountUnderTest)
+            .executeBatchDynamic(DynamicCallTestBuilder.singleCall(ordinaryCall));
     }
 
     function test_WrapperTargetCannotDelegateCallbackAuthorityToDownstreamPool() external {
         FlashLoanWrapper wrapper = new FlashLoanWrapper();
-        bytes memory params = abi.encode(_buildCallbackEnvelope(FLASH_PREMIUM, _emptyCallbackPlan()));
-        IDefiSimplify7702Account.DynamicCall memory wrapperCall = _buildDynamicCall(
+        bytes memory params = abi.encode(_buildCallbackEnvelope(FLASH_PREMIUM, DynamicCallTestBuilder.noCalls()));
+        IDefiSimplify7702Account.DynamicCall memory wrapperCall = DynamicCallTestBuilder.buildZeroValueCall(
             address(wrapper),
             abi.encodeCall(
                 FlashLoanWrapper.requestFlashLoan,
                 (flashLoanPool, accountUnderTest.delegatedEoa, address(flashAsset), FLASH_PRINCIPAL, params)
             ),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             true
         );
         bytes memory senderFailure = abi.encodeWithSelector(
@@ -93,7 +95,8 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
                 IDefiSimplify7702Account.DynamicCallFailed.selector, 0, address(wrapper), senderFailure
             )
         );
-        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(_singleDynamicCall(wrapperCall));
+        _dynamicExecutionInterfaceView(accountUnderTest)
+            .executeBatchDynamic(DynamicCallTestBuilder.singleCall(wrapperCall));
     }
 
     function test_SamePoolDifferentReplayIsRejectedAfterFirstCallbackConsumesWindow() external {
@@ -103,7 +106,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
             abi.encodeWithSelector(IDefiSimplify7702Account.CallbackNotAwaiting.selector, 0, uint8(3));
 
         vm.expectRevert(_wrappedFlashLoanTargetFailure(0, replayFailure));
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         assertEq(flashLoanPool.callbackCount(), 0, "replayed Pool call rolls back first callback");
     }
@@ -121,8 +124,13 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
 
     function test_CallbackPlanCannotTargetDelegatedAccountItself() external {
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0] =
-            _buildDynamicCall(accountUnderTest.delegatedEoa, bytes(""), _noCheckpoints(), _noPatches(), false);
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
+            accountUnderTest.delegatedEoa,
+            bytes(""),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
+            false
+        );
         bytes memory invalidSelfTarget =
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 0, accountUnderTest.delegatedEoa);
 
@@ -133,11 +141,11 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
     function test_CallbackTargetCannotEnterInheritedExecute() external {
         DynamicExecutionAdversary staticExecutionCaller = new DynamicExecutionAdversary();
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0] = _buildDynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             address(staticExecutionCaller),
             abi.encodeCall(DynamicExecutionAdversary.callAccountExecute, (accountUnderTest.delegatedEoa)),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
         bytes memory authorizationFailure = abi.encodeWithSelector(
@@ -161,11 +169,11 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
     function test_CallbackTargetCannotEnterInheritedExecuteBatch() external {
         DynamicExecutionAdversary staticExecutionCaller = new DynamicExecutionAdversary();
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0] = _buildDynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             address(staticExecutionCaller),
             abi.encodeCall(DynamicExecutionAdversary.callAccountExecuteBatch, (accountUnderTest.delegatedEoa)),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
         bytes memory authorizationFailure = abi.encodeWithSelector(
@@ -190,14 +198,16 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         PatchBalanceToken checkpointToken = new PatchBalanceToken();
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
         callbackCalls[0] = _buildRecordingCall(0, "must-not-consume-outer-checkpoint");
-        callbackCalls[0].patches = _onePatch(_checkpointDeltaPatch(address(checkpointToken), OUTER_CHECKPOINT_ID, 4));
+        callbackCalls[0].patches = DynamicCallTestBuilder.singlePatch(
+            DynamicCallTestBuilder.fullCheckpointDeltaPatch(address(checkpointToken), OUTER_CHECKPOINT_ID, 4)
+        );
 
         IDefiSimplify7702Account.DynamicCall[] memory outerCalls = new IDefiSimplify7702Account.DynamicCall[](2);
-        outerCalls[0] = _buildDynamicCall(
+        outerCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             address(checkpointToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(100))),
-            _oneCheckpoint(address(checkpointToken), OUTER_CHECKPOINT_ID),
-            _noPatches(),
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), OUTER_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
         outerCalls[1] = _buildFlashLoanCall(address(flashAsset), FLASH_PRINCIPAL, FLASH_PREMIUM, callbackCalls);
@@ -213,18 +223,20 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
     function test_OuterInvocationCannotConsumeCheckpointCreatedOnlyByCallback() external {
         PatchBalanceToken checkpointToken = new PatchBalanceToken();
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0] = _buildDynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             address(checkpointToken),
             abi.encodeCall(PatchBalanceToken.produce, (uint256(40))),
-            _oneCheckpoint(address(checkpointToken), CALLBACK_CHECKPOINT_ID),
-            _noPatches(),
+            DynamicCallTestBuilder.singleCheckpoint(address(checkpointToken), CALLBACK_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
 
         IDefiSimplify7702Account.DynamicCall[] memory outerCalls = new IDefiSimplify7702Account.DynamicCall[](2);
         outerCalls[0] = _buildFlashLoanCall(address(flashAsset), FLASH_PRINCIPAL, FLASH_PREMIUM, callbackCalls);
         outerCalls[1] = _buildRecordingCall(0, "must-not-consume-callback-checkpoint");
-        outerCalls[1].patches = _onePatch(_checkpointDeltaPatch(address(checkpointToken), CALLBACK_CHECKPOINT_ID, 4));
+        outerCalls[1].patches = DynamicCallTestBuilder.singlePatch(
+            DynamicCallTestBuilder.fullCheckpointDeltaPatch(address(checkpointToken), CALLBACK_CHECKPOINT_ID, 4)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.CheckpointNotFound.selector, 1, 0, CALLBACK_CHECKPOINT_ID)
@@ -242,7 +254,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         );
 
         vm.expectRevert(_wrappedFlashLoanTargetFailure(0, targetFailure));
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         assertEq(flashAsset.balanceOf(address(flashLoanPool)), FLASH_PRINCIPAL, "Pool balance unchanged");
         assertEq(
@@ -274,7 +286,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         );
 
         vm.expectRevert(_wrappedFlashLoanTargetFailure(0, targetFailure));
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         assertEq(flashAsset.balanceOf(address(flashLoanPool)), FLASH_PRINCIPAL, "Pool pull rolled back");
         assertEq(flashAsset.balanceOf(accountUnderTest.delegatedEoa), FLASH_PREMIUM, "account repayment rolled back");
@@ -292,7 +304,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         );
 
         vm.expectRevert(residualAllowance);
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
     }
 
     function test_PoolCannotPullMoreThanExactApprovedRepayment() external {
@@ -307,7 +319,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         );
 
         vm.expectRevert(_wrappedFlashLoanTargetFailure(0, excessivePullFailure));
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
     }
 
     function test_FeeOnTransferAssetFailsRepaymentCoverageAndRollsBackPrincipalTransfer() external {
@@ -322,7 +334,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         );
 
         vm.expectRevert(_wrappedFlashLoanTargetFailure(0, insufficientRepayment));
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         assertEq(flashAsset.balanceOf(address(flashLoanPool)), FLASH_PRINCIPAL, "fee transfer rolled back");
     }
@@ -334,7 +346,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         );
         flashAsset.setApprovalReentry(accountUnderTest.delegatedEoa, replayCalldata, true);
 
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
         assertEq(flashAsset.approvalReentryCount(), 1, "only exact nonzero approval attempts reentry");
         assertFalse(flashAsset.lastApprovalReentrySucceeded(), "reentrant callback must fail");
@@ -351,11 +363,11 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         uint256 revertDataSize = 4_096;
         bytes memory completeRevertData = new bytes(revertDataSize);
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0] = _buildDynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             address(revertDataTarget),
             abi.encodeCall(DynamicExecutionAdversary.failWithReturnDataSize, (revertDataSize)),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
         bytes memory callbackCallFailure = abi.encodeWithSelector(
@@ -372,7 +384,7 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
 
     function test_SuccessfulCallbackExecutionWritesNoPermanentDelegatedAccountStorage() external {
         vm.record();
-        _executeFlashLoan(_emptyCallbackPlan(), FLASH_PREMIUM);
+        _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
         (, bytes32[] memory permanentWrites) = vm.accesses(accountUnderTest.delegatedEoa);
 
         assertEq(permanentWrites.length, 0, "callback path wrote permanent delegated-account storage");

@@ -13,6 +13,7 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IBaseUniswapV3Pool, IBaseUniswapV3SwapRouter02} from "./BaseAaveV3DynamicStrategyFixture.sol";
 import {BaseAaveV3StaticFlowFixture, IBaseAaveV3Pool, IBaseAaveReserveToken} from "./BaseAaveV3StaticFlowFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 /// @dev Test-only Aave V3 Pool surface needed by the flash-assisted lifecycle proof.
 interface IBaseAaveV3FlashLifecyclePool is IBaseAaveV3Pool, IAaveV3FlashLoanSimplePool {
@@ -81,7 +82,6 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
     uint32 internal constant EXACT_INPUT_AMOUNT_ARGUMENT_OFFSET = 132;
     uint32 internal constant BALANCE_OF_ACCOUNT_ARGUMENT_OFFSET = 4;
     uint32 internal constant FIRST_RETURN_WORD_OFFSET = 0;
-    uint16 internal constant ALL_OF_BALANCE = 10_000;
 
     bytes32 internal constant LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID = keccak256("dsc-82.leverage.swap-output-cbeth");
     bytes32 internal constant PARTIAL_CALLBACK_WITHDRAWAL_CHECKPOINT_ID =
@@ -284,28 +284,30 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
             _buildLeverageOpenCallbackCalls(delegatedEoa, minimumCbEthOutput, repaymentBorrowAmount);
 
         calls = new IDefiSimplify7702Account.DynamicCall[](7);
-        calls[0] = _plainDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             AAVE_V3_POOL, abi.encodeCall(IBaseAaveV3FlashLifecyclePool.setUserEMode, (ETH_CORRELATED_EMODE_CATEGORY))
         );
-        calls[1] = _plainDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             BASE_CBETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, LEVERAGE_INITIAL_CBETH_SUPPLY))
         );
-        calls[2] = _plainDynamicCall(
+        calls[2] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.supply, (BASE_CBETH, LEVERAGE_INITIAL_CBETH_SUPPLY, delegatedEoa, NO_REFERRAL_CODE)
             )
         );
-        calls[3] = _flashLoanCall(delegatedEoa, LEVERAGE_FLASH_WETH, maximumPremium, callbackCalls, _noPatches());
-        calls[4] = _plainDynamicCall(
+        calls[3] = _flashLoanCall(
+            delegatedEoa, LEVERAGE_FLASH_WETH, maximumPremium, callbackCalls, DynamicCallTestBuilder.noPatches()
+        );
+        calls[4] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (AAVE_V3_POOL, minimumHealthFactor))
         );
-        calls[5] = _plainDynamicCall(
+        calls[5] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertBalanceAtLeast, (BASE_WETH, EXISTING_WETH_INVENTORY))
         );
-        calls[6] = _plainDynamicCall(
+        calls[6] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertBalanceAtLeast, (BASE_CBETH, EXISTING_CBETH_INVENTORY))
         );
@@ -317,7 +319,7 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         uint256 repaymentBorrowAmount
     ) private pure returns (IDefiSimplify7702Account.DynamicCall[] memory callbackCalls) {
         callbackCalls = new IDefiSimplify7702Account.DynamicCall[](5);
-        callbackCalls[0] = _plainDynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             BASE_WETH, abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, LEVERAGE_FLASH_WETH))
         );
 
@@ -331,32 +333,36 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
                 amountOutMinimum: minimumCbEthOutput,
                 sqrtPriceLimitX96: MAXIMUM_CBETH_PER_WETH_SQRT_PRICE_X96
             });
-        callbackCalls[1] = _dynamicCall(
+        callbackCalls[1] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_UNISWAP_V3_SWAP_ROUTER_02,
             abi.encodeCall(IBaseUniswapV3SwapRouter02.exactInputSingle, (swapParams)),
-            _oneCheckpoint(BASE_CBETH, LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID),
-            _noPatches(),
+            DynamicCallTestBuilder.singleCheckpoint(BASE_CBETH, LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
-        callbackCalls[2] = _dynamicCall(
+        callbackCalls[2] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_CBETH,
             abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_CBETH, LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_CBETH, LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET
+                )
             ),
             false
         );
-        callbackCalls[3] = _dynamicCall(
+        callbackCalls[3] = DynamicCallTestBuilder.buildZeroValueCall(
             AAVE_V3_POOL,
             abi.encodeCall(IBaseAaveV3Pool.supply, (BASE_CBETH, 0, delegatedEoa, NO_REFERRAL_CODE)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_CBETH, LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID, AAVE_AMOUNT_ARGUMENT_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_CBETH, LEVERAGE_SWAP_OUTPUT_CHECKPOINT_ID, AAVE_AMOUNT_ARGUMENT_OFFSET
+                )
             ),
             false
         );
-        callbackCalls[4] = _plainDynamicCall(
+        callbackCalls[4] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.borrow,
@@ -376,41 +382,47 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
             _buildPartialDeleverageCallbackCalls(delegatedEoa, maximumCbEthInput);
 
         calls = new IDefiSimplify7702Account.DynamicCall[](7);
-        calls[0] = _dynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_CBETH,
             abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0)),
-            _oneCheckpoint(BASE_CBETH, PARTIAL_OUTER_REMAINDER_CHECKPOINT_ID),
-            _noPatches(),
+            DynamicCallTestBuilder.singleCheckpoint(BASE_CBETH, PARTIAL_OUTER_REMAINDER_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
-        calls[1] = _flashLoanCall(delegatedEoa, PARTIAL_FLASH_WETH, maximumPremium, callbackCalls, _noPatches());
-        calls[2] = _dynamicCall(
+        calls[1] = _flashLoanCall(
+            delegatedEoa, PARTIAL_FLASH_WETH, maximumPremium, callbackCalls, DynamicCallTestBuilder.noPatches()
+        );
+        calls[2] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_CBETH,
             abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_CBETH, PARTIAL_OUTER_REMAINDER_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_CBETH, PARTIAL_OUTER_REMAINDER_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET
+                )
             ),
             false
         );
-        calls[3] = _dynamicCall(
+        calls[3] = DynamicCallTestBuilder.buildZeroValueCall(
             AAVE_V3_POOL,
             abi.encodeCall(IBaseAaveV3Pool.supply, (BASE_CBETH, 0, delegatedEoa, NO_REFERRAL_CODE)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_CBETH, PARTIAL_OUTER_REMAINDER_CHECKPOINT_ID, AAVE_AMOUNT_ARGUMENT_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_CBETH, PARTIAL_OUTER_REMAINDER_CHECKPOINT_ID, AAVE_AMOUNT_ARGUMENT_OFFSET
+                )
             ),
             false
         );
-        calls[4] = _plainDynamicCall(
+        calls[4] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (AAVE_V3_POOL, minimumHealthFactor))
         );
-        calls[5] = _plainDynamicCall(
+        calls[5] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertBalanceAtLeast, (BASE_WETH, EXISTING_WETH_INVENTORY))
         );
-        calls[6] = _plainDynamicCall(
+        calls[6] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertBalanceAtLeast, (BASE_CBETH, EXISTING_CBETH_INVENTORY))
         );
@@ -423,35 +435,37 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
     {
         uint256 requiredRepayment = PARTIAL_FLASH_WETH + _aaveFlashPremium(PARTIAL_FLASH_WETH);
         callbackCalls = new IDefiSimplify7702Account.DynamicCall[](6);
-        callbackCalls[0] =
-            _plainDynamicCall(BASE_WETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, PARTIAL_FLASH_WETH)));
-        callbackCalls[1] = _plainDynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            BASE_WETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, PARTIAL_FLASH_WETH))
+        );
+        callbackCalls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.repay, (BASE_WETH, PARTIAL_FLASH_WETH, VARIABLE_INTEREST_RATE_MODE, delegatedEoa)
             )
         );
-        callbackCalls[2] = _dynamicCall(
+        callbackCalls[2] = DynamicCallTestBuilder.buildZeroValueCall(
             AAVE_V3_POOL,
             abi.encodeCall(IBaseAaveV3Pool.withdraw, (BASE_CBETH, PARTIAL_CBETH_WITHDRAWAL, delegatedEoa)),
-            _oneCheckpoint(BASE_CBETH, PARTIAL_CALLBACK_WITHDRAWAL_CHECKPOINT_ID),
-            _noPatches(),
+            DynamicCallTestBuilder.singleCheckpoint(BASE_CBETH, PARTIAL_CALLBACK_WITHDRAWAL_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
-        callbackCalls[3] = _dynamicCall(
+        callbackCalls[3] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_CBETH,
             abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
                     BASE_CBETH, PARTIAL_CALLBACK_WITHDRAWAL_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET
                 )
             ),
             false
         );
         callbackCalls[4] = _exactOutputWethSwapCall(delegatedEoa, requiredRepayment, maximumCbEthInput);
-        callbackCalls[5] =
-            _plainDynamicCall(BASE_CBETH, abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0)));
+        callbackCalls[5] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            BASE_CBETH, abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0))
+        );
     }
 
     function _buildFlashAssistedFullClose(
@@ -471,9 +485,13 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
             0,
             maximumPremium,
             callbackCalls,
-            _onePatch(_currentBalancePatch(BASE_AAVE_VARIABLE_DEBT_WETH, FLASH_LOAN_AMOUNT_ARGUMENT_OFFSET))
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCurrentBalancePatch(
+                    BASE_AAVE_VARIABLE_DEBT_WETH, FLASH_LOAN_AMOUNT_ARGUMENT_OFFSET
+                )
+            )
         );
-        calls[1] = _plainDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(staticAssertions),
             abi.encodeCall(
                 IStaticCallUint256Assertions.assertStaticCallUint256AtMost,
@@ -486,11 +504,11 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
                 )
             )
         );
-        calls[2] = _plainDynamicCall(
+        calls[2] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (AAVE_V3_POOL, type(uint256).max))
         );
-        calls[3] = _plainDynamicCall(
+        calls[3] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(
                 IFlowAssertions.assertBalanceAtLeast,
@@ -506,38 +524,45 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
     {
         uint256 requiredRepayment = observedDebt + _aaveFlashPremium(observedDebt);
         callbackCalls = new IDefiSimplify7702Account.DynamicCall[](6);
-        callbackCalls[0] = _dynamicCall(
+        callbackCalls[0] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_WETH,
             abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0)),
-            _noCheckpoints(),
-            _onePatch(_currentBalancePatch(BASE_AAVE_VARIABLE_DEBT_WETH, ERC20_APPROVE_AMOUNT_OFFSET)),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCurrentBalancePatch(
+                    BASE_AAVE_VARIABLE_DEBT_WETH, ERC20_APPROVE_AMOUNT_OFFSET
+                )
+            ),
             false
         );
-        callbackCalls[1] = _plainDynamicCall(
+        callbackCalls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.repay, (BASE_WETH, type(uint256).max, VARIABLE_INTEREST_RATE_MODE, delegatedEoa)
             )
         );
-        callbackCalls[2] = _dynamicCall(
+        callbackCalls[2] = DynamicCallTestBuilder.buildZeroValueCall(
             AAVE_V3_POOL,
             abi.encodeCall(IBaseAaveV3Pool.withdraw, (BASE_CBETH, type(uint256).max, delegatedEoa)),
-            _oneCheckpoint(BASE_CBETH, FULL_CLOSE_WITHDRAWAL_CHECKPOINT_ID),
-            _noPatches(),
+            DynamicCallTestBuilder.singleCheckpoint(BASE_CBETH, FULL_CLOSE_WITHDRAWAL_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches(),
             false
         );
-        callbackCalls[3] = _dynamicCall(
+        callbackCalls[3] = DynamicCallTestBuilder.buildZeroValueCall(
             BASE_CBETH,
             abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_CBETH, FULL_CLOSE_WITHDRAWAL_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_CBETH, FULL_CLOSE_WITHDRAWAL_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_OFFSET
+                )
             ),
             false
         );
         callbackCalls[4] = _exactOutputWethSwapCall(delegatedEoa, requiredRepayment, maximumCbEthInput);
-        callbackCalls[5] =
-            _plainDynamicCall(BASE_CBETH, abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0)));
+        callbackCalls[5] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            BASE_CBETH, abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0))
+        );
     }
 
     function _exactOutputWethSwapCall(address delegatedEoa, uint256 wethAmountOut, uint256 maximumCbEthInput)
@@ -555,7 +580,7 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
                 amountInMaximum: maximumCbEthInput,
                 sqrtPriceLimitX96: MINIMUM_CBETH_PER_WETH_SQRT_PRICE_X96
             });
-        return _plainDynamicCall(
+        return DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             BASE_UNISWAP_V3_SWAP_ROUTER_02,
             abi.encodeCall(IBaseUniswapV3FlashLifecycleRouter.exactOutputSingle, (swapParams))
         );
@@ -571,94 +596,15 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         bytes memory params = abi.encode(
             IDefiSimplify7702Account.CallbackEnvelope({maxPremium: maximumPremium, callbackCalls: callbackCalls})
         );
-        return _dynamicCall(
+        return DynamicCallTestBuilder.buildZeroValueCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IAaveV3FlashLoanSimplePool.flashLoanSimple, (delegatedEoa, BASE_WETH, amount, params, NO_REFERRAL_CODE)
             ),
-            _noCheckpoints(),
+            DynamicCallTestBuilder.noCheckpoints(),
             patches,
             true
         );
-    }
-
-    function _plainDynamicCall(address target, bytes memory data)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory)
-    {
-        return _dynamicCall(target, data, _noCheckpoints(), _noPatches(), false);
-    }
-
-    function _dynamicCall(
-        address target,
-        bytes memory data,
-        IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpointsBefore,
-        IDefiSimplify7702Account.BalancePatch[] memory patches,
-        bool expectsCallback
-    ) internal pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall = IDefiSimplify7702Account.DynamicCall({
-                target: target,
-                value: 0,
-                data: data,
-                checkpointsBefore: checkpointsBefore,
-                patches: patches,
-                expectsCallback: expectsCallback
-            });
-    }
-
-    function _checkpointDeltaPatch(address token, bytes32 checkpointId, uint32 offset)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch memory patch)
-    {
-        patch = IDefiSimplify7702Account.BalancePatch({
-            token: token,
-            checkpointId: checkpointId,
-            offset: offset,
-            bps: ALL_OF_BALANCE,
-            source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
-        });
-    }
-
-    function _currentBalancePatch(address token, uint32 offset)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch memory patch)
-    {
-        patch = IDefiSimplify7702Account.BalancePatch({
-            token: token,
-            checkpointId: bytes32(0),
-            offset: offset,
-            bps: ALL_OF_BALANCE,
-            source: IDefiSimplify7702Account.BalanceSource.CurrentBalance
-        });
-    }
-
-    function _oneCheckpoint(address token, bytes32 checkpointId)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
-    {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: token, id: checkpointId});
-    }
-
-    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
-    {
-        patches = new IDefiSimplify7702Account.BalancePatch[](1);
-        patches[0] = patch;
-    }
-
-    function _noCheckpoints() internal pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-    }
-
-    function _noPatches() internal pure returns (IDefiSimplify7702Account.BalancePatch[] memory patches) {
-        patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 
     function _executeDynamicCallsAsDelegatedEoa(
