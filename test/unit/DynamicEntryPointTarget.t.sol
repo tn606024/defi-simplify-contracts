@@ -7,6 +7,7 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {IStakeManager} from "@account-abstraction/contracts/interfaces/IStakeManager.sol";
 import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
     address payable private constant BENEFICIARY = payable(address(0xBEEF));
@@ -23,8 +24,8 @@ contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
     function test_EntryPointDepositToIsAValidDynamicTarget() external {
         uint256 deposit = 0.25 ether;
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
-            address(entryPoint), abi.encodeCall(IStakeManager.depositTo, (accountUnderTest.delegatedEoa)), deposit
+        calls[0] = DynamicCallTestBuilder.buildOrdinaryCall(
+            address(entryPoint), deposit, abi.encodeCall(IStakeManager.depositTo, (accountUnderTest.delegatedEoa))
         );
 
         vm.prank(accountUnderTest.delegatedEoa, accountUnderTest.delegatedEoa);
@@ -38,8 +39,8 @@ contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
         PackedUserOperation[] memory operations = new PackedUserOperation[](0);
         bytes memory targetReason = abi.encodeWithSelector(EntryPoint.Reentrancy.selector);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
-            address(entryPoint), abi.encodeCall(IEntryPoint.handleOps, (operations, BENEFICIARY)), 0
+        calls[0] = DynamicCallTestBuilder.buildOrdinaryCall(
+            address(entryPoint), 0, abi.encodeCall(IEntryPoint.handleOps, (operations, BENEFICIARY))
         );
 
         vm.expectRevert(
@@ -49,17 +50,5 @@ contract DynamicEntryPointTargetTest is DelegatedAccountFixture {
         );
         vm.prank(accountUnderTest.delegatedEoa, accountUnderTest.delegatedEoa);
         _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
-    }
-
-    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData, uint256 callValue)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-    {
-        dynamicCall.target = callTarget;
-        dynamicCall.value = callValue;
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 }

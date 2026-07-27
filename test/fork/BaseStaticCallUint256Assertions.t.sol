@@ -49,7 +49,7 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         _defiSimplifyAccountView(accountUnderTest).executeBatch(calls);
     }
 
-    function test_IndependentCheckerWorksAsFinalDynamicStepAgainstBaseAave() external {
+    function test_DynamicBatchUsesIndependentCheckerAsFinalAaveHealthFactorStep() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0].target = address(genericAssertions);
         calls[0].data = _encodeAaveHealthFactorAssertion();

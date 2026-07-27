@@ -9,8 +9,9 @@ import {Vm} from "forge-std/Vm.sol";
 import {DynamicExecutionAdversary} from "../mocks/DynamicExecutionAdversary.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
-contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
+contract DynamicExecutionTest is DelegatedAccountFixture {
     bytes4 private constant CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR = 0xecadebe3;
     bytes4 private constant EXECUTE_OPERATION_SELECTOR = 0x1b11d0ff;
     bytes4 private constant CALLBACK_ENABLED_DYNAMIC_INTERFACE_ID = 0xf7bc3b1c;
@@ -99,7 +100,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
 
     function test_MaliciousCallbackFailsAuthorizationBeforeReadingActiveDynamicLock() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.callAccountDynamic, (accountUnderTest.delegatedEoa))
         );
@@ -120,7 +121,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
 
     function test_MaliciousCallbackCannotEnterInheritedExecute() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(adversarialTarget),
             abi.encodeCall(DynamicExecutionAdversary.callAccountExecute, (accountUnderTest.delegatedEoa))
         );
@@ -141,7 +142,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
 
     function test_MaliciousCallbackCannotEnterInheritedExecuteBatch() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(adversarialTarget),
             abi.encodeCall(DynamicExecutionAdversary.callAccountExecuteBatch, (accountUnderTest.delegatedEoa))
         );
@@ -170,7 +171,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
     function test_ZeroTargetRevertsWithCallIndex() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
         calls[0] = _buildRecordingCall(29, 0, "rolled-back");
-        calls[1] = _buildUnpatchedDynamicCall(address(0), "");
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(address(0), "");
 
         vm.expectRevert(abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 1, address(0)));
         _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
@@ -180,7 +181,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
 
     function test_SelfTargetRevertsWithCallIndex() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(accountUnderTest.delegatedEoa, "");
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(accountUnderTest.delegatedEoa, "");
 
         vm.expectRevert(
             abi.encodeWithSelector(IDefiSimplify7702Account.InvalidTarget.selector, 0, accountUnderTest.delegatedEoa)
@@ -193,7 +194,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         bytes memory targetReason = abi.encodeWithSelector(DynamicExecutionTarget.TargetFailure.selector, 31, payload);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
         calls[0] = _buildRecordingCall(37, 0, "rolled-back");
-        calls[1] = _buildUnpatchedDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(recordingTarget), abi.encodeCall(DynamicExecutionTarget.fail, (31, payload))
         );
 
@@ -215,7 +216,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         bytes memory targetReason = abi.encodeWithSelector(DynamicExecutionTarget.TargetFailure.selector, 61, payload);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
         calls[0] = _buildRecordingCall(67, 0.2 ether, "rolled-back-large-revert");
-        calls[1] = _buildUnpatchedDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(recordingTarget), abi.encodeCall(DynamicExecutionTarget.fail, (61, payload))
         );
 
@@ -233,7 +234,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
     function test_ReturndataBombCanExhaustGasBeforeIndexedWrapping() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
         calls[0] = _buildRecordingCall(71, 0.2 ether, "rolled-back-returndata-bomb");
-        calls[1] = _buildUnpatchedDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(adversarialTarget),
             abi.encodeCall(DynamicExecutionAdversary.failWithReturnDataSize, (RETURNDATA_BOMB_SIZE))
         );
@@ -272,7 +273,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
             abi.encodeWithSelector(DynamicExecutionAdversary.TargetAssertionFailed.selector, payload);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
         calls[0] = _buildRecordingCall(83, 0.3 ether, "rolled-back-assertion");
-        calls[1] = _buildUnpatchedDynamicCall(
+        calls[1] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(adversarialTarget), abi.encodeCall(DynamicExecutionAdversary.assertCondition, (false, payload))
         );
 
@@ -315,7 +316,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         payload[0] = 0xA1;
         payload[8_191] = 0xB2;
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(adversarialTarget), abi.encodeCall(DynamicExecutionAdversary.returnPayload, (payload))
         );
         calls[1] = _buildRecordingCall(101, 0, "after-return-data");
@@ -330,7 +331,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         DelegatedDefiSimplifyAccount memory reentrantAccount =
             _deployDelegatedDefiSimplifyAccount(IEntryPoint(address(recordingTarget)), REENTRANT_ACCOUNT_AUTHORITY_KEY);
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(recordingTarget),
             abi.encodeCall(DynamicExecutionTarget.callAccountDynamic, (reentrantAccount.delegatedEoa))
         );
@@ -359,7 +360,7 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
 
     function test_RevertRollsBackTransientLock() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = _buildUnpatchedDynamicCall(
+        calls[0] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(recordingTarget), abi.encodeCall(DynamicExecutionTarget.fail, (47, bytes("rollback")))
         );
         (bool success,) =
@@ -389,29 +390,8 @@ contract DynamicExecutionScaffoldTest is DelegatedAccountFixture {
         view
         returns (IDefiSimplify7702Account.DynamicCall memory)
     {
-        return _buildUnpatchedDynamicCall(
-            address(recordingTarget), abi.encodeCall(DynamicExecutionTarget.record, (amount, payload)), value
+        return DynamicCallTestBuilder.buildOrdinaryCall(
+            address(recordingTarget), value, abi.encodeCall(DynamicExecutionTarget.record, (amount, payload))
         );
-    }
-
-    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory)
-    {
-        return _buildUnpatchedDynamicCall(callTarget, callData, 0);
-    }
-
-    function _buildUnpatchedDynamicCall(address callTarget, bytes memory callData, uint256 callValue)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-    {
-        dynamicCall.target = callTarget;
-        dynamicCall.value = callValue;
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-        dynamicCall.expectsCallback = false;
     }
 }

@@ -7,6 +7,7 @@ import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint
 import {AaveV3FlashLoanPoolMock, FlashLoanAssetMock} from "../mocks/AaveV3FlashLoanMocks.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "./DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "./DynamicCallTestBuilder.sol";
 
 /// @dev Shared reviewer-readable fixture for callback adversarial, fuzz, invariant-adjacent,
 ///      and gas tests. The production account is always exercised through a real delegated EOA.
@@ -44,7 +45,8 @@ abstract contract AaveV3FlashLoanFixture is DelegatedAccountFixture {
     ) internal {
         IDefiSimplify7702Account.DynamicCall memory flashLoanCall =
             _buildFlashLoanCall(address(asset), principal, maximumPremium, callbackCalls);
-        _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(_singleDynamicCall(flashLoanCall));
+        _dynamicExecutionInterfaceView(accountUnderTest)
+            .executeBatchDynamic(DynamicCallTestBuilder.singleCall(flashLoanCall));
     }
 
     function _buildFlashLoanCall(
@@ -54,14 +56,14 @@ abstract contract AaveV3FlashLoanFixture is DelegatedAccountFixture {
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls
     ) internal view returns (IDefiSimplify7702Account.DynamicCall memory) {
         bytes memory params = abi.encode(_buildCallbackEnvelope(maximumPremium, callbackCalls));
-        return _buildDynamicCall(
+        return DynamicCallTestBuilder.buildZeroValueCall(
             address(flashLoanPool),
             abi.encodeCall(
                 IAaveV3FlashLoanSimplePool.flashLoanSimple,
                 (accountUnderTest.delegatedEoa, asset, principal, params, uint16(0))
             ),
-            _noCheckpoints(),
-            _noPatches(),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
             true
         );
     }
@@ -71,27 +73,9 @@ abstract contract AaveV3FlashLoanFixture is DelegatedAccountFixture {
         view
         returns (IDefiSimplify7702Account.DynamicCall memory)
     {
-        return _buildDynamicCall(
-            address(callbackRecordingTarget),
-            abi.encodeCall(DynamicExecutionTarget.record, (amount, payload)),
-            _noCheckpoints(),
-            _noPatches(),
-            false
+        return DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            address(callbackRecordingTarget), abi.encodeCall(DynamicExecutionTarget.record, (amount, payload))
         );
-    }
-
-    function _buildDynamicCall(
-        address target,
-        bytes memory data,
-        IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints,
-        IDefiSimplify7702Account.BalancePatch[] memory patches,
-        bool expectsCallback
-    ) internal pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall.target = target;
-        dynamicCall.data = data;
-        dynamicCall.checkpointsBefore = checkpoints;
-        dynamicCall.patches = patches;
-        dynamicCall.expectsCallback = expectsCallback;
     }
 
     function _buildCallbackEnvelope(uint256 maximumPremium, IDefiSimplify7702Account.DynamicCall[] memory callbackCalls)
@@ -101,73 +85,6 @@ abstract contract AaveV3FlashLoanFixture is DelegatedAccountFixture {
     {
         envelope.maxPremium = maximumPremium;
         envelope.callbackCalls = callbackCalls;
-    }
-
-    function _oneCheckpoint(address token, bytes32 checkpointId)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
-    {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: token, id: checkpointId});
-    }
-
-    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
-    {
-        patches = new IDefiSimplify7702Account.BalancePatch[](1);
-        patches[0] = patch;
-    }
-
-    function _checkpointDeltaPatch(address token, bytes32 checkpointId, uint32 offset)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch memory)
-    {
-        return IDefiSimplify7702Account.BalancePatch({
-            token: token,
-            checkpointId: checkpointId,
-            offset: offset,
-            bps: 10_000,
-            source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
-        });
-    }
-
-    function _currentBalancePatch(address token, uint32 offset, uint16 bps)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch memory)
-    {
-        return IDefiSimplify7702Account.BalancePatch({
-            token: token,
-            checkpointId: bytes32(0),
-            offset: offset,
-            bps: bps,
-            source: IDefiSimplify7702Account.BalanceSource.CurrentBalance
-        });
-    }
-
-    function _emptyCallbackPlan() internal pure returns (IDefiSimplify7702Account.DynamicCall[] memory callbackCalls) {
-        callbackCalls = new IDefiSimplify7702Account.DynamicCall[](0);
-    }
-
-    function _noCheckpoints() internal pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-    }
-
-    function _noPatches() internal pure returns (IDefiSimplify7702Account.BalancePatch[] memory patches) {
-        patches = new IDefiSimplify7702Account.BalancePatch[](0);
-    }
-
-    function _singleDynamicCall(IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-        internal
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall[] memory calls)
-    {
-        calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = dynamicCall;
     }
 
     function _wrappedFlashLoanTargetFailure(uint256 outerCallIndex, bytes memory targetReason)

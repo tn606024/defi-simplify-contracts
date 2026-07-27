@@ -8,6 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseAaveV3StaticFlowFixture, IBaseAaveV3Pool} from "./BaseAaveV3StaticFlowFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 /// @dev Test-only direct swap surface for Base's official Uniswap V3 SwapRouter02.
 interface IBaseUniswapV3SwapRouter02 {
@@ -72,7 +73,6 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
     uint32 internal constant ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET = 36;
     uint32 internal constant SWAP_ROUTER_AMOUNT_IN_CALLDATA_OFFSET = 132;
     uint32 internal constant AAVE_SUPPLY_AMOUNT_CALLDATA_OFFSET = 36;
-    uint16 internal constant FULL_CHECKPOINT_DELTA_BPS = 10_000;
 
     bytes32 internal constant BORROWED_USDC_CHECKPOINT_ID = keccak256("dsc-57.borrowed-usdc");
     bytes32 internal constant SWAPPED_WETH_CHECKPOINT_ID = keccak256("dsc-57.swapped-weth");
@@ -153,6 +153,25 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
         vm.deal(delegatedEoa, EXISTING_NATIVE_INVENTORY);
     }
 
+    /// @dev Builds the guarded WETH/USDC leverage loop exercised against Base.
+    ///
+    /// The delegated EOA starts with the configured WETH supply amount plus
+    /// separate WETH, USDC, and native-ETH inventory sentinels. Calls execute
+    /// in this order:
+    /// 1. approve and supply only the configured initial WETH;
+    /// 2. checkpoint USDC immediately before borrowing;
+    /// 3. approve and swap exactly the observed borrowed-USDC delta;
+    /// 4. checkpoint WETH immediately before the swap, then approve and supply
+    ///    exactly the observed swap-output delta; and
+    /// 5. require the final Aave V3 health factor to meet the configured bound.
+    ///
+    /// Both checkpoint deltas deliberately exclude pre-existing inventory. This
+    /// direct SwapRouter02 function has no deadline field; amountOutMinimum and
+    /// sqrtPriceLimitX96 are the protocol-native economic limits. Exact delta
+    /// approvals constrain the router and Pool inputs, and the final assertion
+    /// is the account-level post-condition. Every forced validation, swap, or
+    /// assertion failure must roll back all earlier calls, balances, allowances,
+    /// checkpoints, and protocol state in the batch.
     function _buildWethCollateralUsdcDebtLoopStrategy(
         address delegatedEoa,
         FlowAssertions flowAssertions,
@@ -162,30 +181,33 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
     ) internal pure returns (IDefiSimplify7702Account.DynamicCall[] memory calls) {
         calls = new IDefiSimplify7702Account.DynamicCall[](8);
 
-        calls[INITIAL_APPROVE_CALL_INDEX] =
-            _plainDynamicCall(BASE_WETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, INITIAL_WETH_SUPPLY_AMOUNT)));
-        calls[INITIAL_SUPPLY_CALL_INDEX] = _plainDynamicCall(
+        calls[INITIAL_APPROVE_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            BASE_WETH, abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, INITIAL_WETH_SUPPLY_AMOUNT))
+        );
+        calls[INITIAL_SUPPLY_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.supply, (BASE_WETH, INITIAL_WETH_SUPPLY_AMOUNT, delegatedEoa, NO_REFERRAL_CODE)
             )
         );
 
-        calls[BORROW_CALL_INDEX] = _dynamicCall(
+        calls[BORROW_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             AAVE_V3_POOL,
             abi.encodeCall(
                 IBaseAaveV3Pool.borrow,
                 (BASE_USDC, GUARDED_USDC_BORROW_AMOUNT, VARIABLE_INTEREST_RATE_MODE, NO_REFERRAL_CODE, delegatedEoa)
             ),
-            _oneCheckpoint(BASE_USDC, BORROWED_USDC_CHECKPOINT_ID),
-            _noPatches()
+            DynamicCallTestBuilder.singleCheckpoint(BASE_USDC, BORROWED_USDC_CHECKPOINT_ID),
+            DynamicCallTestBuilder.noPatches()
         );
-        calls[ROUTER_APPROVE_CALL_INDEX] = _dynamicCall(
+        calls[ROUTER_APPROVE_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             BASE_USDC,
             abi.encodeCall(IERC20.approve, (BASE_UNISWAP_V3_SWAP_ROUTER_02, 0)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_USDC, BORROWED_USDC_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_USDC, BORROWED_USDC_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET
+                )
             )
         );
 
@@ -199,96 +221,40 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
                 amountOutMinimum: minimumSwapOutput,
                 sqrtPriceLimitX96: sqrtPriceLimitX96
             });
-        calls[SWAP_CALL_INDEX] = _dynamicCall(
+        calls[SWAP_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             BASE_UNISWAP_V3_SWAP_ROUTER_02,
             abi.encodeCall(IBaseUniswapV3SwapRouter02.exactInputSingle, (swapParams)),
-            _oneCheckpoint(BASE_WETH, SWAPPED_WETH_CHECKPOINT_ID),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_USDC, BORROWED_USDC_CHECKPOINT_ID, SWAP_ROUTER_AMOUNT_IN_CALLDATA_OFFSET)
+            DynamicCallTestBuilder.singleCheckpoint(BASE_WETH, SWAPPED_WETH_CHECKPOINT_ID),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_USDC, BORROWED_USDC_CHECKPOINT_ID, SWAP_ROUTER_AMOUNT_IN_CALLDATA_OFFSET
+                )
             )
         );
-        calls[OUTPUT_APPROVE_CALL_INDEX] = _dynamicCall(
+        calls[OUTPUT_APPROVE_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             BASE_WETH,
             abi.encodeCall(IERC20.approve, (AAVE_V3_POOL, 0)),
-            _noCheckpoints(),
-            _onePatch(
-                _checkpointDeltaPatch(BASE_WETH, SWAPPED_WETH_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET)
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_WETH, SWAPPED_WETH_CHECKPOINT_ID, ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET
+                )
             )
         );
-        calls[OUTPUT_SUPPLY_CALL_INDEX] = _dynamicCall(
+        calls[OUTPUT_SUPPLY_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueBalanceAwareCall(
             AAVE_V3_POOL,
             abi.encodeCall(IBaseAaveV3Pool.supply, (BASE_WETH, 0, delegatedEoa, NO_REFERRAL_CODE)),
-            _noCheckpoints(),
-            _onePatch(_checkpointDeltaPatch(BASE_WETH, SWAPPED_WETH_CHECKPOINT_ID, AAVE_SUPPLY_AMOUNT_CALLDATA_OFFSET))
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.singlePatch(
+                DynamicCallTestBuilder.fullCheckpointDeltaPatch(
+                    BASE_WETH, SWAPPED_WETH_CHECKPOINT_ID, AAVE_SUPPLY_AMOUNT_CALLDATA_OFFSET
+                )
+            )
         );
-        calls[HEALTH_FACTOR_ASSERTION_CALL_INDEX] = _plainDynamicCall(
+        calls[HEALTH_FACTOR_ASSERTION_CALL_INDEX] = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
             address(flowAssertions),
             abi.encodeCall(IFlowAssertions.assertAaveV3HealthFactorAtLeast, (AAVE_V3_POOL, minimumHealthFactor))
         );
-    }
-
-    function _plainDynamicCall(address target, bytes memory data)
-        private
-        pure
-        returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
-    {
-        return _dynamicCall(target, data, _noCheckpoints(), _noPatches());
-    }
-
-    function _dynamicCall(
-        address target,
-        bytes memory data,
-        IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpointsBefore,
-        IDefiSimplify7702Account.BalancePatch[] memory patches
-    ) private pure returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall = IDefiSimplify7702Account.DynamicCall({
-            target: target,
-            value: 0,
-            data: data,
-            checkpointsBefore: checkpointsBefore,
-            patches: patches,
-            expectsCallback: false
-        });
-    }
-
-    function _checkpointDeltaPatch(address token, bytes32 checkpointId, uint32 offset)
-        private
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch memory patch)
-    {
-        patch = IDefiSimplify7702Account.BalancePatch({
-            token: token,
-            checkpointId: checkpointId,
-            offset: offset,
-            bps: FULL_CHECKPOINT_DELTA_BPS,
-            source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
-        });
-    }
-
-    function _oneCheckpoint(address token, bytes32 checkpointId)
-        private
-        pure
-        returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints)
-    {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        checkpoints[0] = IDefiSimplify7702Account.BalanceCheckpoint({token: token, id: checkpointId});
-    }
-
-    function _noCheckpoints() private pure returns (IDefiSimplify7702Account.BalanceCheckpoint[] memory checkpoints) {
-        checkpoints = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-    }
-
-    function _onePatch(IDefiSimplify7702Account.BalancePatch memory patch)
-        private
-        pure
-        returns (IDefiSimplify7702Account.BalancePatch[] memory patches)
-    {
-        patches = new IDefiSimplify7702Account.BalancePatch[](1);
-        patches[0] = patch;
-    }
-
-    function _noPatches() private pure returns (IDefiSimplify7702Account.BalancePatch[] memory patches) {
-        patches = new IDefiSimplify7702Account.BalancePatch[](0);
     }
 
     function _executeDynamicCallsAsDelegatedEoa(
