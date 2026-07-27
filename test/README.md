@@ -88,7 +88,7 @@ to the final suites:
 `unit/DynamicExecutionScaffold.t.sol` was renamed
 `unit/DynamicExecution.t.sol` because the implementation is no longer a
 scaffold. After these removals and one relocated security regression, the final
-non-fork suite contains 299 tests.
+non-fork suite contains 301 tests.
 
 `.gas-snapshot` was regenerated because the names and test-only builder
 construction changed. The resulting drift is test-harness allocation/inlining
@@ -532,3 +532,26 @@ slither . --filter-paths 'lib/' --fail-high
 ```
 
 The repository-wide commands in the root `README.md` remain the release gate.
+
+## DSC-68 SDK/signer-only no-code target policy
+
+`unit/DynamicNoCodeTargetPolicy.t.sol` locks the accepted contract-side half of
+ADR-007 without changing production Solidity. It proves that:
+
+- nonempty calldata to a nonzero no-code target retains generic EVM `CALL`
+  success; and
+- a no-code call carrying value transfers the declared native ETH.
+
+These tests deliberately characterize the unsafe primitive that DS-55 must
+reject before signing except for an explicit typed and bounded EOA transfer.
+They do not claim receipt success, code existence, or simulation establishes
+target identity.
+
+Run the focused suite with:
+
+```sh
+forge test --match-path 'test/unit/DynamicNoCodeTargetPolicy.t.sol' -vvv
+```
+
+The final local suite contains 301 non-fork tests and 276 deterministic
+gas-snapshot tests.
