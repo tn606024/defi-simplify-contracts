@@ -88,7 +88,7 @@ to the final suites:
 `unit/DynamicExecutionScaffold.t.sol` was renamed
 `unit/DynamicExecution.t.sol` because the implementation is no longer a
 scaffold. After these removals and one relocated security regression, the final
-non-fork suite contains 301 tests.
+non-fork suite contains 308 tests.
 
 `.gas-snapshot` was regenerated because the names and test-only builder
 construction changed. The resulting drift is test-harness allocation/inlining
@@ -553,5 +553,5 @@ Run the focused suite with:
 forge test --match-path 'test/unit/DynamicNoCodeTargetPolicy.t.sol' -vvv
 ```
 
-The final local suite contains 301 non-fork tests and 276 deterministic
+The final local suite contains 308 non-fork tests and 276 deterministic
 gas-snapshot tests.

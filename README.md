@@ -32,13 +32,13 @@ authenticates that origin, executes an isolated callback plan, installs an exact
 zero-first-compatible repayment allowance, and requires the Pool to consume the
 allowance completely before the outer batch continues.
 
-The Solidity implementation and its Base reference flows have reached the
-DSC-58 internal review candidate. This does **not** mean the contracts are
-audited or production-ready. The project has deliberately chosen an unaudited
-experimental v1 release policy. The cross-repository SDK callback compiler,
-target-policy, and golden-vector gates remain incomplete. DSC-56 now provides a
-reproducible Base deployment candidate, but no Base deployment has been
-broadcast and no official deployed manifest or release has been published.
+The Solidity implementation and its Base reference flows have completed the
+DSC-58 internal review. This does **not** mean the contracts are audited or
+production-ready. The project has deliberately chosen an unaudited experimental
+v1 policy. The three direct immutable artifacts are deployed and exact-source
+verified on Base, but remain unreleased and not integrated into the Go SDK. The
+cross-repository SDK callback compiler, target policy, and golden-vector gates
+remain incomplete.
 
 ## v1 security analysis boundary
 
@@ -109,7 +109,7 @@ forge build --sizes
 ./script/check-static-call-uint256-assertions-surface.sh
 ./script/check-direct-immutable-artifacts.sh
 ./script/check-abi-fixtures.sh
-./script/check-base-v1-candidate-manifest.sh
+./script/check-base-v1-manifest.sh
 FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
 forge snapshot --check \
   --no-match-test 'testFuzz|invariant_' \
@@ -162,8 +162,8 @@ from external forks skip it because repository secrets are not exposed to them.
 The same workflow checks the pinned Base Aave static, guarded
 WETH-collateral/USDC-debt loop, and flash-assisted cbETH/WETH lifecycle gas
 baselines stored in `.gas-snapshot`. It also verifies the live Arachnid factory
-and performs all three deterministic candidate deployments only inside a
-disposable Base fork.
+and independently reconstructs the three official deployment payloads, runtime
+identities, and historical factory transactions without broadcasting.
 
 The guarded WETH-collateral/USDC-debt loop proof at Base block `48,961,870`
 supplies WETH, checkpoints and borrows USDC, swaps only the observed USDC delta
@@ -188,23 +188,28 @@ Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are
 expected to be committed.
 
-## Base v1 deployment candidate
+## Base v1 official deployment
 
-The reproducible candidate and its generation, independent check, and
-non-broadcast Base simulation instructions are in
-[`deployments/README.md`](deployments/README.md). The candidate addresses are
-not deployed addresses. Its machine-readable status is `candidate`,
-`not-broadcast`, `unaudited`, and `not-integrated`; it deliberately omits
-transaction hashes, source-verification URLs, audit URLs, and an assigned trust
-level until those facts exist.
+The reproducible official Base deployment manifest and independent verification
+instructions are in [`deployments/README.md`](deployments/README.md). Its
+machine-readable status is `deployed`, `official`, `unreleased`, `unaudited`,
+and `not-integrated`. Here, `official` means only that the project publishes and
+reproduces the exact artifact and deployment identity; it is not an audit,
+security guarantee, release, or SDK-readiness claim.
+
+| Artifact | Base address |
+| --- | --- |
+| `DefiSimplify7702Account` | [`0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA`](https://basescan.org/address/0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA#code) |
+| `FlowAssertions` | [`0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5`](https://basescan.org/address/0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5#code) |
+| `StaticCallUint256Assertions` | [`0x034ee940A644323463AB074DCA99504BF5a666EA`](https://basescan.org/address/0x034ee940A644323463AB074DCA99504BF5a666EA#code) |
 
 ## DSC-58 security evidence
 
-The review candidate is backed by these reproducible gates:
+The deployed-but-unreleased v1 implementation is backed by these reproducible gates:
 
 | Gate | Evidence |
 | --- | --- |
-| Non-fork regression | 301 tests pass under the CI profile |
+| Non-fork regression | 308 tests pass under the CI profile |
 | Fuzz/property | Every fuzz property runs 10,000 cases, including exact patch byte isolation and full-precision `mulDiv` agreement |
 | Stateful invariants | Both dynamic-engine and callback campaigns run 512 sequences at depth 256, up to 131,072 generated calls per invariant, with zero unexpected reverts |
 | Production coverage | 100% line, statement, branch, and function coverage for all three contracts and all transient libraries |

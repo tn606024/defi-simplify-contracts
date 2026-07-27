@@ -26,19 +26,24 @@
 - `check-abi-fixtures.sh` verifies both the smaller account/checker interface
   ABIs and the complete deployment ABIs remain byte-for-byte synchronized with
   Solidity.
-- `generate-base-v1-candidate-manifest.sh` validates the Base deployment config
+- `generate-base-v1-manifest.sh` validates the official Base deployment config
   against the dependency and effective build locks, substitutes the immutable
-  EntryPoint into account runtime bytecode, and derives the three direct
-  artifact hashes and CREATE2 addresses.
-- `check-base-v1-candidate-manifest.sh` independently regenerates the candidate
-  manifest and rejects stale output or misleading audit, deployment,
-  verification, trust-level, and SDK-readiness placeholders.
+  EntryPoint into account runtime bytecode, derives the three direct artifact
+  hashes and CREATE2 addresses, and combines them with mined transaction and
+  exact source-verification evidence.
+- `check-base-v1-manifest.sh` independently regenerates the official manifest
+  and rejects stale output, incomplete deployment evidence, or misleading
+  audit, release, trust-level, warranty, security, and SDK-readiness claims.
+- `check-base-v1-onchain-deployment.sh` uses `BASE_RPC_URL` to verify the live
+  factory, EntryPoint, and artifact runtime hashes, then checks each historical
+  deployment transaction's sender, factory destination, salt, complete
+  initcode hash, successful receipt, and mined block against the manifest.
 - `DeployBaseV1.s.sol` verifies the live Base factory and EntryPoint, rebuilds
   every initcode and CREATE2 prediction, and idempotently deploys or verifies
-  all three runtimes. It simulates unless the maintainer explicitly adds
-  `--broadcast`.
+  all three runtimes. The official addresses are already deployed, so the
+  script is now an idempotent reproduction check and must not be broadcast.
 - `check-reproducible-build.sh` performs two clean builds and compares the
   SHA-256 digest of every generated JSON artifact.
 
-See `deployments/README.md` for the candidate/deployed manifest lifecycle and
-the non-broadcast dry-run commands.
+See `deployments/README.md` for the official addresses, transactions, source
+verification, manifest semantics, and non-broadcast reproduction commands.
