@@ -5,7 +5,8 @@
   OpenZeppelin submodule checkouts, committed gitlinks, and clean upstream
   working trees against `config/account-abstraction-v0.9.0.json`. It also
   requires `foundry.toml` and every repository-owned Solidity source under
-  `src/` and `test/` to use the exact local compiler recorded by that lock.
+  `src/`, `test/`, and `script/` to use the exact local compiler recorded by
+  that lock.
 - `check-forge-std-revision.sh` verifies the forge-std tag, checkout, committed
   gitlink, and clean working tree against `foundry.lock`.
 - `check-minimal-account-surface.sh` requires the custom account ABI to be the
@@ -22,10 +23,22 @@
   events, or `DELEGATECALL`/`CALLCODE` proxy runtime. It also freezes the
   account's sole immutable EntryPoint constructor input and keeps both checkers
   constructor-free.
-- `check-abi-fixtures.sh` verifies the committed account, typed-assertion, and
-  generic-assertion interface ABIs used by the Go SDK remain byte-for-byte
-  synchronized with Solidity.
+- `check-abi-fixtures.sh` verifies both the smaller account/checker interface
+  ABIs and the complete deployment ABIs remain byte-for-byte synchronized with
+  Solidity.
+- `generate-base-v1-candidate-manifest.sh` validates the Base deployment config
+  against the dependency and effective build locks, substitutes the immutable
+  EntryPoint into account runtime bytecode, and derives the three direct
+  artifact hashes and CREATE2 addresses.
+- `check-base-v1-candidate-manifest.sh` independently regenerates the candidate
+  manifest and rejects stale output or misleading audit, deployment,
+  verification, trust-level, and SDK-readiness placeholders.
+- `DeployBaseV1.s.sol` verifies the live Base factory and EntryPoint, rebuilds
+  every initcode and CREATE2 prediction, and idempotently deploys or verifies
+  all three runtimes. It simulates unless the maintainer explicitly adds
+  `--broadcast`.
 - `check-reproducible-build.sh` performs two clean builds and compares the
   SHA-256 digest of every generated JSON artifact.
 
-Deployment scripts are added only after the account and assertion ABIs freeze.
+See `deployments/README.md` for the candidate/deployed manifest lifecycle and
+the non-broadcast dry-run commands.
