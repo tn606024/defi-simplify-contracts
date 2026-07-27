@@ -2,6 +2,16 @@
 
 Minimal EIP-7702 execution primitives for the `defi-simplify` Go SDK.
 
+> [!WARNING]
+> **Experimental and unaudited.** v1 has not undergone, and is not currently
+> planned to undergo, an independent security audit before publication. Tests,
+> fuzzing, invariant campaigns, static analysis, Base fork proofs, source
+> verification, and deterministic deployment are engineering evidence—not an
+> audit or a security guarantee. Smart-contract, EIP-7702, protocol, signer, or
+> automation failures can cause total and irreversible loss of funds. Use only
+> at your own risk, never with funds you cannot afford to lose. No warranty or
+> security guarantee is provided.
+
 The v1 implementation targets Base, inherits the pinned account-abstraction
 v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
 provides independent post-condition assertions. The public contract surface is
@@ -23,14 +33,15 @@ zero-first-compatible repayment allowance, and requires the Pool to consume the
 allowance completely before the outer batch continues.
 
 The Solidity implementation and its Base reference flows have reached the
-DSC-58 review candidate. This does **not** mean the contracts are audited or
-production-ready. Independent External Review 2, its remediation, the
-cross-repository SDK callback compiler and golden-vector gate, and the later
-deployment-manifest gate remain incomplete.
+DSC-58 internal review candidate. This does **not** mean the contracts are
+audited or production-ready. The project has deliberately chosen an unaudited
+experimental v1 release policy. The cross-repository SDK callback compiler,
+target-policy and golden-vector gates, and the deployment-manifest gate remain
+incomplete.
 
-## v1 review boundary
+## v1 security analysis boundary
 
-The independent review scope is the combined deployed bytecode, including the
+Any security analysis must cover the combined deployed bytecode, including the
 pinned inherited account:
 
 ```text
@@ -44,7 +55,7 @@ FlowAssertions
   └── caller-bound balance and Aave V3 post-conditions
 
 StaticCallUint256Assertions
-  └── independent reviewed fixed-word STATICCALL bridge
+  └── independent fixed-word STATICCALL bridge
 ```
 
 The account's final v1 `executeBatchDynamic` selector is `0xecadebe3`; its
@@ -230,8 +241,8 @@ ADR-004's integrated checkpoint evidence remains approximately linear:
   repository compiles every source with exact Solidity 0.8.36 and verifies that
   lock before every build.
 
-No Slither finding is treated as an audit substitute. External Review 2 must
-review the inherited and custom bytecode together.
+No Slither finding is treated as an audit substitute. No independent v1 audit
+is currently planned; the published evidence must not be described as one.
 
 ## Accepted risks and unresolved assumptions
 
@@ -271,5 +282,7 @@ review the inherited and custom bytecode together.
   prove the callback envelope and fully patched origin bytes against committed
   Solidity vectors. DSC-56 must still produce and verify the official Base
   direct-deployment manifests.
-- The custom account remains high risk until independent review, remediation,
-  controlled canary operation, and real-world maturity are complete.
+- The custom account remains high risk. The project does not require an
+  independent audit before the explicitly unaudited experimental v1 release;
+  the warning above, controlled canary operation, and real-world maturity do
+  not eliminate the possibility of total loss.
