@@ -12,18 +12,98 @@ Minimal EIP-7702 execution primitives for the `defi-simplify` Go SDK.
 > at your own risk, never with funds you cannot afford to lose. No warranty or
 > security guarantee is provided.
 
+## Start here
+
+This repository publishes the contracts that will be used by the
+`defi-simplify` SDK. The contracts are deployed on Base so their addresses and
+bytecode can be reviewed and integrated reproducibly, but they are not yet a
+finished end-user product.
+
+| Question | Current answer |
+| --- | --- |
+| Which chain is supported? | Base only |
+| Are the contracts deployed? | Yes; they have no proxy or upgrade path |
+| Are the deployed sources verified? | Yes; BaseScan reproduced the deployed bytecode from source |
+| Is there an independent audit? | No |
+| Is this version released? | No |
+| Can the Go SDK use it end to end? | Not yet |
+| Is it recommended for production funds? | No |
+
+Until the Go SDK integration and signer-policy gates are complete, users should
+not manually construct calldata, install the delegation, or operate these
+contracts with funds. A verified deployment proves which source and build
+produced the bytecode; it does not prove that a strategy is safe.
+
+## How the contracts fit together
+
+| Contract | What it does | How a user interacts with it |
+| --- | --- | --- |
+| `DefiSimplify7702Account` | Adds guarded DeFi batch execution and the authenticated Aave V3 flash-loan callback to an EIP-7702 account | The user's EOA—their normal wallet address—delegates code to this implementation; users should not send assets to or call the implementation address as if it were their wallet |
+| `FlowAssertions` | Checks caller-bound ERC20 balances and Aave V3 health factor at the end of a flow | The SDK appends reviewed final safety conditions to a batch so a failed condition reverts the execution |
+| `StaticCallUint256Assertions` | Checks a reviewed fixed `uint256` return word for integrations without a typed assertion | This is an advanced SDK adapter, not a general-purpose safety check |
+
+The intended future user flow is:
+
+1. the SDK constructs protocol calldata, amount patches, and final assertions;
+2. the signer shows the targets, amounts, bounds, and expected outcome for
+   review;
+3. the user authorizes their EOA to delegate to the official account
+   implementation;
+4. execution runs in the user's delegated EOA context, where the assets remain;
+5. a failed target call or assertion reverts execution-time asset and protocol
+   changes, although gas and nonce are still consumed.
+
+The three deployments have no owner, admin, proxy, or upgrade function. The
+deployer cannot operate a user's delegated EOA or replace the deployed code.
+
+## Official Base v1 contracts
+
+`official` means that this repository publishes and reproduces the exact
+artifact and deployment identity. It does not mean audited, released,
+SDK-integrated, safe, or recommended for capital.
+
+| Contract | Purpose | Base address |
+| --- | --- | --- |
+| `DefiSimplify7702Account` | EIP-7702 delegation implementation | [`0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA`](https://basescan.org/address/0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA#code) |
+| `FlowAssertions` | Typed balance and Aave V3 post-conditions | [`0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5`](https://basescan.org/address/0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5#code) |
+| `StaticCallUint256Assertions` | Reviewed fixed-word assertion adapter | [`0x034ee940A644323463AB074DCA99504BF5a666EA`](https://basescan.org/address/0x034ee940A644323463AB074DCA99504BF5a666EA#code) |
+
+The machine-readable deployment identity, transaction links, code hashes, and
+independent reproduction commands are in
+[`deployments/base-v1.json`](deployments/base-v1.json) and
+[`deployments/README.md`](deployments/README.md).
+
+### Source-verification note
+
+The first BaseScan verification submission used a repository-wide compiler
+input, so BaseScan currently displays test files that were not needed by these
+contracts. Those test files were unused compiler inputs: they are not imports
+of the deployed contracts and did not contribute to their creation or runtime
+bytecode.
+
+The contract artifacts record the actual source closures:
+
+- `DefiSimplify7702Account`: 34 source files;
+- `FlowAssertions`: 8 source files;
+- `StaticCallUint256Assertions`: 2 source files.
+
+The `lib/` files inside those closures are required because the account inherits
+the pinned upstream account and uses OpenZeppelin libraries. The `test/` files
+are not required dependencies.
+
+Future explorer submissions are generated with
+`script/generate-base-v1-verification-inputs.sh`. It creates one Standard JSON
+input per contract and rejects `test/`, `script/`, build output, and unrelated
+contracts. BaseScan does not normally replace an already verified source bundle
+through resubmission, so correcting the existing displayed file list requires
+BaseScan support; it does not require redeployment.
+
+## Implementation scope
+
 The v1 implementation targets Base, inherits the pinned account-abstraction
 v0.9.0 `Simple7702Account`, adds checkpoint-based ERC20 amount patching, and
 provides independent post-condition assertions. The public contract surface is
 defined by the checked-in Solidity interfaces and implementation.
-
-The current implementation includes the frozen dynamic account engine, the
-typed `FlowAssertions` ERC20 balance and Aave V3 health-factor primitives, and
-the independent `StaticCallUint256Assertions` fixed-word checker. The generic
-checker is a lower-level adapter surface with explicit account-binding and
-global-read modes; binding is not an authorization boundary. The SDK and signer
-remain responsible for authenticating exact checker, target, selector, offset,
-and bound semantics.
 
 The account also implements the final v1 direct Aave V3
 `flashLoanSimple` callback path. A callback-enabled call commits its fully
@@ -32,13 +112,11 @@ authenticates that origin, executes an isolated callback plan, installs an exact
 zero-first-compatible repayment allowance, and requires the Pool to consume the
 allowance completely before the outer batch continues.
 
-The Solidity implementation and its Base reference flows have completed the
-DSC-58 internal review. This does **not** mean the contracts are audited or
-production-ready. The project has deliberately chosen an unaudited experimental
-v1 policy. The three direct immutable artifacts are deployed and exact-source
-verified on Base, but remain unreleased and not integrated into the Go SDK. The
-cross-repository SDK callback compiler, target policy, and golden-vector gates
-remain incomplete.
+`FlowAssertions` provides typed ERC20 balance and Aave V3 health-factor checks.
+`StaticCallUint256Assertions` is a lower-level adapter with explicit
+account-binding and global-read modes. Binding is not an authorization
+boundary; the SDK and signer must authenticate the exact checker, target,
+selector, offsets, and bound semantics.
 
 ## v1 security analysis boundary
 
@@ -109,6 +187,7 @@ forge build --sizes
 ./script/check-static-call-uint256-assertions-surface.sh
 ./script/check-direct-immutable-artifacts.sh
 ./script/check-abi-fixtures.sh
+./script/generate-base-v1-verification-inputs.sh
 ./script/check-base-v1-manifest.sh
 FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
 forge snapshot --check \
@@ -187,21 +266,6 @@ router-native amount and price bounds but no deadline.
 Generated build output and RPC credentials are ignored. `.gas-snapshot`, source
 code, deployment manifests, compiler configuration, and dependency locks are
 expected to be committed.
-
-## Base v1 official deployment
-
-The reproducible official Base deployment manifest and independent verification
-instructions are in [`deployments/README.md`](deployments/README.md). Its
-machine-readable status is `deployed`, `official`, `unreleased`, `unaudited`,
-and `not-integrated`. Here, `official` means only that the project publishes and
-reproduces the exact artifact and deployment identity; it is not an audit,
-security guarantee, release, or SDK-readiness claim.
-
-| Artifact | Base address |
-| --- | --- |
-| `DefiSimplify7702Account` | [`0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA`](https://basescan.org/address/0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA#code) |
-| `FlowAssertions` | [`0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5`](https://basescan.org/address/0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5#code) |
-| `StaticCallUint256Assertions` | [`0x034ee940A644323463AB074DCA99504BF5a666EA`](https://basescan.org/address/0x034ee940A644323463AB074DCA99504BF5a666EA#code) |
 
 ## DSC-58 security evidence
 
@@ -314,8 +378,7 @@ is currently planned; the published evidence must not be described as one.
   nested callbacks, and non-Aave callback providers are outside v1.
 - DS-55 must implement recursive SDK/signer target admission, and DS-54 must
   prove the callback envelope and fully patched origin bytes against committed
-  Solidity vectors. DSC-56 must still produce and verify the official Base
-  direct-deployment manifests.
+  Solidity vectors before this deployment is presented as SDK-integrated.
 - The custom account remains high risk. The project does not require an
   independent audit before the explicitly unaudited experimental v1 release;
   the warning above, controlled canary operation, and real-world maturity do
