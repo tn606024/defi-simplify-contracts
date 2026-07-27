@@ -163,6 +163,9 @@ abstract contract BaseAaveV3StaticFlowFixture is DelegatedAccountFixture {
         return delegatedEoa.call(abi.encodeWithSelector(BaseAccount.executeBatch.selector, calls));
     }
 
+    /// @dev Builds the two-call setup used when WETH is already held by the
+    /// delegated EOA: approve the Pool for the exact amount, then supply that
+    /// amount as collateral on behalf of the same EOA.
     function _buildApproveAndSupplyBatch(address delegatedEoa, uint256 supplyAmount)
         internal
         pure
@@ -179,6 +182,8 @@ abstract contract BaseAaveV3StaticFlowFixture is DelegatedAccountFixture {
         });
     }
 
+    /// @dev Continues after a separate approval: supply exact WETH collateral,
+    /// then borrow exact variable-rate USDC against the delegated EOA.
     function _buildSupplyAndBorrowBatch(address delegatedEoa, uint256 supplyAmount, uint256 borrowAmount)
         internal
         pure
@@ -200,6 +205,9 @@ abstract contract BaseAaveV3StaticFlowFixture is DelegatedAccountFixture {
         });
     }
 
+    /// @dev Opens the reference static position in one atomic batch:
+    /// exact WETH approval, WETH supply, then variable-rate USDC borrow.
+    /// Tests assert the resulting balances and Aave account data after execution.
     function _buildOpenPositionBatch(address delegatedEoa, uint256 supplyAmount, uint256 borrowAmount)
         internal
         pure
@@ -224,6 +232,8 @@ abstract contract BaseAaveV3StaticFlowFixture is DelegatedAccountFixture {
         });
     }
 
+    /// @dev Continues after a separate USDC approval: repay the delegated EOA's
+    /// exact variable debt, then withdraw all unlocked WETH collateral.
     function _buildRepayAndWithdrawBatch(address delegatedEoa, uint256 debtAmount)
         internal
         pure
@@ -244,6 +254,9 @@ abstract contract BaseAaveV3StaticFlowFixture is DelegatedAccountFixture {
         });
     }
 
+    /// @dev Closes the reference static position in one atomic batch:
+    /// approve exact USDC debt, repay it, then withdraw all WETH collateral.
+    /// The caller funds the exact repayment balance before executing this plan.
     function _buildClosePositionBatch(address delegatedEoa, uint256 debtAmount)
         internal
         pure

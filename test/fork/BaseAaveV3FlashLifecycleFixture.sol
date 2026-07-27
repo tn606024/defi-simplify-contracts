@@ -272,6 +272,18 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Builds the guarded flash-assisted leverage-open flow.
+    ///
+    /// The delegated EOA starts without an Aave position and holds a configured
+    /// cbETH supply amount plus separate cbETH and WETH inventory sentinels. The
+    /// outer batch enables ETH-correlated E-Mode, supplies only the configured
+    /// cbETH, then opens one WETH flash loan. During the callback, the flash WETH
+    /// is swapped for cbETH, only the observed cbETH output is supplied, and WETH
+    /// is borrowed to fund principal plus premium repayment. The account
+    /// zero-first approves exactly that repayment and requires the Pool pull to
+    /// leave zero allowance. Final assertions enforce the health-factor floor
+    /// and prove that pre-existing WETH/cbETH inventory was not consumed. Forced
+    /// premium, swap, repayment, or assertion failures must roll back both frames.
     function _buildFlashAssistedLeverageOpen(
         address delegatedEoa,
         FlowAssertions flowAssertions,
@@ -313,6 +325,10 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Callback order for leverage-open:
+    /// approve exact flash WETH to the router; exact-input swap under native
+    /// output/price bounds while checkpointing cbETH; approve and supply only
+    /// that cbETH delta; then borrow the caller-provided WETH repayment amount.
     function _buildLeverageOpenCallbackCalls(
         address delegatedEoa,
         uint256 minimumCbEthOutput,
@@ -371,6 +387,20 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Builds the guarded flash-assisted partial-deleverage flow.
+    ///
+    /// The delegated EOA starts in E-Mode with cbETH collateral, variable WETH
+    /// debt, the borrowed proceeds removed, and separate cbETH/WETH inventory
+    /// sentinels. The outer frame checkpoints cbETH before the flash loan. The
+    /// callback uses flash WETH to repay part of the debt, withdraws a fixed
+    /// cbETH slice, and exact-output swaps no more than maximumCbEthInput for the
+    /// WETH needed to repay principal plus premium. Its callback-scope checkpoint
+    /// limits router approval to the withdrawal; the independent outer-scope
+    /// checkpoint observes only the unspent remainder and resupplies it after the
+    /// Pool pull. The account requires exact repayment and zero residual Pool
+    /// allowance. Final assertions enforce the new health factor and retain both
+    /// inventory sentinels. Forced swap or assertion failures roll back both
+    /// frames, the repayment, the withdrawal, and every allowance.
     function _buildFlashAssistedPartialDeleverage(
         address delegatedEoa,
         FlowAssertions flowAssertions,
@@ -428,6 +458,11 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Callback order for partial deleverage:
+    /// approve and repay the flash-sized WETH debt; checkpoint and withdraw the
+    /// configured cbETH slice; approve only that withdrawal delta to the router;
+    /// exact-output swap for principal plus premium under the cbETH input cap;
+    /// then clear the router's potentially residual cbETH allowance.
     function _buildPartialDeleverageCallbackCalls(address delegatedEoa, uint256 maximumCbEthInput)
         private
         pure
@@ -468,6 +503,18 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Builds the guarded flash-assisted full-close flow.
+    ///
+    /// The delegated EOA starts from the same E-Mode cbETH-collateral/WETH-debt
+    /// position and isolated inventory sentinels as partial deleverage. The flash
+    /// principal is patched from its current Aave variable-debt-token balance.
+    /// The callback repays all WETH debt, withdraws all cbETH collateral, and
+    /// exact-output swaps only enough of that withdrawal to cover principal plus
+    /// premium. The account requires exact repayment and zero residual Pool
+    /// allowance. After repayment, independent assertions require zero variable
+    /// debt, the no-position health factor, and a conservative minimum cbETH
+    /// remainder that preserves prior inventory. Any forced callback or final
+    /// assertion failure rolls back the complete close across both frames.
     function _buildFlashAssistedFullClose(
         address delegatedEoa,
         FlowAssertions flowAssertions,
@@ -517,6 +564,12 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Callback order for full close:
+    /// patch the Pool approval from current variable-debt-token balance; repay
+    /// all variable WETH debt; checkpoint and withdraw all cbETH collateral;
+    /// approve only the withdrawal delta to the router; exact-output swap for
+    /// observed debt plus premium under the cbETH input cap; then clear any
+    /// residual router allowance.
     function _buildFullCloseCallbackCalls(address delegatedEoa, uint256 observedDebt, uint256 maximumCbEthInput)
         private
         pure
@@ -565,6 +618,10 @@ abstract contract BaseAaveV3FlashLifecycleFixture is BaseAaveV3StaticFlowFixture
         );
     }
 
+    /// @dev Builds the direct SwapRouter02 exact-output step shared by both
+    /// deleverage plans. This router surface has no deadline field; exact WETH
+    /// output, maximum cbETH input, and the minimum accepted sqrt price are its
+    /// protocol-native bounds.
     function _exactOutputWethSwapCall(address delegatedEoa, uint256 wethAmountOut, uint256 maximumCbEthInput)
         private
         pure

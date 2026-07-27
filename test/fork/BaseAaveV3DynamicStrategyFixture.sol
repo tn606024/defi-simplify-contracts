@@ -153,6 +153,25 @@ abstract contract BaseAaveV3DynamicStrategyFixture is BaseAaveV3StaticFlowFixtur
         vm.deal(delegatedEoa, EXISTING_NATIVE_INVENTORY);
     }
 
+    /// @dev Builds the guarded WETH/USDC leverage loop exercised against Base.
+    ///
+    /// The delegated EOA starts with the configured WETH supply amount plus
+    /// separate WETH, USDC, and native-ETH inventory sentinels. Calls execute
+    /// in this order:
+    /// 1. approve and supply only the configured initial WETH;
+    /// 2. checkpoint USDC immediately before borrowing;
+    /// 3. approve and swap exactly the observed borrowed-USDC delta;
+    /// 4. checkpoint WETH immediately before the swap, then approve and supply
+    ///    exactly the observed swap-output delta; and
+    /// 5. require the final Aave V3 health factor to meet the configured bound.
+    ///
+    /// Both checkpoint deltas deliberately exclude pre-existing inventory. This
+    /// direct SwapRouter02 function has no deadline field; amountOutMinimum and
+    /// sqrtPriceLimitX96 are the protocol-native economic limits. Exact delta
+    /// approvals constrain the router and Pool inputs, and the final assertion
+    /// is the account-level post-condition. Every forced validation, swap, or
+    /// assertion failure must roll back all earlier calls, balances, allowances,
+    /// checkpoints, and protocol state in the batch.
     function _buildWethCollateralUsdcDebtLoopStrategy(
         address delegatedEoa,
         FlowAssertions flowAssertions,
