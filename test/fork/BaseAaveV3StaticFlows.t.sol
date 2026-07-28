@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.36;
 
-import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseAaveV3StaticFlowFixture, IBaseAaveV3Pool} from "./BaseAaveV3StaticFlowFixture.sol";

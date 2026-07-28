@@ -12,7 +12,6 @@ import {
 } from "../mocks/AaveV3FlashLoanMocks.sol";
 import {PatchBalanceToken} from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionAdversary} from "../mocks/DynamicExecutionAdversary.sol";
-import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {AaveV3FlashLoanFixture} from "../utils/AaveV3FlashLoanFixture.sol";
 import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 

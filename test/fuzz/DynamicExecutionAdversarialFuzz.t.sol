@@ -5,6 +5,7 @@ import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Ac
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 /// @dev Adversarial nested-revert coverage for dynamic call atomicity and error wrapping.
 contract DynamicExecutionAdversarialFuzzTest is DelegatedAccountFixture {
@@ -47,9 +48,6 @@ contract DynamicExecutionAdversarialFuzzTest is DelegatedAccountFixture {
         view
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = address(recordingTarget);
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        dynamicCall = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(address(recordingTarget), callData);
     }
 }

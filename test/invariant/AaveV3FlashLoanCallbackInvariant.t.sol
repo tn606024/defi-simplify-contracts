@@ -13,6 +13,9 @@ import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
+/// @dev Exposes only the transient state needed to compare completed handler
+///      actions against the callback lifecycle model. Every view remains subject
+///      to the delegated account's normal execution authorization.
 contract CallbackInvariantAccountHarness is DefiSimplify7702Account {
     constructor(IEntryPoint entryPoint) DefiSimplify7702Account(entryPoint) {}
 
@@ -48,6 +51,17 @@ contract CallbackInvariantAccountHarness is DefiSimplify7702Account {
     }
 }
 
+/// @dev Stateful callback model exercised by Foundry's invariant runner.
+///
+/// Expected protocol failures are invoked through low-level calls so the handler
+/// can assert atomic rollback and continue the campaign. A revert from the handler
+/// itself means that an expected outcome, lifecycle transition, or postcondition
+/// was violated; `fail_on_revert = true` therefore treats it as a fatal finding.
+///
+/// The expected-success counters are the reference model. The recording target is
+/// observed protocol state, while `allPostconditionsPassed` is a sticky verdict
+/// covering commitment cleanup, lock release, repayment allowance cleanup, and
+/// the action-specific invocation-counter rules checked before it is recorded.
 contract AaveV3FlashLoanCallbackInvariantHandler {
     uint256 private constant PRINCIPAL = 1_000 ether;
 
@@ -58,7 +72,6 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
     address payable public delegatedEoa;
     uint256 public expectedSuccessfulCallbackCalls;
     uint256 public expectedSuccessfulCallbackAmount;
-    uint256 public completedPostconditionChecks;
     bool public allPostconditionsPassed = true;
 
     constructor() {
@@ -165,8 +178,7 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         uint256 counterAfterFirstSuccess = _invocationCounter();
         require(counterAfterFirstSuccess == counterBefore + 2, "first success scope count");
 
-        IDefiSimplify7702Account.DynamicCall[] memory failingPlan = new IDefiSimplify7702Account.DynamicCall[](1);
-        failingPlan[0] = _failingCall();
+        IDefiSimplify7702Account.DynamicCall[] memory failingPlan = DynamicCallTestBuilder.singleCall(_failingCall());
         (bool failedCallSucceeded,) = delegatedEoa.call(
             abi.encodeCall(
                 IDefiSimplify7702Account.executeBatchDynamic,
@@ -207,7 +219,6 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
             && !CallbackInvariantAccountHarness(delegatedEoa).dynamicExecutionLocked()
             && flashAsset.allowance(delegatedEoa, address(flashLoanPool)) == 0;
         allPostconditionsPassed = allPostconditionsPassed && postconditionsPassed;
-        completedPostconditionChecks += 1;
     }
 
     function _invocationCounter() private view returns (uint256) {
@@ -222,14 +233,16 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         IDefiSimplify7702Account.CallbackEnvelope memory envelope = IDefiSimplify7702Account.CallbackEnvelope({
             maxPremium: maximumPremium, callbackCalls: callbackCalls
         });
-        dynamicCall.target = address(flashLoanPool);
-        dynamicCall.data = abi.encodeCall(
-            IAaveV3FlashLoanSimplePool.flashLoanSimple,
-            (delegatedEoa, address(flashAsset), PRINCIPAL, abi.encode(envelope), uint16(0))
+        dynamicCall = DynamicCallTestBuilder.buildZeroValueCall(
+            address(flashLoanPool),
+            abi.encodeCall(
+                IAaveV3FlashLoanSimplePool.flashLoanSimple,
+                (delegatedEoa, address(flashAsset), PRINCIPAL, abi.encode(envelope), uint16(0))
+            ),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
+            true
         );
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-        dynamicCall.expectsCallback = true;
     }
 
     function _recordingCall(uint256 amount)
@@ -237,17 +250,17 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         view
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = address(callbackRecordingTarget);
-        dynamicCall.data = abi.encodeCall(DynamicExecutionTarget.record, (amount, bytes("invariant-success")));
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        dynamicCall = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            address(callbackRecordingTarget),
+            abi.encodeCall(DynamicExecutionTarget.record, (amount, bytes("invariant-success")))
+        );
     }
 
     function _failingCall() private view returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall) {
-        dynamicCall.target = address(callbackRecordingTarget);
-        dynamicCall.data = abi.encodeCall(DynamicExecutionTarget.fail, (uint256(81), bytes("invariant-failure")));
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        dynamicCall = DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+            address(callbackRecordingTarget),
+            abi.encodeCall(DynamicExecutionTarget.fail, (uint256(81), bytes("invariant-failure")))
+        );
     }
 
     function _oneRecordingCall(uint256 amount)
@@ -255,11 +268,16 @@ contract AaveV3FlashLoanCallbackInvariantHandler {
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory callbackCalls)
     {
-        callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0] = _recordingCall(amount);
+        callbackCalls = DynamicCallTestBuilder.singleCall(_recordingCall(amount));
     }
 }
 
+/// @dev Checks the handler's reference model after every generated action
+///      sequence. Successful plans alone may change the recording target; every
+///      completed success or modeled failure must leave the callback commitment
+///      idle and cleared, the dynamic lock open, and the Pool allowance at zero.
+///      Action-local assertions additionally prove success increments two
+///      invocation scopes and reverted actions roll the counter back.
 contract AaveV3FlashLoanCallbackInvariantTest is DelegatedAccountFixture {
     uint256 private constant CALLBACK_INVARIANT_AUTHORITY_KEY =
         0x23df36d1f089ac03a05df44d4fb7caacbfb7d94f33c18b1fdd77f99e4f523582;

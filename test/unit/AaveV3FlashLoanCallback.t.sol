@@ -10,6 +10,12 @@ import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
+/// @dev Core callback state-machine suite, ordered for reviewer navigation:
+///      successful outer/callback plans; lifecycle, replay, and reentry;
+///      sender/initiator/origin authentication; premium, nested-plan, and
+///      callback-target failures; then repayment and allowance cleanup.
+///      Broader malicious-boundary cases live in AaveV3FlashLoanAdversarial,
+///      while randomized sequences live in the callback fuzz and invariant suites.
 contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
     bytes32 private constant SHARED_CHECKPOINT_ID = keccak256("shared-outer-and-callback-checkpoint");
     uint256 private constant FLASH_PRINCIPAL = 1_000 ether;
@@ -30,6 +36,10 @@ contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
         flashAsset.mint(address(pool), FLASH_PRINCIPAL);
         flashAsset.mint(accountUnderTest.delegatedEoa, FLASH_PREMIUM);
     }
+
+    // -------------------------------------------------------------------------
+    // Successful outer placement, callback plans, patches, and scope isolation
+    // -------------------------------------------------------------------------
 
     function test_FlashLoanAtFirstOuterIndexCompletesBeforeLaterOrdinaryCalls() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls =
@@ -174,6 +184,10 @@ contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
         assertEq(recordingTarget.total(), 160, "callback delta 30 plus retained outer delta 130");
     }
 
+    // -------------------------------------------------------------------------
+    // Callback lifecycle, replay protection, cleanup, and public reentry
+    // -------------------------------------------------------------------------
+
     function test_CallbackEnabledTargetReturningWithoutCallbackIsRejected() external {
         pool.setSkipCallback(true);
         pool.setPullRepayment(false);
@@ -236,6 +250,10 @@ contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
         vm.expectRevert(_wrappedPoolFailure(0, callbackFailure));
         _executeFlashLoan(callbackCalls, FLASH_PREMIUM);
     }
+
+    // -------------------------------------------------------------------------
+    // Callback sender, initiator, and committed-origin authentication
+    // -------------------------------------------------------------------------
 
     function test_WrongCallbackSenderIsRejectedBeforePlanExecution() external {
         pool.setCallbackMutation(AaveV3FlashLoanPoolMock.CallbackMutation.WrongSender);
@@ -322,6 +340,10 @@ contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
         assertEq(recordingTarget.count(), 0, "malformed envelope plan");
     }
 
+    // -------------------------------------------------------------------------
+    // Premium bounds, nested-plan rejection, target failure, and rollback
+    // -------------------------------------------------------------------------
+
     function test_PremiumEqualToSignedMaximumIsAccepted() external {
         _executeFlashLoan(DynamicCallTestBuilder.noCalls(), FLASH_PREMIUM);
 
@@ -386,6 +408,10 @@ contract AaveV3FlashLoanCallbackTest is DelegatedAccountFixture {
 
         assertEq(recordingTarget.count(), 0, "earlier callback target state rolled back");
     }
+
+    // -------------------------------------------------------------------------
+    // Repayment balance, token responses, exact approval, and allowance cleanup
+    // -------------------------------------------------------------------------
 
     function test_ExistingAllowanceIsClearedBeforeExactRepaymentApproval() external {
         flashAsset.setRequireZeroFirstApproval(true);

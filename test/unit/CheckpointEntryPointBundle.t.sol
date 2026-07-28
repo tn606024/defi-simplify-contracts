@@ -7,6 +7,7 @@ import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/Pac
 import {CheckpointTableHarness, PatchBalanceToken} from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
     uint256 private constant ACCOUNT_AUTHORITY_KEY = 0x48B0;
@@ -113,10 +114,7 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         view
         returns (PackedUserOperation memory operation)
     {
-        IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
-        calls[0] = dynamicCall;
-
-        return _buildSignedUserOperation(nonce, calls);
+        return _buildSignedUserOperation(nonce, DynamicCallTestBuilder.singleCall(dynamicCall));
     }
 
     function _buildSignedUserOperation(uint256 nonce, IDefiSimplify7702Account.DynamicCall[] memory calls)
@@ -139,26 +137,18 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         returns (PackedUserOperation memory operation)
     {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](2);
-        calls[0].target = address(balanceToken);
-        calls[0].data = abi.encodeCall(PatchBalanceToken.produce, (producedAmount));
-        calls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        calls[0].checkpointsBefore[0] =
-            IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: REUSED_CHECKPOINT_ID});
-        calls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
-
-        calls[1].target = address(recordingTarget);
-        calls[1].data = mustFail
-            ? abi.encodeCall(DynamicExecutionTarget.fail, (uint256(0), bytes("patched-revert")))
-            : abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("patched-success")));
-        calls[1].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        calls[1].patches = new IDefiSimplify7702Account.BalancePatch[](1);
-        calls[1].patches[0] = IDefiSimplify7702Account.BalancePatch({
-            token: address(balanceToken),
-            checkpointId: REUSED_CHECKPOINT_ID,
-            offset: 4,
-            bps: 10_000,
-            source: IDefiSimplify7702Account.BalanceSource.CheckpointDelta
-        });
+        calls[0] = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
+            address(balanceToken),
+            abi.encodeCall(PatchBalanceToken.produce, (producedAmount)),
+            DynamicCallTestBuilder.singleCheckpoint(address(balanceToken), REUSED_CHECKPOINT_ID)
+        );
+        calls[1] = DynamicCallTestBuilder.buildZeroValueSinglePatchCall(
+            address(recordingTarget),
+            mustFail
+                ? abi.encodeCall(DynamicExecutionTarget.fail, (uint256(0), bytes("patched-revert")))
+                : abi.encodeCall(DynamicExecutionTarget.record, (uint256(0), bytes("patched-success"))),
+            DynamicCallTestBuilder.fullCheckpointDeltaPatch(address(balanceToken), REUSED_CHECKPOINT_ID, 4)
+        );
 
         return _buildSignedUserOperation(nonce, calls);
     }
@@ -184,11 +174,10 @@ contract CheckpointEntryPointBundleTest is DelegatedAccountFixture {
         view
         returns (IDefiSimplify7702Account.DynamicCall memory dynamicCall)
     {
-        dynamicCall.target = address(recordingTarget);
-        dynamicCall.data = callData;
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](1);
-        dynamicCall.checkpointsBefore[0] =
-            IDefiSimplify7702Account.BalanceCheckpoint({token: address(balanceToken), id: REUSED_CHECKPOINT_ID});
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        dynamicCall = DynamicCallTestBuilder.buildZeroValueCheckpointingCall(
+            address(recordingTarget),
+            callData,
+            DynamicCallTestBuilder.singleCheckpoint(address(balanceToken), REUSED_CHECKPOINT_ID)
+        );
     }
 }
