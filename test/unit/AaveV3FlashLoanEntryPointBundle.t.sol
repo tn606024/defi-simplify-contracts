@@ -10,6 +10,7 @@ import {AaveV3FlashLoanPoolMock, FlashLoanAssetMock} from "../mocks/AaveV3FlashL
 import {CheckpointTableHarness} from "../mocks/CheckpointBalanceToken.sol";
 import {DynamicExecutionTarget} from "../mocks/DynamicExecutionTarget.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
+import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract AaveV3FlashLoanEntryPointBundleTest is DelegatedAccountFixture {
     uint256 private constant ACCOUNT_AUTHORITY_KEY = 0xF1A581;
@@ -74,11 +75,11 @@ contract AaveV3FlashLoanEntryPointBundleTest is DelegatedAccountFixture {
 
     function test_CallbackPlanTargetingActiveEntryPointCannotStartNestedHandleOps() external {
         PackedUserOperation[] memory nestedOperations = new PackedUserOperation[](0);
-        IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0].target = address(entryPoint);
-        callbackCalls[0].data = abi.encodeCall(IEntryPoint.handleOps, (nestedOperations, BENEFICIARY));
-        callbackCalls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        callbackCalls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = DynamicCallTestBuilder.singleCall(
+            DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+                address(entryPoint), abi.encodeCall(IEntryPoint.handleOps, (nestedOperations, BENEFICIARY))
+            )
+        );
 
         PackedUserOperation[] memory operations = new PackedUserOperation[](1);
         operations[0] = _buildSignedUserOperation(0, callbackCalls);
@@ -97,12 +98,12 @@ contract AaveV3FlashLoanEntryPointBundleTest is DelegatedAccountFixture {
         view
         returns (PackedUserOperation memory operation)
     {
-        IDefiSimplify7702Account.DynamicCall[] memory outerCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        outerCalls[0] = _flashLoanCall(callbackCalls);
-
         operation.sender = delegatedEoa;
         operation.nonce = nonce;
-        operation.callData = abi.encodeCall(IDefiSimplify7702Account.executeBatchDynamic, (outerCalls));
+        operation.callData = abi.encodeCall(
+            IDefiSimplify7702Account.executeBatchDynamic,
+            (DynamicCallTestBuilder.singleCall(_flashLoanCall(callbackCalls)))
+        );
         operation.accountGasLimits = bytes32((uint256(2_000_000) << 128) | uint256(2_000_000));
         operation.preVerificationGas = 100_000;
         operation.gasFees = bytes32(0);
@@ -116,14 +117,16 @@ contract AaveV3FlashLoanEntryPointBundleTest is DelegatedAccountFixture {
     {
         IDefiSimplify7702Account.CallbackEnvelope memory envelope =
             IDefiSimplify7702Account.CallbackEnvelope({maxPremium: FLASH_PREMIUM, callbackCalls: callbackCalls});
-        dynamicCall.target = address(flashLoanPool);
-        dynamicCall.data = abi.encodeCall(
-            IAaveV3FlashLoanSimplePool.flashLoanSimple,
-            (delegatedEoa, address(flashAsset), FLASH_PRINCIPAL, abi.encode(envelope), uint16(0))
+        dynamicCall = DynamicCallTestBuilder.buildZeroValueCall(
+            address(flashLoanPool),
+            abi.encodeCall(
+                IAaveV3FlashLoanSimplePool.flashLoanSimple,
+                (delegatedEoa, address(flashAsset), FLASH_PRINCIPAL, abi.encode(envelope), uint16(0))
+            ),
+            DynamicCallTestBuilder.noCheckpoints(),
+            DynamicCallTestBuilder.noPatches(),
+            true
         );
-        dynamicCall.checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        dynamicCall.patches = new IDefiSimplify7702Account.BalancePatch[](0);
-        dynamicCall.expectsCallback = true;
     }
 
     function _oneRecordingCallbackCall(uint256 amount, bytes memory payload)
@@ -131,11 +134,11 @@ contract AaveV3FlashLoanEntryPointBundleTest is DelegatedAccountFixture {
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory callbackCalls)
     {
-        callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0].target = address(callbackRecordingTarget);
-        callbackCalls[0].data = abi.encodeCall(DynamicExecutionTarget.record, (amount, payload));
-        callbackCalls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        callbackCalls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        callbackCalls = DynamicCallTestBuilder.singleCall(
+            DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+                address(callbackRecordingTarget), abi.encodeCall(DynamicExecutionTarget.record, (amount, payload))
+            )
+        );
     }
 
     function _oneFailingCallbackCall()
@@ -143,12 +146,12 @@ contract AaveV3FlashLoanEntryPointBundleTest is DelegatedAccountFixture {
         view
         returns (IDefiSimplify7702Account.DynamicCall[] memory callbackCalls)
     {
-        callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
-        callbackCalls[0].target = address(callbackRecordingTarget);
-        callbackCalls[0].data =
-            abi.encodeCall(DynamicExecutionTarget.fail, (uint256(81), bytes("bundle-callback-failure")));
-        callbackCalls[0].checkpointsBefore = new IDefiSimplify7702Account.BalanceCheckpoint[](0);
-        callbackCalls[0].patches = new IDefiSimplify7702Account.BalancePatch[](0);
+        callbackCalls = DynamicCallTestBuilder.singleCall(
+            DynamicCallTestBuilder.buildZeroValueOrdinaryCall(
+                address(callbackRecordingTarget),
+                abi.encodeCall(DynamicExecutionTarget.fail, (uint256(81), bytes("bundle-callback-failure")))
+            )
+        );
     }
 
     function _currentInvocationCounter() private returns (uint256 counter) {

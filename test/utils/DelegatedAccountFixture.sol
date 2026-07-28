@@ -34,6 +34,9 @@ abstract contract DelegatedAccountFixture is Test {
         DelegatedDefiSimplifyAccount defiSimplify;
     }
 
+    /// @dev Deploys the DeFi Simplify implementation and attaches the default
+    ///      authority EOA using Foundry's Prague EIP-7702 cheatcode. Calls must
+    ///      target `delegatedEoa`, where implementation code runs in EOA context.
     function _deployDelegatedDefiSimplifyAccount(IEntryPoint entryPoint)
         internal
         returns (DelegatedDefiSimplifyAccount memory accountUnderTest)
@@ -41,6 +44,9 @@ abstract contract DelegatedAccountFixture is Test {
         return _deployDelegatedDefiSimplifyAccount(entryPoint, DEFI_SIMPLIFY_AUTHORITY_KEY);
     }
 
+    /// @dev Same delegated-account setup with an explicit authority key. The EOA
+    ///      must start without code so the fixture cannot silently replace a
+    ///      prior delegation or ordinary contract runtime.
     function _deployDelegatedDefiSimplifyAccount(IEntryPoint entryPoint, uint256 authorityKey)
         internal
         returns (DelegatedDefiSimplifyAccount memory accountUnderTest)
@@ -58,6 +64,8 @@ abstract contract DelegatedAccountFixture is Test {
         );
     }
 
+    /// @dev Deploys and attaches the pinned upstream implementation to the
+    ///      default upstream authority for differential tests.
     function _deployDelegatedUpstreamAccount(IEntryPoint entryPoint)
         internal
         returns (DelegatedUpstreamAccount memory upstreamAccount)
@@ -65,6 +73,7 @@ abstract contract DelegatedAccountFixture is Test {
         return _deployDelegatedUpstreamAccount(entryPoint, UPSTREAM_AUTHORITY_KEY);
     }
 
+    /// @dev Same upstream delegated-account setup with an explicit authority key.
     function _deployDelegatedUpstreamAccount(IEntryPoint entryPoint, uint256 authorityKey)
         internal
         returns (DelegatedUpstreamAccount memory upstreamAccount)
@@ -82,6 +91,9 @@ abstract contract DelegatedAccountFixture is Test {
         );
     }
 
+    /// @dev Creates two independent delegated EOAs for upstream compatibility
+    ///      comparisons; the two ABI views never represent separate contexts for
+    ///      one authority.
     function _deployUpstreamCompatibilityFixture(IEntryPoint entryPoint)
         internal
         returns (UpstreamCompatibilityFixture memory compatibilityFixture)
@@ -89,6 +101,7 @@ abstract contract DelegatedAccountFixture is Test {
         return _deployUpstreamCompatibilityFixture(entryPoint, UPSTREAM_AUTHORITY_KEY, DEFI_SIMPLIFY_AUTHORITY_KEY);
     }
 
+    /// @dev Same two-EOA compatibility fixture with explicit authority keys.
     function _deployUpstreamCompatibilityFixture(
         IEntryPoint entryPoint,
         uint256 upstreamAuthorityKey,
@@ -98,6 +111,18 @@ abstract contract DelegatedAccountFixture is Test {
         compatibilityFixture.defiSimplify = _deployDelegatedDefiSimplifyAccount(entryPoint, defiSimplifyAuthorityKey);
     }
 
+    /// @dev Parses the 23-byte EIP-7702 designator `0xef0100 || implementation`.
+    ///
+    /// `delegatedEoa.code` copies the designator into `bytes memory`; the first
+    /// word at `code` is its length and payload starts at `code + 32`. The first
+    /// load extracts the three-byte prefix. The implementation begins at payload
+    /// byte offset 3, so `code + 35` points to its first byte and `shr(96, ...)`
+    /// keeps the left-aligned 20-byte address. No Solidity storage slot is read
+    /// or written by this assembly.
+    ///
+    /// Foundry's Prague cheatcode makes calls through the EOA execute the attached
+    /// implementation in delegated EOA context. Calling the implementation
+    /// directly or replacing EOA code with `vm.etch` would not test that context.
     function _delegationTarget(address delegatedEoa) internal view returns (address implementation) {
         bytes memory code = delegatedEoa.code;
         require(code.length == 23, "invalid delegation indicator length");

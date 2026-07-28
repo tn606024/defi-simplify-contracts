@@ -4,6 +4,13 @@ pragma solidity 0.8.36;
 import {IAaveV3FlashLoanSimplePool} from "../../src/interfaces/IAaveV3FlashLoanSimplePool.sol";
 import {IDefiSimplify7702Account} from "../../src/interfaces/IDefiSimplify7702Account.sol";
 
+/// @dev ERC-20-shaped flash-loan asset with independently configurable faults.
+///
+/// The read toggles exercise reverted and short `balanceOf`/`allowance` data.
+/// Approval toggles cover revert, false, empty, short, zero-first, and approval
+/// reentry behavior. Transfer toggles cover false `transferFrom` results and
+/// fee-on-transfer repayment. These controls persist until a test resets them;
+/// normal Foundry isolation provides a fresh deployment for the next test.
 contract FlashLoanAssetMock {
     error BalanceReadReverted();
     error AllowanceReadReverted();
@@ -15,6 +22,7 @@ contract FlashLoanAssetMock {
     mapping(address account => uint256 balance) private _balances;
     mapping(address owner => mapping(address spender => uint256 allowanceAmount)) private _allowances;
 
+    // Approval and checked-read response faults.
     bool public requireZeroFirstApproval;
     bool public returnFalseFromApproval;
     bool public revertApproval;
@@ -27,6 +35,7 @@ contract FlashLoanAssetMock {
     bool public returnFalseFromTransferFrom;
     uint16 public transferFeeBps;
 
+    // Reentry observation while the account installs the exact Pool approval.
     bool public approvalReentryEnabled;
     address public approvalReentryTarget;
     bytes public approvalReentryData;
@@ -97,6 +106,8 @@ contract FlashLoanAssetMock {
         }
         tokenBalance = _balances[account];
         if (returnShortBalanceData) {
+            // `mstore` right-aligns 0x1234; returning bytes [30, 32) yields
+            // exactly two bytes instead of the ABI-required 32-byte word.
             assembly ("memory-safe") {
                 mstore(0, 0x1234)
                 return(30, 2)
@@ -110,6 +121,7 @@ contract FlashLoanAssetMock {
         }
         allowanceAmount = _allowances[owner][spender];
         if (returnShortAllowanceData) {
+            // Return the same deliberately truncated two-byte word as balanceOf.
             assembly ("memory-safe") {
                 mstore(0, 0x1234)
                 return(30, 2)
@@ -137,6 +149,7 @@ contract FlashLoanAssetMock {
         }
 
         if (returnShortApprovalData) {
+            // Return the final byte of the stored word: 0x01 without ABI padding.
             assembly ("memory-safe") {
                 mstore(0, 1)
                 return(31, 1)
@@ -180,6 +193,8 @@ contract FlashLoanAssetMock {
     }
 }
 
+/// @dev Changes only `msg.sender` at the callback boundary to model a wrapper
+///      or forwarded callback from an address other than the committed Pool.
 contract FlashLoanCallbackForwarder {
     function forward(
         address receiver,
@@ -193,6 +208,23 @@ contract FlashLoanCallbackForwarder {
     }
 }
 
+/// @dev Direct Aave V3 `flashLoanSimple` fault model used by callback tests.
+///
+/// Fault categories are intentionally orthogonal:
+/// - origin mutations change sender, initiator, asset, amount, params, selector,
+///   or ABI length at callback authentication;
+/// - lifecycle faults skip or replay callback consumption;
+/// - repayment faults skip, under-pull, over-pull, return false, charge a token
+///   fee, or leave residual allowance through the cooperating asset mock;
+/// - outer-call failures occur before principal transfer, after callback, or
+///   after repayment to prove whole-call rollback;
+/// - a forced receiver separates the principal/callback recipient from the
+///   receiver committed in the originating calldata.
+///
+/// Nested callback-plan faults are encoded in `CallbackEnvelope.callbackCalls`
+/// by the owning fixture rather than hidden in this Pool. Configuration remains
+/// active for repeated calls in one test and must be explicitly restored when a
+/// test runs another scenario; Foundry creates a fresh mock for each test setup.
 contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
     error CallbackReturnedFalse();
     error RepaymentPullReturnedFalse();
@@ -217,16 +249,21 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
 
     FlashLoanCallbackForwarder private immutable _callbackForwarder;
 
+    // Callback origin and lifecycle controls.
     uint256 public premium;
     CallbackMutation public callbackMutation;
     bool public skipCallback;
     bool public replayCallback;
     bool public replayWithDifferentParams;
+
+    // Repayment and receiver controls.
     bool public pullRepayment = true;
     bool public useCustomPullAmount;
     uint256 public customPullAmount;
     bool public useForcedCallbackReceiver;
     address public forcedCallbackReceiver;
+
+    // Observable callback telemetry and outer failure injection.
     uint256 public callbackCount;
     bytes32 public lastReceivedCalldataHash;
     FailurePoint public failurePoint;
@@ -296,6 +333,8 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
     }
 
     function _runFlashLoan(address receiverAddress, address asset, uint256 amount, bytes calldata params) private {
+        // Failure points bracket the three externally observable phases:
+        // principal delivery, authenticated callback, and repayment pull.
         _revertAt(FailurePoint.BeforePrincipalTransfer);
         address callbackReceiver = useForcedCallbackReceiver ? forcedCallbackReceiver : receiverAddress;
         require(FlashLoanAssetMock(asset).transfer(callbackReceiver, amount), "principal transfer failed");
@@ -365,11 +404,17 @@ contract AaveV3FlashLoanPoolMock is IAaveV3FlashLoanSimplePool {
             IDefiSimplify7702Account.executeOperation,
             (callbackAsset, callbackAmount, premium, callbackInitiator, callbackParams)
         );
+        // `bytes memory` stores its length in the first word and payload at +32.
+        // Reducing only the length by one removes the final byte from the
+        // dynamically encoded params tail while leaving all payload bytes in
+        // memory, so CALL observes canonical calldata truncated by one byte.
         assembly ("memory-safe") {
             mstore(callbackCalldata, sub(mload(callbackCalldata), 1))
         }
         (bool callbackSucceeded, bytes memory callbackReturnData) = receiverAddress.call(callbackCalldata);
         if (!callbackSucceeded) {
+            // Bubble the receiver's complete revert bytes without ABI decoding.
+            // `callbackReturnData + 32` skips the in-memory length word.
             assembly ("memory-safe") {
                 revert(add(callbackReturnData, 32), mload(callbackReturnData))
             }

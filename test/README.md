@@ -1,4 +1,22 @@
-# Test fixtures
+# Test suite guide
+
+This guide separates the current reviewer map from historical issue evidence.
+The current non-fork suite contains 315 tests; older counts and artifact hashes
+in the appendix are merge-point records, not the present baseline.
+
+## Contents
+
+- [Current reviewer guide](#current-reviewer-guide)
+  - [Canonical fixtures and builders](#canonical-fixtures-and-builders)
+  - [Final v1 suite ownership](#final-v1-suite-ownership)
+  - [Reviewer-readable test vocabulary](#reviewer-readable-test-vocabulary)
+  - [Callback suite navigation](#callback-suite-navigation)
+  - [Focused validation](#focused-validation)
+- [Historical verification appendix](#historical-verification-appendix)
+
+## Current reviewer guide
+
+### Canonical fixtures and builders
 
 `utils/DelegatedAccountFixture.sol` is the canonical EIP-7702 fixture for unit
 and Base fork tests. It uses forge-std's Prague
@@ -25,7 +43,12 @@ suite unchanged as a regression gate when dynamic execution is introduced; add
 new cases only when the inherited upstream surface or a documented static
 invariant expands.
 
-## Final v1 suite ownership
+`utils/DynamicCallTestBuilder.sol` owns mechanical construction of generic
+dynamic calls, empty and singleton arrays, checkpoints, and balance patches.
+Protocol fixtures keep the reviewer-visible strategy order, asset roles,
+callback semantics, economic bounds, and final assertions.
+
+### Final v1 suite ownership
 
 DSC-83 consolidates the completed v1 suite without changing production source,
 public ABI, transient layout, or runtime behavior. Generic dynamic-call
@@ -116,7 +139,7 @@ production account ABI. `unit/CheckpointEntryPointBundle.t.sol` uses the real
 pinned EntryPoint source to prove that multiple same-account UserOperations in
 one bundle receive isolated invocation scopes.
 
-## Reviewer-readable test vocabulary
+### Reviewer-readable test vocabulary
 
 DSC-77 established one vocabulary across unit, fuzz, invariant, integration, and
 Base fork tests. Names should expose the scenario without requiring a reviewer
@@ -143,7 +166,56 @@ deterministic test gas. Production source, public ABI fixtures, runtime bytecode
 and contract behavior remained unchanged. At the DSC-77 merge point, the
 non-fork regression suite contained 210 tests.
 
-## DSC-51 dynamic-engine verification report
+### Callback suite navigation
+
+| Reviewer question | Start here |
+| --- | --- |
+| Does the ordinary callback state machine enforce origin, lifecycle, repayment, and cleanup? | `unit/AaveV3FlashLoanCallback.t.sol`, whose section boundaries follow those four concerns |
+| What happens at malicious reentry, malformed calldata, wrapper, repayment, and outer-failure boundaries? | `unit/AaveV3FlashLoanAdversarial.t.sol` |
+| Are outer and callback scopes isolated across same-account EntryPoint operations? | `unit/AaveV3FlashLoanEntryPointBundle.t.sol` |
+| Do arbitrary patches, positions, flags, premiums, and allowances preserve the rules? | `fuzz/AaveV3FlashLoanCallbackFuzz.t.sol` |
+| Do randomized success and expected-failure sequences preserve rollback and cleanup? | `invariant/AaveV3FlashLoanCallbackInvariant.t.sol` |
+| Which test dependency injects each callback fault? | `mocks/AaveV3FlashLoanMocks.sol`, grouped by origin, lifecycle, repayment, receiver, and outer failure |
+
+The invariant handler treats expected protocol reverts as modeled outcomes and
+checks their rollback locally. Any handler revert is unexpected and remains
+fatal under `fail_on_revert = true`. Its expected-success counters are the
+reference model; target state is observed telemetry, and the sticky
+postcondition verdict covers commitment cleanup, lock release, and zero Pool
+allowance.
+
+### Focused validation
+
+Run the canonical repository gate:
+
+```sh
+make check
+```
+
+Use these focused layers while reviewing a test-only change:
+
+```sh
+forge test --no-match-path 'test/fork/**'
+forge test --match-path 'test/unit/AaveV3FlashLoan*.t.sol' -vvv
+forge test --match-path 'test/fuzz/**/*.t.sol' -vvv
+forge test --match-path 'test/invariant/**/*.t.sol' -vvv
+forge snapshot --check --no-match-test 'testFuzz|invariant_' \
+  --no-match-contract 'BaseDeploymentManifestTest' \
+  --no-match-path 'test/fork/**'
+```
+
+Base protocol suites remain a separate `BASE_RPC_URL`-dependent gate. The root
+`Makefile`, CI workflows, and repository instructions are canonical when a
+historical command below differs from current validation.
+
+## Historical verification appendix
+
+The following reports preserve what each completed DSC issue proved at its merge
+point. Their suite counts, gas values, runtime sizes, artifact hashes, and
+commands are intentionally historical; use the current reviewer guide above for
+present ownership and validation.
+
+### DSC-51 dynamic-engine verification report
 
 DSC-51 is a verification-only change. It does not modify production contracts,
 the frozen dynamic ABI, validation order, or transient layout.
@@ -169,7 +241,7 @@ The invariant profiles and seed reproduction commands are documented in
 the CI profile runs 512 sequences at depth 256 with `fail_on_revert = true`.
 CI also executes each dynamic-engine fuzz property with 10,000 runs.
 
-### Gas evidence
+#### Gas evidence
 
 | Scenario | Test gas |
 | --- | ---: |
@@ -201,7 +273,7 @@ The snapshot command excludes `invariant_` functions because their reported
 run/call totals intentionally differ between the default and CI profiles. The
 deterministic tests in the invariant suite remain in `.gas-snapshot`.
 
-### Findings and accepted gaps
+#### Findings and accepted gaps
 
 No production-contract defect was found by the added campaigns. During test
 harness development, selector targeting alone allowed Forge to fuzz deployed
@@ -230,7 +302,7 @@ repository artifact tree was
 `9bb6a848a89b356c8e8d42cc0943da2ca723a373240d24f22c3b731a049561e9`;
 DSC-51 changes test artifacts only.
 
-## DSC-53 balance assertions
+### DSC-53 balance assertions
 
 `unit/FlowAssertions.t.sol` proves caller-scoped transaction-lifetime snapshots,
 duplicate and cross-sender identity, reusable snapshots, validation order,
@@ -264,7 +336,7 @@ forge test --match-path 'test/fuzz/FlowAssertionsFuzz.t.sol' -vvv
 forge test --match-path 'test/integration/**/*.t.sol' -vvv
 ```
 
-## DSC-76 shared transient token-balance records
+### DSC-76 shared transient token-balance records
 
 `src/libraries/TransientTokenBalanceRecord.sol` is the canonical production
 accessor for the shared physical record shape used by account checkpoints and
@@ -294,7 +366,7 @@ Run the focused DSC-76 suite with:
 forge test --match-path 'test/unit/TransientTokenBalanceRecord.t.sol' -vvv
 ```
 
-## DSC-55 Aave V3 health-factor assertion
+### DSC-55 Aave V3 health-factor assertion
 
 `FlowAssertions.assertAaveV3HealthFactorAtLeast` is deliberately versioned and
 implemented directly on the immutable checker. It low-level `STATICCALL`s the
@@ -334,7 +406,7 @@ forge test --match-path 'test/integration/FlowAssertionsAaveV3BatchIntegration.t
 forge test --match-path 'test/fork/BaseAaveV3FlowAssertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
 ```
 
-## DSC-54 independent generic uint256 staticcall checker
+### DSC-54 independent generic uint256 staticcall checker
 
 `StaticCallUint256Assertions` is deployed and reviewed independently from the
 typed `FlowAssertions` checker. It supports an account-binding mode that
@@ -378,7 +450,7 @@ forge test --match-path 'test/integration/StaticCallUint256AssertionsBatchIntegr
 forge test --match-path 'test/fork/BaseStaticCallUint256Assertions.t.sol' --fork-url "$BASE_RPC_URL" -vvv
 ```
 
-## DSC-78 authenticated Aave V3 callback path
+### DSC-78 authenticated Aave V3 callback path
 
 `unit/AaveV3FlashLoanCallback.t.sol` exercises the complete direct
 `flashLoanSimple` round trip through a delegated EOA. It covers callback-enabled
@@ -426,7 +498,7 @@ forge test --match-path 'test/unit/AaveV3FlashLoanCallback.t.sol' -vvv
 ./script/check-abi-fixtures.sh
 ```
 
-## DSC-81 callback adversarial, fuzz, and invariant proof
+### DSC-81 callback adversarial, fuzz, and invariant proof
 
 DSC-81 does not expand the callback ABI or supported provider set. It stresses
 the completed Aave V3 callback path as a security boundary:
@@ -482,7 +554,7 @@ reports zero high findings. The remaining project results are the intentional
 checked low-level token/protocol calls, their loop reachability, and reviewed
 assembly word reads/writes.
 
-### Explicit limits of the proof
+#### Explicit limits of the proof
 
 - A callback outer-call index is not supplied by the Pool and cannot be changed
   by a production caller independently from the committed call. First, middle,
@@ -515,7 +587,7 @@ forge test --match-path 'test/invariant/AaveV3FlashLoanCallbackInvariant.t.sol' 
 forge test --match-path 'test/unit/AaveV3FlashLoanGas.t.sol' -vvv
 ```
 
-### Validation commands
+#### Validation commands used at the DSC-81 merge point
 
 Run the focused verification layers with:
 
@@ -536,7 +608,7 @@ slither . --filter-paths 'lib/' --fail-high
 
 The repository-wide commands in the root `README.md` remain the release gate.
 
-## DSC-68 SDK/signer-only no-code target policy
+### DSC-68 SDK/signer-only no-code target policy
 
 `unit/DynamicNoCodeTargetPolicy.t.sol` locks the accepted contract-side half of
 ADR-007 without changing production Solidity. It proves that:
@@ -556,7 +628,7 @@ Run the focused suite with:
 forge test --match-path 'test/unit/DynamicNoCodeTargetPolicy.t.sol' -vvv
 ```
 
-## DSC-84 post-review test and coverage hardening
+### DSC-84 post-review test and coverage hardening
 
 DSC-84 adds evidence without changing production Solidity, ABI, storage,
 metadata, or the deployed artifact identity:
