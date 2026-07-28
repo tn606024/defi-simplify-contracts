@@ -12,6 +12,7 @@ export FOUNDRY_PROFILE
 	check-toolchain \
 	check-foundry \
 	check-dependencies \
+	check-build-lock-regression \
 	format \
 	build \
 	check-artifacts \
@@ -51,7 +52,11 @@ check-foundry:
 
 check-dependencies:
 	./script/check-account-abstraction-revision.sh
+	$(MAKE) check-build-lock-regression
 	./script/check-forge-std-revision.sh
+
+check-build-lock-regression:
+	./test/scripts/check-foundry-build-settings.sh
 
 format:
 	forge fmt --check

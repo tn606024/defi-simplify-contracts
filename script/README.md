@@ -9,9 +9,12 @@ independently callable implementation units used by those targets.
 - `check-account-abstraction-revision.sh` verifies the account-abstraction and
   OpenZeppelin submodule checkouts, committed gitlinks, and clean upstream
   working trees against `config/account-abstraction-v0.9.0.json`. It also
-  requires `foundry.toml` and every repository-owned Solidity source under
-  `src/`, `test/`, and `script/` to use the exact local compiler recorded by
-  that lock.
+  requires the effective Foundry Solidity, EVM, optimizer, optimizer-run, and
+  via-IR settings to match the complete local compatibility build lock, and
+  every repository-owned Solidity source under `src/`, `test/`, and `script/`
+  to use the locked compiler.
+- `check-foundry-build-settings.sh` is the focused build-lock validator used by
+  the account-abstraction revision check and its mismatch regression harness.
 - `check-forge-std-revision.sh` verifies the forge-std tag, checkout, committed
   gitlink, and clean working tree against `foundry.lock`.
 - `check-minimal-account-surface.sh` requires the custom account ABI to be the
