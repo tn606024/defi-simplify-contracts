@@ -42,19 +42,19 @@ export PATH="$HOME/.foundry/bin:$PATH"
 ./script/check-foundry-version.sh
 ./script/check-account-abstraction-revision.sh
 ./script/check-forge-std-revision.sh
+forge build
+./script/generate-base-v1-manifest.sh
 ./script/check-base-v1-manifest.sh
-./script/run-base-v1-historical-test.sh \
-  test/unit/BaseDeploymentManifest.t.sol -vvv
+./script/check-abi-fixtures.sh
+./script/check-direct-immutable-artifacts.sh
 ```
 
-The generator reads `config/base-v1-deployment.json`, checks out the exact
-source commit recorded by the deployed manifest, validates the locked
-account-abstraction revision, Base EntryPoint, and historical 200-run settings,
+The generator reads `config/base-v1-deployment.json`, validates the locked
+account-abstraction revision, Base EntryPoint, and effective Foundry settings,
 then reconstructs creation code, complete initcode, runtime code, hashes, and
 CREATE2 addresses. The checker rejects any difference from the checked-in
 manifest or any overstatement of audit, release, SDK, warranty, or security
-status. Active ABI and direct-artifact checks belong to the separate v1.1
-candidate build and run through `make check`.
+status.
 
 Generate explorer verification inputs separately for each direct artifact:
 
@@ -78,37 +78,6 @@ The checked-in complete deployment ABIs are:
 The existing `I*.json` fixtures remain the smaller cross-repository interface
 and error surfaces.
 
-## Base v1.1 unbroadcast candidate
-
-`base-v1.1-candidate.json` records the next direct immutable artifact family.
-It is compiled with 10,000 optimizer runs and includes the account's
-zero-capacity balance-cache allocation fast path. It is **unreleased,
-unbroadcast, unverified, not SDK-integrated, experimental, and unaudited**.
-DSC-86 owns the planned independent audit of the exact candidate commit.
-`intendedTrustLevel: "official"` records intent only; no trust level has been
-assigned and none of the predicted addresses is an official deployment.
-
-| Artifact | Predicted address | Runtime size | Runtime code hash |
-| --- | --- | ---: | --- |
-| `DefiSimplify7702Account` | `0x92fE0373d4684a7428B6d723a93427e4D152DF6d` | 12,158 bytes | `0x3ccebf2c563db0b2284a322ed5a53067ba4a561949973f375e267a3230babc00` |
-| `FlowAssertions` | `0xBDD175f69C799efFeD30192B49D8421d29CA2167` | 2,209 bytes | `0xadbf11b88ce66db628549fa169006eb55e88c382708716ddb7c1c9c1d9b754c5` |
-| `StaticCallUint256Assertions` | `0x4BCdFef3B0aa0B4FF857E1557f2669870C57c77D` | 1,609 bytes | `0xb6ed9520e6684c6b4342d03c92f4995ca2774ac909306f7876d8cdf047ecf9f6` |
-
-Reproduce both the active candidate and the historical official identity:
-
-```sh
-forge build
-./script/check-base-v1-1-candidate-manifest.sh
-./script/check-base-v1-manifest.sh
-./script/run-base-v1-historical-test.sh \
-  test/unit/BaseDeploymentManifest.t.sol -vvv
-```
-
-The historical checks build the exact source commit recorded by
-`deployments/base-v1.json` with its original 200-run settings. CI fetches full
-Git history so this build remains available after the repository default moves
-to 10,000 runs.
-
 ## Independently verify Base evidence
 
 The deployment script is idempotent. Against current Base state it reconstructs
@@ -116,8 +85,7 @@ all three identities and verifies the already-deployed runtimes without sending
 a factory transaction:
 
 ```sh
-./script/run-base-v1-historical-script.sh \
-  script/DeployBaseV1.s.sol:DeployBaseV1 \
+forge script script/DeployBaseV1.s.sol:DeployBaseV1 \
   --rpc-url "$BASE_RPC_URL"
 ```
 
@@ -129,8 +97,8 @@ against the official manifest:
 ```sh
 ./script/check-base-v1-onchain-deployment.sh
 
-./script/run-base-v1-historical-test.sh \
-  test/fork/BaseDeploymentFactory.t.sol \
+forge test \
+  --match-path 'test/fork/BaseDeploymentFactory.t.sol' \
   --fork-url "$BASE_RPC_URL"
 ```
 

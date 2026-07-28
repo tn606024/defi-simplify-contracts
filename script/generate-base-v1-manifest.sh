@@ -1,64 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly config_path="config/base-v1-deployment.json"
-output_path="${1:-deployments/base-v1.json}"
-if [[ "$output_path" != /* ]]; then
-  output_path="$repository_root/$output_path"
-fi
-readonly output_path
-
-readonly expected_build_settings="$(
-  jq -c '.build | {
-      solidityVersion,
-      evmVersion,
-      optimizer,
-      optimizerRuns,
-      viaIR,
-      bytecodeHash,
-      useLiteralContent
-    }' "$config_path"
-)"
-readonly actual_build_settings="$(
-  forge config --json | jq -c '{
-    solidityVersion: .solc,
-    evmVersion: .evm_version,
-    optimizer: .optimizer,
-    optimizerRuns: .optimizer_runs,
-    viaIR: .via_ir,
-    bytecodeHash: .bytecode_hash,
-    useLiteralContent: .use_literal_content
-  }'
-)"
-if [[ "$expected_build_settings" != "$actual_build_settings" ]]; then
-  readonly deployment_source_commit="$(jq -er '.deploymentSourceCommit' "$config_path")"
-  readonly historical_tree="$(mktemp -d /tmp/defi-simplify-base-v1.XXXXXX)"
-
-  cleanup_historical_tree() {
-    rm -rf "$historical_tree"
-  }
-  trap cleanup_historical_tree EXIT
-
-  git -C "$repository_root" cat-file -e "$deployment_source_commit^{commit}" || {
-    echo "Historical Base v1 source commit is unavailable: $deployment_source_commit" >&2
-    exit 1
-  }
-  git -C "$repository_root" archive "$deployment_source_commit" | tar -x -C "$historical_tree"
-  rm -rf "$historical_tree/lib"
-  ln -s "$repository_root/lib" "$historical_tree/lib"
-  cp "$repository_root/script/generate-base-v1-manifest.sh" \
-    "$historical_tree/script/generate-base-v1-manifest.sh"
-  cp "$repository_root/config/base-v1-deployment.json" \
-    "$historical_tree/config/base-v1-deployment.json"
-
-  (
-    cd "$historical_tree"
-    ./script/generate-base-v1-manifest.sh "$output_path"
-  )
-  exit 0
-fi
-
+readonly output_path="${1:-deployments/base-v1.json}"
 readonly account_artifact="out/DefiSimplify7702Account.sol/DefiSimplify7702Account.json"
 readonly flow_assertions_artifact="out/FlowAssertions.sol/FlowAssertions.json"
 readonly static_assertions_artifact="out/StaticCallUint256Assertions.sol/StaticCallUint256Assertions.json"
@@ -87,6 +31,28 @@ if [[ "$configured_foundry_version" != "$pinned_foundry_version" ]]; then
   exit 1
 fi
 
+readonly expected_build_settings="$(
+  jq -c '.build | {
+      solidityVersion,
+      evmVersion,
+      optimizer,
+      optimizerRuns,
+      viaIR,
+      bytecodeHash,
+      useLiteralContent
+    }' "$config_path"
+)"
+readonly actual_build_settings="$(
+  forge config --json | jq -c '{
+    solidityVersion: .solc,
+    evmVersion: .evm_version,
+    optimizer: .optimizer,
+    optimizerRuns: .optimizer_runs,
+    viaIR: .via_ir,
+    bytecodeHash: .bytecode_hash,
+    useLiteralContent: .use_literal_content
+  }'
+)"
 if [[ "$expected_build_settings" != "$actual_build_settings" ]]; then
   echo "Deployment config does not match the active pinned Foundry build settings" >&2
   exit 1
@@ -210,7 +176,7 @@ artifact_manifest() {
     jq -er --arg name "$contract_name" '.deployment.artifacts[$name].address' "$config_path"
   )"
   if [[ "$deployed_address" != "$expected_address" ]]; then
-    echo "$contract_name deployed address $deployed_address does not match reconstructed $expected_address" >&2
+    echo "$contract_name deployed address does not match the reconstructed CREATE2 address" >&2
     exit 1
   fi
   transaction_hash="$(

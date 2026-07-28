@@ -1,7 +1,7 @@
 # Test suite guide
 
 This guide separates the current reviewer map from historical issue evidence.
-The current non-fork suite contains 325 tests; older counts and artifact hashes
+The current non-fork suite contains 315 tests; older counts and artifact hashes
 in the appendix are merge-point records, not the present baseline.
 
 ## Contents
@@ -78,7 +78,7 @@ The concrete suite families own these final-v1 properties:
 | `DynamicExecution`, `DynamicEntryPointTarget`, `BaseDynamicEntryPoint` | Authorization, final-selector ABI decoding, target policy, call/value execution, failure attribution, rollback, lock, event surface, and EntryPoint-as-target behavior |
 | `CheckpointEngine`, `CheckpointEntryPointBundle`, `DynamicCalldataPatching` | Invocation-scoped checkpoint records, validation order, balance sources, exact word patching, and same-account bundle isolation |
 | `DynamicCalldataPatchingFuzz`, `DynamicExecutionAdversarialFuzz`, `DynamicEngineInvariant` | Arbitrary amount/offset/revert-data properties and stateful execution/rollback models |
-| `DynamicGoldenVectors`, `DynamicEngineGas`, `BalanceCacheGas`, `BalanceCacheZeroCapacity`, `CheckpointRepresentationBenchmark` | Exact cross-repository bytes/slots/errors and deterministic checkpoint/patch/cache cost evidence |
+| `DynamicGoldenVectors`, `DynamicEngineGas`, `BalanceCacheGas`, `CheckpointRepresentationBenchmark` | Exact cross-repository bytes/slots/errors and deterministic checkpoint/patch/cache cost evidence |
 | `AaveV3FlashLoanCallback`, `CallbackCommitmentState`, `TransientExecutionComponents` | Authenticated single-use Aave callback lifecycle, origin commitment, repayment, and low-level transient component transitions |
 | `AaveV3FlashLoanAdversarial`, `AaveV3FlashLoanEntryPointBundle` | Malicious callback/reentry/repayment boundaries and same-account EntryPoint bundle isolation |
 | `AaveV3FlashLoanCallbackFuzz`, `AaveV3FlashLoanCallbackInvariant` | Arbitrary patched origins, callback positions, repayment allowances, and stateful callback rollback/cleanup |
@@ -86,7 +86,6 @@ The concrete suite families own these final-v1 properties:
 | `FlowAssertions`, `FlowAssertionsAaveV3`, `StaticCallUint256Assertions` | Caller-bound typed balance/Aave post-conditions and independent reviewed generic uint256 reads |
 | Assertion fuzz, integration, golden-vector, and Base fork suites | Arithmetic properties, account/checker atomicity, exact SDK bytes, and deployed Base compatibility |
 | Base Aave static, dynamic, and flash lifecycle suites | Pinned protocol identities, complete reference strategies, economic guard failures, atomic rollback, emitted protocol evidence, and gas |
-| `BaseDeploymentManifest`, `BaseV1_1CandidateManifest`, `ArtifactDeploymentGasBenchmark` | Historical v1.0.0 identity, active v1.1.0 candidate identity/limit headroom, and deployment-cost comparison |
 | `TransientTokenBalanceRecord`, `TransientNamespaceSeparation` | Canonical record shape and pairwise separation of every occupied transient namespace |
 | `DelegatedAccountFixture`, `DynamicCallTestBuilder`, focused protocol fixtures and mocks | Canonical test construction and controlled dependencies; these support the properties above rather than claiming production behavior themselves |
 
@@ -201,7 +200,7 @@ forge test --match-path 'test/unit/AaveV3FlashLoan*.t.sol' -vvv
 forge test --match-path 'test/fuzz/**/*.t.sol' -vvv
 forge test --match-path 'test/invariant/**/*.t.sol' -vvv
 forge snapshot --check --no-match-test 'testFuzz|invariant_' \
-  --no-match-contract 'BaseDeploymentManifestTest|BaseV1_1CandidateManifestTest' \
+  --no-match-contract 'BaseDeploymentManifestTest' \
   --no-match-path 'test/fork/**'
 ```
 
@@ -692,86 +691,3 @@ make coverage
 
 The final local suite contains 315 non-fork tests and 283 deterministic
 gas-snapshot tests.
-
-### DSC-87 v1.1 artifact and gas decision
-
-DSC-87 creates an unreleased, unbroadcast v1.1.0 artifact family. It preserves
-the official Base v1.0.0 manifest and rebuilds that identity from its exact
-deployment source commit with 200 optimizer runs. The active candidate uses
-10,000 runs and leaves the two `BalanceCache` arrays unallocated when a call
-contains no patches or checkpoints.
-
-The isolated 200-run source comparison reproduced the expected allocation
-effect:
-
-| Path | Released source | Empty-cache fast path | Delta |
-| --- | ---: | ---: | ---: |
-| Zero-capacity ordinary call | 20,056 | 19,461 | -595 |
-| Empty callback plan | 162,654 | 162,059 | -595 |
-| One ordinary callback call | 262,921 | 261,730 | -1,191 |
-| Four ordinary callback calls | 297,195 | 294,213 | -2,982 |
-| Exact repayment | 183,060 | 182,465 | -595 |
-
-Balance-aware dynamic paths add 39–80 gas under the isolated source change
-because they take the nonzero-capacity branch. The complete 10,000-run candidate
-more than offsets that branch cost in the measured paths:
-
-| Representative path | Official v1.0.0 / 200 runs | v1.1.0 candidate / 10,000 runs | Delta |
-| --- | ---: | ---: | ---: |
-| One current-balance patch | 146,920 | 146,363 | -557 |
-| Two-call checkpoint delta | 157,122 | 156,156 | -966 |
-| Empty callback plan | 162,654 | 160,228 | -2,426 |
-| One ordinary callback call | 262,921 | 259,876 | -3,045 |
-| Four ordinary callback calls | 297,195 | 291,807 | -5,388 |
-| Exact repayment | 183,060 | 180,736 | -2,324 |
-
-Deployment becomes more expensive because higher optimizer runs trade bytecode
-size for repeated runtime execution:
-
-| Artifact | Runtime bytes, v1.0.0 → v1.1.0 | Benchmark deployment gas, v1.0.0 → v1.1.0 |
-| --- | ---: | ---: |
-| `DefiSimplify7702Account` | 9,315 → 12,158 | 1,900,100 → 2,470,166 |
-| `FlowAssertions` | 1,451 → 2,209 | 323,163 → 475,099 |
-| `StaticCallUint256Assertions` | 1,082 → 1,609 | 249,160 → 354,802 |
-
-The account deployment premium amortizes after roughly 106–1,024 measured
-executions depending on plan shape. The representative typed balance assertion
-amortizes after about 512 calls; the generic uint256 checker needs roughly
-1,030 calls. This project expects immutable delegation/checker artifacts to be
-reused across many accounts and transactions, so the runtime-biased candidate
-is accepted before the audit freeze.
-
-The distinct-token cache remains linear. Every reviewed Base reference strategy
-uses at most one distinct balance token per `DynamicCall`; a mapping or
-transient-table redesign would add initialization, bytecode, collision policy,
-and audit surface for synthetic shapes outside that observed bound. The
-10,000-run build also reduces the 1/4/8/16/32 matrix to
-32,408 / 73,040 / 131,565 / 263,681 / 588,998 gas without changing cache
-semantics.
-
-All seven pinned-block Base gas flows also decrease:
-
-| Base flow | v1.0.0 / 200 runs | v1.1.0 candidate / 10,000 runs | Delta |
-| --- | ---: | ---: | ---: |
-| Static approve and supply | 182,769 | 182,344 | -425 |
-| Static supply and borrow | 381,138 | 380,623 | -515 |
-| Static repay and withdraw | 69,934 | 69,557 | -377 |
-| Guarded dynamic loop | 621,217 | 615,319 | -5,898 |
-| Flash leverage open | 688,723 | 679,433 | -9,290 |
-| Flash partial deleverage | 414,017 | 404,797 | -9,220 |
-| Flash full close | 300,587 | 294,774 | -5,813 |
-
-Run the focused evidence with:
-
-```sh
-forge test --match-path 'test/unit/BalanceCache*.t.sol' -vvv
-forge test --match-path 'test/benchmark/ArtifactDeploymentGasBenchmark.t.sol' -vvv
-forge test --match-contract BaseV1_1CandidateManifestTest -vvv
-./script/check-base-v1-1-candidate-manifest.sh
-./script/check-base-v1-manifest.sh
-```
-
-The post-DSC-87 local suite contains 325 non-fork tests. The deterministic
-non-fork snapshot contains 288 tests, plus seven separately measured Base fork
-gas tests; JSON/build identity tests remain excluded because their compiler and
-manifest work is not product execution gas.

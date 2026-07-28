@@ -1,63 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output_directory="${1:-out/verification/base-v1}"
-if [[ "$output_directory" != /* ]]; then
-  output_directory="$repository_root/$output_directory"
-fi
-readonly output_directory
-
-readonly config_path="config/base-v1-deployment.json"
-readonly expected_build_settings="$(
-  jq -c '.build | {
-      solidityVersion,
-      evmVersion,
-      optimizer,
-      optimizerRuns,
-      viaIR,
-      bytecodeHash,
-      useLiteralContent
-    }' "$config_path"
-)"
-readonly actual_build_settings="$(
-  forge config --json | jq -c '{
-    solidityVersion: .solc,
-    evmVersion: .evm_version,
-    optimizer: .optimizer,
-    optimizerRuns: .optimizer_runs,
-    viaIR: .via_ir,
-    bytecodeHash: .bytecode_hash,
-    useLiteralContent: .use_literal_content
-  }'
-)"
-if [[ "$expected_build_settings" != "$actual_build_settings" ]]; then
-  readonly deployment_source_commit="$(jq -er '.deploymentSourceCommit' "$config_path")"
-  readonly historical_tree="$(mktemp -d /tmp/defi-simplify-base-v1.XXXXXX)"
-
-  cleanup_historical_tree() {
-    rm -rf "$historical_tree"
-  }
-  trap cleanup_historical_tree EXIT
-
-  git -C "$repository_root" cat-file -e "$deployment_source_commit^{commit}" || {
-    echo "Historical Base v1 source commit is unavailable: $deployment_source_commit" >&2
-    exit 1
-  }
-  git -C "$repository_root" archive "$deployment_source_commit" | tar -x -C "$historical_tree"
-  rm -rf "$historical_tree/lib"
-  ln -s "$repository_root/lib" "$historical_tree/lib"
-  cp "$repository_root/script/generate-base-v1-verification-inputs.sh" \
-    "$historical_tree/script/generate-base-v1-verification-inputs.sh"
-  cp "$repository_root/config/base-v1-deployment.json" \
-    "$historical_tree/config/base-v1-deployment.json"
-
-  (
-    cd "$historical_tree"
-    ./script/generate-base-v1-verification-inputs.sh "$output_directory"
-  )
-  exit 0
-fi
+readonly output_directory="${1:-out/verification/base-v1}"
 
 for required_command in forge jq; do
   command -v "$required_command" >/dev/null || {

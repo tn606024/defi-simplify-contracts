@@ -32,39 +32,24 @@ independently callable implementation units used by those targets.
   ABIs and the complete deployment ABIs remain byte-for-byte synchronized with
   Solidity.
 - `generate-base-v1-manifest.sh` validates the official Base deployment config
-  against the dependency and historical 200-run build locks. When the active
-  repository build differs, it compiles the exact deployment source commit in
-  a temporary tree, substitutes the immutable EntryPoint, derives the three
-  direct artifact hashes and CREATE2 addresses, and combines them with mined
-  transaction and exact source-verification evidence.
+  against the dependency and effective build locks, substitutes the immutable
+  EntryPoint into account runtime bytecode, derives the three direct artifact
+  hashes and CREATE2 addresses, and combines them with mined transaction and
+  exact source-verification evidence.
 - `generate-base-v1-verification-inputs.sh` derives one Solidity Standard JSON
-  input per deployed contract from the historical artifact's exact metadata
-  source closure. It rejects non-production source roots and guarantees that
-  `test/`, `script/`, build output, and unrelated contracts are not included
-  in explorer submissions. Generated inputs are written under the ignored
-  `out/` tree by default.
+  input per deployed contract from that artifact's exact metadata source
+  closure. It rejects non-production source roots and guarantees that
+  `test/`, `script/`, build output, and unrelated contracts are not included in
+  explorer submissions. Generated inputs are written under the ignored `out/`
+  tree by default.
 - `check-base-v1-manifest.sh` independently regenerates the official manifest
   and rejects stale output, incomplete deployment evidence, or misleading
   audit, release, trust-level, warranty, security, and SDK-readiness claims.
-- `generate-base-v1-1-candidate-manifest.sh` derives the active 10,000-run
-  v1.1.0 creation code, initcode, immutable-substituted runtime, versioned
-  salts, predicted addresses, and EIP-170/EIP-3860 headroom.
-- `check-base-v1-1-candidate-manifest.sh` rejects candidate drift or any
-  deployment, trust, verification, release, warranty, audit, or safety
-  overclaim.
-- `run-base-v1-historical-test.sh` compiles one approved deployment-identity
-  test against the exact historical deployment source and 200-run build,
-  keeping official v1.0.0 Solidity reconstruction independent from the active
-  v1.1.0 candidate.
-- `run-base-v1-historical-script.sh` runs the approved non-broadcast
-  `DeployBaseV1` reproduction against the exact historical deployment source
-  and 200-run build. It rejects other script targets.
 - `check-base-v1-onchain-deployment.sh` uses `BASE_RPC_URL` to verify the live
   factory, EntryPoint, and artifact runtime hashes, then checks each historical
   deployment transaction's sender, factory destination, salt, complete
   initcode hash, successful receipt, and mined block against the manifest.
-- `DeployBaseV1.s.sol`, invoked through the historical runner, verifies the live
-  Base factory and EntryPoint, rebuilds
+- `DeployBaseV1.s.sol` verifies the live Base factory and EntryPoint, rebuilds
   every initcode and CREATE2 prediction, and idempotently deploys or verifies
   all three runtimes. The official addresses are already deployed, so the
   script is now an idempotent reproduction check and must not be broadcast.

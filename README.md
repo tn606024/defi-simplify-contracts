@@ -25,12 +25,13 @@ They do not require the `defi-simplify` Go SDK.
 All three contracts are direct and immutable. They have no owner, admin, proxy,
 upgrade function, withdrawal function, or protocol registry.
 
-## Base deployment
+## Retired Base v1.0 deployment
 
 Base is the only supported chain in this version.
-The official deployment is published as the experimental, unaudited
+The former deployment remains visible as the experimental, unaudited
 [`v1.0.0`](https://github.com/tn606024/defi-simplify-contracts/releases/tag/v1.0.0)
-release.
+release, but it is retired and unsupported. The current source build supersedes
+it and is not deployed at these legacy addresses.
 
 | Contract | Address |
 | --- | --- |
@@ -45,15 +46,6 @@ hold assets and protocol positions at the EOA address.
 Complete ABIs are available in [`abi/`](abi/). Deployment transactions, runtime
 code hashes, and reproducible deployment identity are available in
 [`deployments/base-v1.json`](deployments/base-v1.json).
-
-The repository's current default build is the **unreleased and unbroadcast
-v1.1.0 candidate**, compiled with 10,000 optimizer runs. It is not installed at
-the official v1.0.0 addresses above and has no assigned trust level. Its
-predicted addresses, hashes, sizes, and explicit `not-broadcast` status are
-recorded in
-[`deployments/base-v1.1-candidate.json`](deployments/base-v1.1-candidate.json).
-The historical v1.0.0 build remains reproducible from its pinned deployment
-source commit with 200 optimizer runs.
 
 ## Using `DefiSimplify7702Account`
 
