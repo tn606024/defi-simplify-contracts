@@ -18,7 +18,7 @@ echo "  no source file, line, statement, branch, or function is manually exclude
 
 forge coverage \
     --no-match-path 'test/fork/**' \
-    --no-match-contract 'BaseDeploymentManifestTest' \
+    --no-match-contract 'BaseDeploymentManifestTest|BaseV1_1CandidateManifestTest' \
     --exclude-tests \
     --no-match-coverage 'script/' \
     --report summary \

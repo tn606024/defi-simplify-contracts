@@ -46,6 +46,15 @@ Complete ABIs are available in [`abi/`](abi/). Deployment transactions, runtime
 code hashes, and reproducible deployment identity are available in
 [`deployments/base-v1.json`](deployments/base-v1.json).
 
+The repository's current default build is the **unreleased and unbroadcast
+v1.1.0 candidate**, compiled with 10,000 optimizer runs. It is not installed at
+the official v1.0.0 addresses above and has no assigned trust level. Its
+predicted addresses, hashes, sizes, and explicit `not-broadcast` status are
+recorded in
+[`deployments/base-v1.1-candidate.json`](deployments/base-v1.1-candidate.json).
+The historical v1.0.0 build remains reproducible from its pinned deployment
+source commit with 200 optimizer runs.
+
 ## Using `DefiSimplify7702Account`
 
 ### 1. Install the implementation on an EOA

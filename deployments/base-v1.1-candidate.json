@@ -1,0 +1,140 @@
+{
+  "addressFamilyId": "defi-simplify-v1.1-arachnid-entrypoint-v0.9.0",
+  "artifactVersion": "v1.1.0",
+  "artifacts": {
+    "DefiSimplify7702Account": {
+      "abiPath": "abi/DefiSimplify7702Account.json",
+      "constructor": {
+        "arguments": "0x000000000000000000000000433709009b8330fda32311df1c2afa402ed8d009",
+        "signature": "constructor(address)"
+      },
+      "contractName": "DefiSimplify7702Account",
+      "creationCodeHash": "0x7d7fc7abc1caede46db24680d5a1a8639171cd96919d44fa28668ca22bcc562e",
+      "creationCodeSize": 12317,
+      "deploymentStatus": "not-broadcast",
+      "expectedAddress": "0x92fE0373d4684a7428B6d723a93427e4D152DF6d",
+      "initcodeHash": "0xea1f9e95f609685e423318340cce9c9d35f4c90b43e082ebde5710bf85b6c491",
+      "initcodeSize": 12349,
+      "limits": {
+        "initcodeHeadroom": 36803,
+        "initcodeSize": 49152,
+        "runtimeCodeHeadroom": 12418,
+        "runtimeCodeSize": 24576
+      },
+      "runtimeCodeHash": "0x3ccebf2c563db0b2284a322ed5a53067ba4a561949973f375e267a3230babc00",
+      "runtimeCodeSize": 12158,
+      "salt": {
+        "preimage": "defi-simplify.v1.1.DefiSimplify7702Account",
+        "value": "0x49bc36b82e50e9f433f98d5c0325e0191ab9207446dcfb2b1c7a7753d3404f31"
+      },
+      "sourcePath": "src/DefiSimplify7702Account.sol",
+      "verificationStatus": "not-submitted"
+    },
+    "FlowAssertions": {
+      "abiPath": "abi/FlowAssertions.json",
+      "constructor": {
+        "arguments": "0x",
+        "signature": "constructor()"
+      },
+      "contractName": "FlowAssertions",
+      "creationCodeHash": "0x58298683472f0fc329c0597d6af801e25ee106378ed77bbca745377faf70fd80",
+      "creationCodeSize": 2235,
+      "deploymentStatus": "not-broadcast",
+      "expectedAddress": "0xBDD175f69C799efFeD30192B49D8421d29CA2167",
+      "initcodeHash": "0x58298683472f0fc329c0597d6af801e25ee106378ed77bbca745377faf70fd80",
+      "initcodeSize": 2235,
+      "limits": {
+        "initcodeHeadroom": 46917,
+        "initcodeSize": 49152,
+        "runtimeCodeHeadroom": 22367,
+        "runtimeCodeSize": 24576
+      },
+      "runtimeCodeHash": "0xadbf11b88ce66db628549fa169006eb55e88c382708716ddb7c1c9c1d9b754c5",
+      "runtimeCodeSize": 2209,
+      "salt": {
+        "preimage": "defi-simplify.v1.1.FlowAssertions",
+        "value": "0xa6db57ce6b8a190f5217016ccf0dd22878a486536ec2d8a453f73af8b8295b2b"
+      },
+      "sourcePath": "src/FlowAssertions.sol",
+      "verificationStatus": "not-submitted"
+    },
+    "StaticCallUint256Assertions": {
+      "abiPath": "abi/StaticCallUint256Assertions.json",
+      "constructor": {
+        "arguments": "0x",
+        "signature": "constructor()"
+      },
+      "contractName": "StaticCallUint256Assertions",
+      "creationCodeHash": "0xc3f9ab6e93158f85c3bd10d6ba8b56dd72ca1f553fc9536d56e4779c666263ee",
+      "creationCodeSize": 1635,
+      "deploymentStatus": "not-broadcast",
+      "expectedAddress": "0x4BCdFef3B0aa0B4FF857E1557f2669870C57c77D",
+      "initcodeHash": "0xc3f9ab6e93158f85c3bd10d6ba8b56dd72ca1f553fc9536d56e4779c666263ee",
+      "initcodeSize": 1635,
+      "limits": {
+        "initcodeHeadroom": 47517,
+        "initcodeSize": 49152,
+        "runtimeCodeHeadroom": 22967,
+        "runtimeCodeSize": 24576
+      },
+      "runtimeCodeHash": "0xb6ed9520e6684c6b4342d03c92f4995ca2774ac909306f7876d8cdf047ecf9f6",
+      "runtimeCodeSize": 1609,
+      "salt": {
+        "preimage": "defi-simplify.v1.1.StaticCallUint256Assertions",
+        "value": "0x13419e0e8df6da47767fa29a231b905833a763310b2bac47f210653edcf28d4f"
+      },
+      "sourcePath": "src/StaticCallUint256Assertions.sol",
+      "verificationStatus": "not-submitted"
+    }
+  },
+  "build": {
+    "bytecodeHash": "ipfs",
+    "evmVersion": "prague",
+    "foundryVersion": "v1.7.1",
+    "optimizer": true,
+    "optimizerRuns": 10000,
+    "solidityVersion": "0.8.36",
+    "useLiteralContent": true,
+    "viaIR": true
+  },
+  "entryPoint": {
+    "address": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
+    "runtimeCodeHash": "0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d",
+    "version": "v0.9.0"
+  },
+  "factory": {
+    "address": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+    "calldataEncoding": "bytes32 salt || initcode",
+    "name": "Arachnid Deterministic Deployment Proxy",
+    "runtimeCodeHash": "0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989"
+  },
+  "intendedTrustLevel": "official",
+  "manifestStatus": "candidate",
+  "network": {
+    "chainId": 8453,
+    "deploymentStatus": "not-broadcast",
+    "name": "Base"
+  },
+  "releaseStatus": "unreleased",
+  "schemaVersion": 1,
+  "scope": {
+    "chain": "Base-only",
+    "strategyClaims": "documented Base Aave proofs only"
+  },
+  "sdkIntegrationStatus": "not-integrated",
+  "security": {
+    "experimental": true,
+    "independentAuditPlanned": true,
+    "notice": "Experimental and unaudited; this unbroadcast candidate is not an audit or security guarantee. Total and irreversible loss is possible. Use at your own risk; no warranty is provided.",
+    "securityGuarantee": false,
+    "status": "unaudited",
+    "totalLossRisk": true,
+    "warranty": "none"
+  },
+  "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
+  "upstreamAccount": {
+    "commit": "b36a1ed52ae00da6f8a4c8d50181e2877e4fa410",
+    "repository": "https://github.com/eth-infinitism/account-abstraction",
+    "tag": "v0.9.0"
+  }
+}

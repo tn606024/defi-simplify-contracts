@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "artifactVersion": "v1.1.0",
+  "manifestStatus": "candidate",
+  "intendedTrustLevel": "official",
+  "releaseStatus": "unreleased",
+  "addressFamilyId": "defi-simplify-v1.1-arachnid-entrypoint-v0.9.0",
+  "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
+  "network": {
+    "name": "Base",
+    "chainId": 8453,
+    "deploymentStatus": "not-broadcast"
+  },
+  "factory": {
+    "name": "Arachnid Deterministic Deployment Proxy",
+    "address": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+    "runtimeCodeHash": "0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989",
+    "calldataEncoding": "bytes32 salt || initcode"
+  },
+  "entryPoint": {
+    "version": "v0.9.0",
+    "address": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
+    "runtimeCodeHash": "0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d"
+  },
+  "upstreamAccount": {
+    "repository": "https://github.com/eth-infinitism/account-abstraction",
+    "tag": "v0.9.0",
+    "commit": "b36a1ed52ae00da6f8a4c8d50181e2877e4fa410"
+  },
+  "build": {
+    "foundryVersion": "v1.7.1",
+    "solidityVersion": "0.8.36",
+    "evmVersion": "prague",
+    "optimizer": true,
+    "optimizerRuns": 10000,
+    "viaIR": true,
+    "bytecodeHash": "ipfs",
+    "useLiteralContent": true
+  },
+  "security": {
+    "status": "unaudited",
+    "experimental": true,
+    "independentAuditPlanned": true,
+    "securityGuarantee": false,
+    "warranty": "none",
+    "totalLossRisk": true
+  },
+  "scope": {
+    "chain": "Base-only",
+    "strategyClaims": "documented Base Aave proofs only"
+  },
+  "salts": {
+    "DefiSimplify7702Account": {
+      "preimage": "defi-simplify.v1.1.DefiSimplify7702Account",
+      "value": "0x49bc36b82e50e9f433f98d5c0325e0191ab9207446dcfb2b1c7a7753d3404f31"
+    },
+    "FlowAssertions": {
+      "preimage": "defi-simplify.v1.1.FlowAssertions",
+      "value": "0xa6db57ce6b8a190f5217016ccf0dd22878a486536ec2d8a453f73af8b8295b2b"
+    },
+    "StaticCallUint256Assertions": {
+      "preimage": "defi-simplify.v1.1.StaticCallUint256Assertions",
+      "value": "0x13419e0e8df6da47767fa29a231b905833a763310b2bac47f210653edcf28d4f"
+    }
+  }
+}

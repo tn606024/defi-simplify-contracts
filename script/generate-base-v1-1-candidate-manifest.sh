@@ -1,13 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly config_path="config/base-v1-deployment.json"
-output_path="${1:-deployments/base-v1.json}"
-if [[ "$output_path" != /* ]]; then
-  output_path="$repository_root/$output_path"
+readonly config_path="config/base-v1.1-candidate.json"
+readonly output_path="${1:-deployments/base-v1.1-candidate.json}"
+readonly account_artifact="out/DefiSimplify7702Account.sol/DefiSimplify7702Account.json"
+readonly flow_assertions_artifact="out/FlowAssertions.sol/FlowAssertions.json"
+readonly static_assertions_artifact="out/StaticCallUint256Assertions.sol/StaticCallUint256Assertions.json"
+readonly runtime_code_limit=24576
+readonly initcode_size_limit=49152
+
+require_command() {
+  local command_name="$1"
+  command -v "$command_name" >/dev/null || {
+    echo "$command_name is required to generate the Base v1.1 candidate manifest" >&2
+    exit 1
+  }
+}
+
+for required_command in forge cast jq; do
+  require_command "$required_command"
+done
+
+[[ -f "$config_path" ]] || {
+  echo "Missing candidate config at $config_path" >&2
+  exit 1
+}
+
+readonly configured_foundry_version="$(jq -er '.build.foundryVersion' "$config_path")"
+readonly pinned_foundry_version="$(tr -d '[:space:]' < .foundry-version)"
+if [[ "$configured_foundry_version" != "$pinned_foundry_version" ]]; then
+  echo "Candidate config Foundry version does not match .foundry-version" >&2
+  exit 1
 fi
-readonly output_path
 
 readonly expected_build_settings="$(
   jq -c '.build | {
@@ -32,63 +56,7 @@ readonly actual_build_settings="$(
   }'
 )"
 if [[ "$expected_build_settings" != "$actual_build_settings" ]]; then
-  readonly deployment_source_commit="$(jq -er '.deploymentSourceCommit' "$config_path")"
-  readonly historical_tree="$(mktemp -d /tmp/defi-simplify-base-v1.XXXXXX)"
-
-  cleanup_historical_tree() {
-    rm -rf "$historical_tree"
-  }
-  trap cleanup_historical_tree EXIT
-
-  git -C "$repository_root" cat-file -e "$deployment_source_commit^{commit}" || {
-    echo "Historical Base v1 source commit is unavailable: $deployment_source_commit" >&2
-    exit 1
-  }
-  git -C "$repository_root" archive "$deployment_source_commit" | tar -x -C "$historical_tree"
-  rm -rf "$historical_tree/lib"
-  ln -s "$repository_root/lib" "$historical_tree/lib"
-  cp "$repository_root/script/generate-base-v1-manifest.sh" \
-    "$historical_tree/script/generate-base-v1-manifest.sh"
-  cp "$repository_root/config/base-v1-deployment.json" \
-    "$historical_tree/config/base-v1-deployment.json"
-
-  (
-    cd "$historical_tree"
-    ./script/generate-base-v1-manifest.sh "$output_path"
-  )
-  exit 0
-fi
-
-readonly account_artifact="out/DefiSimplify7702Account.sol/DefiSimplify7702Account.json"
-readonly flow_assertions_artifact="out/FlowAssertions.sol/FlowAssertions.json"
-readonly static_assertions_artifact="out/StaticCallUint256Assertions.sol/StaticCallUint256Assertions.json"
-
-require_command() {
-  local command_name="$1"
-  command -v "$command_name" >/dev/null || {
-    echo "$command_name is required to generate the official Base v1 manifest" >&2
-    exit 1
-  }
-}
-
-for required_command in forge cast jq; do
-  require_command "$required_command"
-done
-
-[[ -f "$config_path" ]] || {
-  echo "Missing deployment config at $config_path" >&2
-  exit 1
-}
-
-readonly configured_foundry_version="$(jq -er '.build.foundryVersion' "$config_path")"
-readonly pinned_foundry_version="$(tr -d '[:space:]' < .foundry-version)"
-if [[ "$configured_foundry_version" != "$pinned_foundry_version" ]]; then
-  echo "Deployment config Foundry version does not match .foundry-version" >&2
-  exit 1
-fi
-
-if [[ "$expected_build_settings" != "$actual_build_settings" ]]; then
-  echo "Deployment config does not match the active pinned Foundry build settings" >&2
+  echo "Candidate config does not match the active pinned Foundry build settings" >&2
   exit 1
 fi
 
@@ -99,7 +67,7 @@ if [[ "$(jq -r '.upstreamAccount.commit' "$config_path")" \
   != "$(jq -r '.base.entryPointAddress' "$dependency_lock")" ]] \
   || [[ "$(jq -r '.entryPoint.runtimeCodeHash' "$config_path")" \
   != "$(jq -r '.base.entryPointRuntimeCodeHash' "$dependency_lock")" ]]; then
-  echo "Deployment config does not match the account-abstraction and EntryPoint lock" >&2
+  echo "Candidate config does not match the dependency and Base EntryPoint lock" >&2
   exit 1
 fi
 
@@ -128,7 +96,7 @@ salt_value() {
   configured_salt="$(jq -er --arg name "$contract_name" '.salts[$name].value' "$config_path")"
   computed_salt="$(cast keccak "$salt_preimage")"
   if [[ "$configured_salt" != "$computed_salt" ]]; then
-    echo "$contract_name salt does not match its documented preimage" >&2
+    echo "$contract_name candidate salt does not match its documented preimage" >&2
     exit 1
   fi
   echo "$configured_salt"
@@ -147,18 +115,13 @@ account_runtime_bytecode() {
   local runtime replacement start length character_start character_length
 
   if [[ "$(jq '.deployedBytecode.immutableReferences | length' "$account_artifact")" != "1" ]]; then
-    echo "Account artifact must contain exactly one immutable identity" >&2
+    echo "Account candidate artifact must contain exactly one immutable identity" >&2
     exit 1
   fi
 
   runtime="$(jq -er '.deployedBytecode.object' "$account_artifact")"
   runtime="${runtime#0x}"
   replacement="000000000000000000000000${entry_point_address#0x}"
-
-  if [[ "${#replacement}" != 64 ]]; then
-    echo "EntryPoint immutable replacement is not one ABI word" >&2
-    exit 1
-  fi
 
   while read -r start length; do
     if [[ "$length" != "32" ]]; then
@@ -188,10 +151,9 @@ artifact_manifest() {
   local constructor_signature="$5"
   local constructor_arguments="$6"
   local creation_code runtime_code initcode
+  local creation_code_size runtime_code_size initcode_size
   local creation_code_hash runtime_code_hash initcode_hash
-  local salt expected_address deployed_address
-  local transaction_hash block_number deployment_timestamp
-  local transaction_url verification_url
+  local salt expected_address
 
   creation_code="$(jq -er '.bytecode.object' "$artifact_path")"
   if [[ "$contract_name" == "DefiSimplify7702Account" ]]; then
@@ -201,33 +163,23 @@ artifact_manifest() {
   fi
   initcode="${creation_code}${constructor_arguments#0x}"
 
+  creation_code_size="$(byte_length "$creation_code")"
+  runtime_code_size="$(byte_length "$runtime_code")"
+  initcode_size="$(byte_length "$initcode")"
+  if (( runtime_code_size > runtime_code_limit )); then
+    echo "$contract_name candidate runtime exceeds EIP-170" >&2
+    exit 1
+  fi
+  if (( initcode_size > initcode_size_limit )); then
+    echo "$contract_name candidate initcode exceeds EIP-3860" >&2
+    exit 1
+  fi
+
   creation_code_hash="$(hash_bytes "$creation_code")"
   initcode_hash="$(hash_bytes "$initcode")"
   runtime_code_hash="$(hash_bytes "$runtime_code")"
   salt="$(salt_value "$contract_name")"
   expected_address="$(predict_address "$salt" "$initcode_hash")"
-  deployed_address="$(
-    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].address' "$config_path"
-  )"
-  if [[ "$deployed_address" != "$expected_address" ]]; then
-    echo "$contract_name deployed address $deployed_address does not match reconstructed $expected_address" >&2
-    exit 1
-  fi
-  transaction_hash="$(
-    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].transactionHash' "$config_path"
-  )"
-  block_number="$(
-    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].blockNumber' "$config_path"
-  )"
-  deployment_timestamp="$(
-    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].timestamp' "$config_path"
-  )"
-  transaction_url="$(
-    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].transactionUrl' "$config_path"
-  )"
-  verification_url="$(
-    jq -er --arg name "$contract_name" '.deployment.artifacts[$name].verificationUrl' "$config_path"
-  )"
 
   jq -n \
     --arg contractName "$contract_name" \
@@ -238,20 +190,14 @@ artifact_manifest() {
     --arg creationCodeHash "$creation_code_hash" \
     --arg initcodeHash "$initcode_hash" \
     --arg runtimeCodeHash "$runtime_code_hash" \
-    --arg saltPreimage "$(
-      jq -er --arg name "$contract_name" '.salts[$name].preimage' "$config_path"
-    )" \
+    --arg saltPreimage "$(jq -er --arg name "$contract_name" '.salts[$name].preimage' "$config_path")" \
     --arg salt "$salt" \
-    --arg address "$deployed_address" \
     --arg expectedAddress "$expected_address" \
-    --arg deploymentTransactionHash "$transaction_hash" \
-    --argjson deploymentBlockNumber "$block_number" \
-    --arg deploymentTimestamp "$deployment_timestamp" \
-    --arg deploymentTransactionUrl "$transaction_url" \
-    --arg verificationUrl "$verification_url" \
-    --argjson creationCodeSize "$(byte_length "$creation_code")" \
-    --argjson initcodeSize "$(byte_length "$initcode")" \
-    --argjson runtimeCodeSize "$(byte_length "$runtime_code")" \
+    --argjson creationCodeSize "$creation_code_size" \
+    --argjson initcodeSize "$initcode_size" \
+    --argjson runtimeCodeSize "$runtime_code_size" \
+    --argjson runtimeCodeLimit "$runtime_code_limit" \
+    --argjson initcodeSizeLimit "$initcode_size_limit" \
     '{
       contractName: $contractName,
       sourcePath: $sourcePath,
@@ -264,7 +210,6 @@ artifact_manifest() {
         preimage: $saltPreimage,
         value: $salt
       },
-      address: $address,
       creationCodeHash: $creationCodeHash,
       creationCodeSize: $creationCodeSize,
       initcodeHash: $initcodeHash,
@@ -272,13 +217,14 @@ artifact_manifest() {
       expectedAddress: $expectedAddress,
       runtimeCodeHash: $runtimeCodeHash,
       runtimeCodeSize: $runtimeCodeSize,
-      deploymentStatus: "deployed",
-      deploymentTransactionHash: $deploymentTransactionHash,
-      deploymentBlockNumber: $deploymentBlockNumber,
-      deploymentTimestamp: $deploymentTimestamp,
-      deploymentTransactionUrl: $deploymentTransactionUrl,
-      verificationStatus: "exact-match",
-      verificationUrl: $verificationUrl
+      limits: {
+        runtimeCodeSize: $runtimeCodeLimit,
+        runtimeCodeHeadroom: ($runtimeCodeLimit - $runtimeCodeSize),
+        initcodeSize: $initcodeSizeLimit,
+        initcodeHeadroom: ($initcodeSizeLimit - $initcodeSize)
+      },
+      deploymentStatus: "not-broadcast",
+      verificationStatus: "not-submitted"
     }'
 }
 
@@ -313,22 +259,21 @@ readonly static_assertions_manifest="$(
 mkdir -p "$(dirname "$output_path")"
 jq -nS \
   --argjson schemaVersion "$(jq -er '.schemaVersion' "$config_path")" \
+  --arg artifactVersion "$(jq -er '.artifactVersion' "$config_path")" \
   --arg manifestStatus "$(jq -er '.manifestStatus' "$config_path")" \
-  --arg trustLevel "$(jq -er '.trustLevel' "$config_path")" \
+  --arg intendedTrustLevel "$(jq -er '.intendedTrustLevel' "$config_path")" \
   --arg releaseStatus "$(jq -er '.releaseStatus' "$config_path")" \
   --arg addressFamilyId "$(jq -er '.addressFamilyId' "$config_path")" \
   --arg sourceRepository "$(jq -er '.sourceRepository' "$config_path")" \
-  --arg deploymentSourceCommit "$(jq -er '.deploymentSourceCommit' "$config_path")" \
-  --argjson network "$(jq -ec '.network + {deploymentStatus: "deployed"}' "$config_path")" \
+  --argjson network "$(jq -ec '.network' "$config_path")" \
   --argjson factory "$(jq -ec '.factory' "$config_path")" \
   --argjson entryPoint "$(jq -ec '.entryPoint' "$config_path")" \
   --argjson upstreamAccount "$(jq -ec '.upstreamAccount' "$config_path")" \
   --argjson build "$(jq -ec '.build' "$config_path")" \
   --argjson scope "$(jq -ec '.scope' "$config_path")" \
-  --argjson deployment "$(jq -ec '.deployment | del(.artifacts)' "$config_path")" \
   --argjson security "$(
     jq -ec '.security + {
-      notice: "Experimental and unaudited; tests, static analysis, fork proofs, source verification, and reproducibility are not an audit or security guarantee. Total and irreversible loss is possible. Use at your own risk; no warranty is provided."
+      notice: "Experimental and unaudited; this unbroadcast candidate is not an audit or security guarantee. Total and irreversible loss is possible. Use at your own risk; no warranty is provided."
     }' "$config_path"
   )" \
   --argjson account "$account_manifest" \
@@ -336,17 +281,16 @@ jq -nS \
   --argjson staticAssertions "$static_assertions_manifest" \
   '{
     schemaVersion: $schemaVersion,
+    artifactVersion: $artifactVersion,
     manifestStatus: $manifestStatus,
-    trustLevel: $trustLevel,
+    intendedTrustLevel: $intendedTrustLevel,
     releaseStatus: $releaseStatus,
     security: $security,
     sdkIntegrationStatus: "not-integrated",
     scope: $scope,
     addressFamilyId: $addressFamilyId,
     sourceRepository: $sourceRepository,
-    deploymentSourceCommit: $deploymentSourceCommit,
     network: $network,
-    deployment: $deployment,
     factory: $factory,
     entryPoint: $entryPoint,
     upstreamAccount: $upstreamAccount,
@@ -358,4 +302,4 @@ jq -nS \
     }
   }' > "$output_path"
 
-echo "Generated official Base v1 deployment manifest at $output_path"
+echo "Generated Base v1.1 unbroadcast candidate manifest at $output_path"
