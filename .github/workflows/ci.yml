@@ -43,7 +43,7 @@ jobs:
       - name: Check gas snapshot
         run: make snapshot
 
-      - name: Generate coverage summary
+      - name: Enforce production coverage thresholds
         run: make coverage
 
       - name: Check reproducible artifacts
