@@ -31,11 +31,11 @@ export FOUNDRY_PROFILE
 help:
 	@printf '%s\n' \
 		'make check                 Run the complete non-RPC validation suite' \
-		'make check-base            Run Base on-chain, fork, and gas checks (requires BASE_RPC_URL)' \
+		'make check-base            Run active Base fork and gas checks (requires BASE_RPC_URL)' \
 		'make check-toolchain       Verify Foundry and pinned dependency revisions' \
 		'make format                Check Solidity formatting' \
 		'make build                 Build contracts and report sizes' \
-		'make check-artifacts       Check surfaces, ABIs, deployment identity, and verification inputs' \
+		'make check-artifacts       Check current contract surfaces, ABIs, and direct artifacts' \
 		'make test                  Run the non-fork test suite' \
 		'make snapshot              Check deterministic non-fuzz gas snapshots' \
 		'make coverage              Enforce production-only coverage thresholds' \
@@ -65,11 +65,12 @@ check-artifacts: build
 	./script/check-static-call-uint256-assertions-surface.sh
 	./script/check-direct-immutable-artifacts.sh
 	./script/check-abi-fixtures.sh
-	./script/generate-base-v1-verification-inputs.sh
-	./script/check-base-v1-manifest.sh
 
 test:
-	forge test --no-match-path 'test/fork/**' -vvv
+	forge test \
+		--no-match-path 'test/fork/**' \
+		--no-match-contract 'BaseDeploymentManifestTest' \
+		-vvv
 
 snapshot:
 	forge snapshot --check \
@@ -97,7 +98,7 @@ require-base-rpc:
 		exit 1; \
 	}
 
-check-base: check-toolchain check-base-deployment test-base snapshot-base
+check-base: check-toolchain test-base snapshot-base
 
 check-base-deployment: require-base-rpc
 	./script/check-base-v1-onchain-deployment.sh
@@ -106,6 +107,7 @@ test-base: require-base-rpc
 	forge test \
 		--match-path 'test/fork/**/*.t.sol' \
 		--no-match-path 'test/fork/BaseAaveV3*Gas.t.sol' \
+		--no-match-contract 'BaseDeploymentFactoryTest' \
 		--fork-url "$${BASE_RPC_URL}" \
 		--fork-retries 5 \
 		--fork-retry-backoff 1000 \

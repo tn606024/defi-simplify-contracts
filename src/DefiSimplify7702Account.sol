@@ -497,12 +497,16 @@ contract DefiSimplify7702Account is Simple7702Account, IDefiSimplify7702Account 
         return recordRoot.balance();
     }
 
-    /// @dev Preallocates a zero-length per-call balance cache with the requested capacity.
+    /// @dev Preallocates the per-call balance cache only when balance metadata exists.
+    ///      A zero-capacity call never reads or stores a cached balance, so leaving both
+    ///      dynamic-array pointers zero avoids two unnecessary empty-array allocations.
     /// @param capacity Maximum number of distinct balance reads before the target call.
-    /// @return cache Empty cache whose token and balance arrays have `capacity` elements.
+    /// @return cache Empty cache; nonzero-capacity arrays each contain `capacity` elements.
     function _newBalanceCache(uint256 capacity) private pure returns (BalanceCache memory cache) {
-        cache.tokens = new address[](capacity);
-        cache.balances = new uint256[](capacity);
+        if (capacity != 0) {
+            cache.tokens = new address[](capacity);
+            cache.balances = new uint256[](capacity);
+        }
     }
 
     /// @dev Returns a cached balance or performs the first patch-attributed checked balance read.

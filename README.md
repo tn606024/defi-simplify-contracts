@@ -25,12 +25,13 @@ They do not require the `defi-simplify` Go SDK.
 All three contracts are direct and immutable. They have no owner, admin, proxy,
 upgrade function, withdrawal function, or protocol registry.
 
-## Base deployment
+## Retired Base v1.0 deployment
 
 Base is the only supported chain in this version.
-The official deployment is published as the experimental, unaudited
+The former deployment remains visible as the experimental, unaudited
 [`v1.0.0`](https://github.com/tn606024/defi-simplify-contracts/releases/tag/v1.0.0)
-release.
+release, but it is retired and unsupported. The current source build supersedes
+it and is not deployed at these legacy addresses.
 
 | Contract | Address |
 | --- | --- |

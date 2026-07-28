@@ -35,9 +35,6 @@ jobs:
       - name: Require Base RPC secret
         run: test -n "$BASE_RPC_URL"
 
-      - name: Verify official Base deployment transactions and runtimes
-        run: make check-base-deployment
-
       - name: Run Base fork tests
         run: make test-base
 
