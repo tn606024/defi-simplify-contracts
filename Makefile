@@ -38,7 +38,7 @@ help:
 		'make check-artifacts       Check surfaces, ABIs, deployment identity, and verification inputs' \
 		'make test                  Run the non-fork test suite' \
 		'make snapshot              Check deterministic non-fuzz gas snapshots' \
-		'make coverage              Generate the coverage summary' \
+		'make coverage              Enforce production-only coverage thresholds' \
 		'make reproducible          Compare two clean artifact builds' \
 		'make slither               Run dependency-inclusive review and the project-owned high gate'
 
@@ -78,11 +78,7 @@ snapshot:
 		--no-match-path 'test/fork/**'
 
 coverage:
-	forge coverage \
-		--no-match-path 'test/fork/**' \
-		--no-match-contract 'BaseDeploymentManifestTest' \
-		--no-match-coverage 'script/' \
-		--report summary
+	./script/check-production-coverage.sh
 
 reproducible:
 	./script/check-reproducible-build.sh

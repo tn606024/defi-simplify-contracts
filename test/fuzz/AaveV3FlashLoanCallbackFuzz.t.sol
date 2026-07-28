@@ -153,13 +153,43 @@ contract AaveV3FlashLoanCallbackFuzzTest is AaveV3FlashLoanFixture {
             uint256(AaveV3FlashLoanPoolMock.CallbackMutation.WrongAsset),
             uint256(AaveV3FlashLoanPoolMock.CallbackMutation.WrongParams)
         );
-        flashLoanPool.setCallbackMutation(AaveV3FlashLoanPoolMock.CallbackMutation(mutationOrdinal));
+        AaveV3FlashLoanPoolMock.CallbackMutation mutation = AaveV3FlashLoanPoolMock.CallbackMutation(mutationOrdinal);
+        flashLoanPool.setCallbackMutation(mutation);
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
         callbackCalls[0] = _buildRecordingCall(1, "origin-mutation-must-not-run");
+        IDefiSimplify7702Account.DynamicCall memory flashLoanCall =
+            _buildFlashLoanCall(address(flashAsset), FLASH_PRINCIPAL, FLASH_PREMIUM, callbackCalls);
+        bytes memory callbackParams = abi.encode(_buildCallbackEnvelope(FLASH_PREMIUM, callbackCalls));
+        address callbackAsset = address(flashAsset);
+        uint256 callbackAmount = FLASH_PRINCIPAL;
+        if (mutation == AaveV3FlashLoanPoolMock.CallbackMutation.WrongAsset) {
+            callbackAsset = address(0xA55E7);
+        } else if (mutation == AaveV3FlashLoanPoolMock.CallbackMutation.WrongAmount) {
+            callbackAmount += 1;
+        } else {
+            callbackParams = bytes.concat(callbackParams, hex"00");
+        }
+        bytes32 actualOriginHash = keccak256(
+            abi.encodeCall(
+                IAaveV3FlashLoanSimplePool.flashLoanSimple,
+                (accountUnderTest.delegatedEoa, callbackAsset, callbackAmount, callbackParams, uint16(0))
+            )
+        );
+        bytes memory originFailure = abi.encodeWithSelector(
+            IDefiSimplify7702Account.CallbackOriginMismatch.selector, 0, keccak256(flashLoanCall.data), actualOriginHash
+        );
 
-        vm.expectRevert();
-        _executeFlashLoan(callbackCalls, FLASH_PREMIUM);
+        vm.expectRevert(_wrappedFlashLoanTargetFailure(0, originFailure));
+        _dynamicExecutionInterfaceView(accountUnderTest)
+            .executeBatchDynamic(DynamicCallTestBuilder.singleCall(flashLoanCall));
 
         assertEq(callbackRecordingTarget.count(), 0, "origin mutation cannot authorize callback plan");
+        assertEq(flashLoanPool.callbackCount(), 0, "origin mutation survived callback rollback");
+        assertEq(flashAsset.balanceOf(address(flashLoanPool)), FLASH_PRINCIPAL, "origin mutation changed Pool balance");
+        assertEq(
+            flashAsset.balanceOf(accountUnderTest.delegatedEoa),
+            FLASH_PREMIUM,
+            "origin mutation changed account balance"
+        );
     }
 }

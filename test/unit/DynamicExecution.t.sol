@@ -12,6 +12,14 @@ import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
 contract DynamicExecutionTest is DelegatedAccountFixture {
+    struct DynamicCallWithoutCallbackFlag {
+        address target;
+        uint256 value;
+        bytes data;
+        IDefiSimplify7702Account.BalanceCheckpoint[] checkpointsBefore;
+        IDefiSimplify7702Account.BalancePatch[] patches;
+    }
+
     bytes4 private constant CALLBACK_ENABLED_EXECUTE_BATCH_DYNAMIC_SELECTOR = 0xecadebe3;
     bytes4 private constant EXECUTE_OPERATION_SELECTOR = 0x1b11d0ff;
     bytes4 private constant CALLBACK_ENABLED_DYNAMIC_INTERFACE_ID = 0xf7bc3b1c;
@@ -166,6 +174,27 @@ contract DynamicExecutionTest is DelegatedAccountFixture {
 
         vm.expectRevert(IDefiSimplify7702Account.EmptyDynamicBatch.selector);
         _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
+    }
+
+    function test_ExecuteBatchDynamic_WhenTupleOmitsExpectsCallback_RevertsWithoutFallbackOrTargetExecution() external {
+        DynamicCallWithoutCallbackFlag[] memory malformedCalls = new DynamicCallWithoutCallbackFlag[](1);
+        malformedCalls[0] = DynamicCallWithoutCallbackFlag({
+            target: address(recordingTarget),
+            value: 0.25 ether,
+            data: abi.encodeCall(DynamicExecutionTarget.record, (41, bytes("malformed-final-tuple"))),
+            checkpointsBefore: DynamicCallTestBuilder.noCheckpoints(),
+            patches: DynamicCallTestBuilder.noPatches()
+        });
+        bytes memory malformedFinalSelectorCalldata =
+            bytes.concat(IDefiSimplify7702Account.executeBatchDynamic.selector, abi.encode(malformedCalls));
+        uint256 accountBalanceBefore = accountUnderTest.delegatedEoa.balance;
+
+        (bool success,) = accountUnderTest.delegatedEoa.call(malformedFinalSelectorCalldata);
+
+        assertFalse(success, "malformed final-selector calldata reached EOA-style fallback");
+        assertEq(recordingTarget.count(), 0, "malformed tuple executed dynamic target");
+        assertEq(address(recordingTarget).balance, 0, "malformed tuple transferred target value");
+        assertEq(accountUnderTest.delegatedEoa.balance, accountBalanceBefore, "malformed tuple changed account balance");
     }
 
     function test_ZeroTargetRevertsWithCallIndex() external {

@@ -116,10 +116,19 @@ contract AaveV3FlashLoanAdversarialTest is AaveV3FlashLoanFixture {
         IDefiSimplify7702Account.DynamicCall[] memory callbackCalls = new IDefiSimplify7702Account.DynamicCall[](1);
         callbackCalls[0] = _buildRecordingCall(7, "must-not-run-after-truncated-callback");
 
-        vm.expectRevert();
+        vm.expectRevert(_wrappedFlashLoanTargetFailure(0, bytes("")));
         _executeFlashLoan(callbackCalls, FLASH_PREMIUM);
 
         assertEq(callbackRecordingTarget.count(), 0, "malformed callback calldata never executes plan");
+        assertEq(flashLoanPool.callbackCount(), 0, "malformed callback survived callback rollback");
+        assertEq(
+            flashAsset.balanceOf(address(flashLoanPool)), FLASH_PRINCIPAL, "malformed callback changed Pool balance"
+        );
+        assertEq(
+            flashAsset.balanceOf(accountUnderTest.delegatedEoa),
+            FLASH_PREMIUM,
+            "malformed callback changed account balance"
+        );
     }
 
     function test_CallbackPlanCannotTargetDelegatedAccountItself() external {

@@ -52,10 +52,10 @@ The concrete suite families own these final-v1 properties:
 | Suite family | Property ownership |
 | --- | --- |
 | `DefiSimplify7702Account`, `UpstreamEntryPointCompilation`, `UpstreamCompatibility` | Minimal direct deployment and differential preservation of the pinned upstream static account |
-| `DynamicExecution`, `DynamicEntryPointTarget`, `BaseDynamicEntryPoint` | Authorization, target policy, call/value execution, failure attribution, rollback, lock, event surface, and EntryPoint-as-target behavior |
+| `DynamicExecution`, `DynamicEntryPointTarget`, `BaseDynamicEntryPoint` | Authorization, final-selector ABI decoding, target policy, call/value execution, failure attribution, rollback, lock, event surface, and EntryPoint-as-target behavior |
 | `CheckpointEngine`, `CheckpointEntryPointBundle`, `DynamicCalldataPatching` | Invocation-scoped checkpoint records, validation order, balance sources, exact word patching, and same-account bundle isolation |
 | `DynamicCalldataPatchingFuzz`, `DynamicExecutionAdversarialFuzz`, `DynamicEngineInvariant` | Arbitrary amount/offset/revert-data properties and stateful execution/rollback models |
-| `DynamicGoldenVectors`, `DynamicEngineGas`, `CheckpointRepresentationBenchmark` | Exact cross-repository bytes/slots/errors and deterministic checkpoint/patch cost evidence |
+| `DynamicGoldenVectors`, `DynamicEngineGas`, `BalanceCacheGas`, `CheckpointRepresentationBenchmark` | Exact cross-repository bytes/slots/errors and deterministic checkpoint/patch/cache cost evidence |
 | `AaveV3FlashLoanCallback`, `CallbackCommitmentState`, `TransientExecutionComponents` | Authenticated single-use Aave callback lifecycle, origin commitment, repayment, and low-level transient component transitions |
 | `AaveV3FlashLoanAdversarial`, `AaveV3FlashLoanEntryPointBundle` | Malicious callback/reentry/repayment boundaries and same-account EntryPoint bundle isolation |
 | `AaveV3FlashLoanCallbackFuzz`, `AaveV3FlashLoanCallbackInvariant` | Arbitrary patched origins, callback positions, repayment allowances, and stateful callback rollback/cleanup |
@@ -83,7 +83,7 @@ to the final suites:
 | `unit/CallbackAbi.t.sol`: two outer callback flags | `unit/AaveV3FlashLoanCallback.t.sol` prevalidation before Pool or ordinary targets |
 | `unit/CallbackAbi.t.sol`: direct malformed callback | `unit/AaveV3FlashLoanAdversarial.t.sol` authorization before params decoding |
 | `unit/CallbackAbi.t.sol`: zero/one/many envelope encoding | `unit/CallbackGoldenVectors.t.sol` exact encoded fixtures |
-| `unit/CallbackAbi.t.sol`: tuple missing `expectsCallback` | Final ABI/interface fixtures; the pre-release tuple is not a supported selector |
+| `unit/CallbackAbi.t.sol`: tuple missing `expectsCallback` | `unit/DynamicExecution.t.sol` black-box final-selector decoding failure through a delegated EOA |
 
 `unit/DynamicExecutionScaffold.t.sol` was renamed
 `unit/DynamicExecution.t.sol` because the implementation is no longer a
@@ -406,8 +406,11 @@ five-field callback commitment layout.
 
 DSC-83 later retired the transition-only `unit/CallbackAbi.t.sol`; the final
 unit, adversarial, and golden-vector suites listed above preserve its supported
-properties. Calldata for the pre-release tuple without `expectsCallback` is not
-a compatibility surface.
+properties. DSC-84 restores one black-box decoding regression through a real
+delegated EOA: calldata uses the final selector but encodes a tuple without
+`expectsCallback`, and must fail before fallback, target execution, or value
+transfer. The pre-release tuple remains unsupported and is not a compatibility
+surface.
 
 DSC-79 and DSC-80 were folded into DSC-78 before release so reviewers see one
 complete behavior instead of a sequence of temporary fail-closed artifacts.
@@ -525,7 +528,7 @@ forge test --match-path 'test/invariant/**/*.t.sol' -vvv
 FOUNDRY_PROFILE=ci forge test --match-path 'test/invariant/**/*.t.sol' -vvv
 forge test --match-path 'test/unit/DynamicGoldenVectors.t.sol' -vvv
 forge snapshot --check --no-match-test 'testFuzz|invariant_' --no-match-path 'test/fork/**'
-forge coverage --no-match-path 'test/fork/**' --report summary
+make coverage
 ./script/check-reproducible-build.sh
 slither . --fail-none
 slither . --filter-paths 'lib/' --fail-high
@@ -553,5 +556,66 @@ Run the focused suite with:
 forge test --match-path 'test/unit/DynamicNoCodeTargetPolicy.t.sol' -vvv
 ```
 
-The final local suite contains 308 non-fork tests and 276 deterministic
+## DSC-84 post-review test and coverage hardening
+
+DSC-84 adds evidence without changing production Solidity, ABI, storage,
+metadata, or the deployed artifact identity:
+
+- `unit/DynamicExecution.t.sol` sends the final selector with a tuple that omits
+  `expectsCallback` through a real delegated EOA and proves ABI decoding fails
+  before the inherited fallback can report success or a target can execute;
+- the callback origin-mutation fuzz property now checks the complete nested
+  `CallbackOriginMismatch` wrapped by `DynamicCallFailed`, while the truncated
+  callback regression checks the exact outer wrapper with empty decoder revert
+  data; both retain explicit plan non-execution and asset rollback assertions;
+- `unit/BalanceCacheGas.t.sol` verifies that patches and checkpoints share one
+  pre-call cache read per token and records the 1/4/8/16/32 distinct-token
+  matrix; and
+- `make coverage` reports only authored `src/` contracts and libraries and
+  rejects any line, statement, branch, or function regression below 100%.
+
+For `N` distinct tokens, the benchmark inserts each token during patch
+resolution and reuses it during checkpoint creation. The current linear lookup
+therefore performs `N` unavoidable external `balanceOf` static calls and
+`N²` address comparisons in this deliberately lookup-heavy shape:
+`N(N-1)/2` comparisons while inserting misses plus `N(N+1)/2` comparisons for
+checkpoint hits. The arrays reserve `2N` entries because capacity follows the
+number of patches plus checkpoints, although only `N` distinct values are
+stored.
+
+| Distinct tokens | Deterministic test gas |
+| ---: | ---: |
+| 1 | 33,005 |
+| 4 | 74,754 |
+| 8 | 135,707 |
+| 16 | 275,847 |
+| 32 | 629,884 |
+
+These cases intentionally characterize the current implementation rather than
+establish a production plan recommendation. External token calls and calldata,
+memory, and checkpoint work remain part of the end-to-end totals. Every reviewed
+Base v1 reference strategy currently uses at most one distinct balance token
+within any one `DynamicCall`, so the linear cache is acceptable for the frozen
+v1 plan shapes. This is an observed plan bound, not a new on-chain maximum or a
+claim that arbitrary large plans are cheap. DSC-87 owns any production cache
+redesign after comparing this matrix with actual SDK strategy distributions.
+
+The coverage gate uses Foundry's countable source anchors. No production source,
+line, statement, branch, function, or assembly block is manually excluded.
+Foundry warnings for inline assembly and compiler-generated or inlined code stay
+visible in CI; the gate does not pretend such unmappable anchors are measured.
+Passing 100% coverage is regression evidence, not a security proof.
+
+Run the focused gate with:
+
+```sh
+forge test --match-path 'test/unit/BalanceCacheGas.t.sol' -vvv
+forge test --match-test 'test_ExecuteBatchDynamic_WhenTupleOmitsExpectsCallback_RevertsWithoutFallbackOrTargetExecution' -vvv
+forge test --match-test 'testFuzz_OriginFieldMutationNeverExecutesCallbackPlan' -vvv
+forge test --match-test 'test_TruncatedCallbackCalldataCannotReachCallbackPlan' -vvv
+make snapshot
+make coverage
+```
+
+The final local suite contains 315 non-fork tests and 283 deterministic
 gas-snapshot tests.
