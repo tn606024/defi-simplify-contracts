@@ -25,6 +25,15 @@ They do not require the `defi-simplify` Go SDK.
 All three contracts are direct and immutable. They have no owner, admin, proxy,
 upgrade function, withdrawal function, or protocol registry.
 
+## Base v1.1.0 deployment candidate
+
+The current 10,000-optimizer-run source build has a reproducible
+[`v1.1.0` Base deployment candidate](deployments/base-v1.1-candidate.json).
+Its addresses are predictions only: the candidate is explicitly
+`not-broadcast`, `unreleased`, independently unaudited, and not integrated into
+the SDK. No deployment trust level, transaction, or explorer-verification claim
+has been assigned.
+
 ## Retired Base v1.0 deployment
 
 Base is the only supported chain in this version.

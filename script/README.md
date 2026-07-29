@@ -34,30 +34,38 @@ independently callable implementation units used by those targets.
 - `check-abi-fixtures.sh` verifies both the smaller account/checker interface
   ABIs and the complete deployment ABIs remain byte-for-byte synchronized with
   Solidity.
+- `generate-base-v1.1-candidate-manifest.sh` validates the active artifact
+  source commit and tree, dependency and build locks, versioned salts, ABI
+  hashes, immutable substitution, complete initcodes, CREATE2 predictions, and
+  direct runtime identities. It emits only `not-broadcast` candidate facts.
+- `check-base-v1.1-candidate-manifest.sh` independently regenerates the active
+  candidate and rejects stale output or any deployed, released, verified,
+  assigned-trust, warranty, SDK-readiness, or security overclaim.
+- `generate-base-v1.1-verification-inputs.sh` prepares one metadata-derived
+  Solidity Standard JSON source closure per candidate artifact under the
+  ignored `out/` tree. It does not submit those inputs to an explorer.
+- `check-base-v1.1-candidate-onchain.sh` verifies the live Base chain, factory,
+  and EntryPoint identities, then requires all three predicted addresses to
+  remain vacant.
+- `DeployBaseV1_1Candidate.s.sol` reconstructs all candidate identities and
+  dry-runs the exact factory payloads. It deliberately rejects Forge broadcast
+  and resume contexts until a separate approved live-deployment change.
 - `generate-base-v1-manifest.sh` validates the official Base deployment config
-  against the dependency and effective build locks, substitutes the immutable
-  EntryPoint into account runtime bytecode, derives the three direct artifact
-  hashes and CREATE2 addresses, and combines them with mined transaction and
-  exact source-verification evidence.
+  from the retired v1.0.0 source state. It is historical tooling and is outside
+  active current-source validation.
 - `generate-base-v1-verification-inputs.sh` derives one Solidity Standard JSON
-  input per deployed contract from that artifact's exact metadata source
-  closure. It rejects non-production source roots and guarantees that
-  `test/`, `script/`, build output, and unrelated contracts are not included in
-  explorer submissions. Generated inputs are written under the ignored `out/`
-  tree by default.
+  source closure per artifact. The active candidate wrapper selects a distinct
+  output directory and first validates the candidate manifest.
 - `check-base-v1-manifest.sh` independently regenerates the official manifest
-  and rejects stale output, incomplete deployment evidence, or misleading
-  audit, release, trust-level, warranty, security, and SDK-readiness claims.
+  from the retired v1.0.0 source state and is not part of active checks.
 - `check-base-v1-onchain-deployment.sh` uses `BASE_RPC_URL` to verify the live
-  factory, EntryPoint, and artifact runtime hashes, then checks each historical
+  retired factory, EntryPoint, and artifact runtime hashes, then checks each historical
   deployment transaction's sender, factory destination, salt, complete
   initcode hash, successful receipt, and mined block against the manifest.
-- `DeployBaseV1.s.sol` verifies the live Base factory and EntryPoint, rebuilds
-  every initcode and CREATE2 prediction, and idempotently deploys or verifies
-  all three runtimes. The official addresses are already deployed, so the
-  script is now an idempotent reproduction check and must not be broadcast.
+- `DeployBaseV1.s.sol` is retained for the retired v1.0.0 source state and is
+  not an active-build deployment script.
 - `check-reproducible-build.sh` performs two clean builds and compares the
   SHA-256 digest of every generated JSON artifact.
 
-See `deployments/README.md` for the official addresses, transactions, source
-verification, manifest semantics, and non-broadcast reproduction commands.
+See `deployments/README.md` for the active candidate, retired addresses,
+manifest semantics, and non-broadcast reproduction commands.
