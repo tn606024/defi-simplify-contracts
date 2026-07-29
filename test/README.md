@@ -200,7 +200,7 @@ forge test --match-path 'test/unit/AaveV3FlashLoan*.t.sol' -vvv
 forge test --match-path 'test/fuzz/**/*.t.sol' -vvv
 forge test --match-path 'test/invariant/**/*.t.sol' -vvv
 forge snapshot --check --no-match-test 'testFuzz|invariant_' \
-  --no-match-contract 'BaseDeploymentManifestTest' \
+  --no-match-contract 'Base.*Deployment.*ManifestTest|BaseV1_1DeploymentAuthorizationTest|DeterministicDeploymentTest' \
   --no-match-path 'test/fork/**'
 ```
 

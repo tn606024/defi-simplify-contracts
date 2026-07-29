@@ -29,6 +29,7 @@ export FOUNDRY_PROFILE
 	check-base \
 	check-base-candidate \
 	preflight-base-v1.1 \
+	check-base-v1.1-deployment \
 	check-base-deployment \
 	test-base \
 	snapshot-base
@@ -37,8 +38,9 @@ help:
 	@printf '%s\n' \
 		'make check                 Run the complete non-RPC validation suite' \
 		'make check-base            Run active Base fork and gas checks (requires BASE_RPC_URL)' \
-		'make check-base-candidate  Check candidate vacancy and dry-run deployment on Base' \
-		'make preflight-base-v1.1   Run no-broadcast deployment preflight (requires RPC and deployer address)' \
+		'make check-base-v1.1-deployment  Check active v1.1 transactions, receipts, runtimes, and immutable' \
+		'make check-base-candidate  Historical pre-broadcast vacancy and dry-run check' \
+		'make preflight-base-v1.1   Historical no-broadcast deployment preflight' \
 		'make generate-base-v1.1-payloads  Generate exact ignored factory calldata review file' \
 		'make check-toolchain       Verify Foundry and pinned dependency revisions' \
 		'make format                Check Solidity formatting' \
@@ -78,6 +80,7 @@ check-artifacts: build check-base-verification-inputs
 	./script/check-direct-immutable-artifacts.sh
 	./script/check-abi-fixtures.sh
 	./script/check-base-v1.1-candidate-manifest.sh
+	./script/check-base-v1.1-manifest.sh
 
 check-base-verification-inputs:
 	./script/check-base-v1.1-verification-inputs.sh
@@ -94,7 +97,7 @@ test:
 snapshot:
 	forge snapshot --check \
 		--no-match-test 'testFuzz|invariant_' \
-		--no-match-contract 'BaseDeployment.*ManifestTest|BaseV1_1DeploymentAuthorizationTest|DeterministicDeploymentTest' \
+		--no-match-contract 'Base.*Deployment.*ManifestTest|BaseV1_1DeploymentAuthorizationTest|DeterministicDeploymentTest' \
 		--no-match-path 'test/fork/**'
 
 coverage:
@@ -117,7 +120,7 @@ require-base-rpc:
 		exit 1; \
 	}
 
-check-base: check-toolchain check-base-candidate test-base snapshot-base
+check-base: check-toolchain check-base-v1.1-deployment test-base snapshot-base
 
 check-base-candidate: require-base-rpc
 	./script/check-base-v1.1-candidate-onchain.sh
@@ -130,6 +133,9 @@ check-base-candidate: require-base-rpc
 
 preflight-base-v1.1: require-base-rpc
 	./script/preflight-base-v1.1-deployment.sh
+
+check-base-v1.1-deployment: require-base-rpc
+	./script/check-base-v1.1-onchain-deployment.sh
 
 check-base-deployment: require-base-rpc
 	./script/check-base-v1-onchain-deployment.sh

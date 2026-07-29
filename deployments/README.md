@@ -7,30 +7,31 @@
 > not an independent audit or security guarantee. Total and irreversible loss
 > is possible. No warranty is provided.
 
-## Base v1.1.0 deployment candidate
+## Base v1.1.0 deployment
 
-[`base-v1.1-candidate.json`](base-v1.1-candidate.json) is the active,
-machine-readable deployment candidate for the current 10,000-optimizer-run
-build. It freezes the reviewed artifact source commit and tree, build and
-dependency locks, ABI hashes, factory and EntryPoint identities, distinct
-versioned salts, complete initcode hashes, predicted CREATE2 addresses, and
-final direct-runtime hashes.
+[`base-v1.1.json`](base-v1.1.json) is the active machine-readable deployment
+record for the current 10,000-optimizer-run build. It derives every build and
+CREATE2 identity from the unchanged
+[`base-v1.1-candidate.json`](base-v1.1-candidate.json), then adds only observed
+Base transactions, receipts, block hashes, fees, deployed addresses, and
+runtime evidence.
 
-It is deliberately marked `candidate`, `unreleased`, and `not-broadcast`.
-`intendedTrustLevel: "official"` records future intent only. The manifest does
-not assign a trust level or contain deployed addresses, transaction evidence,
-source-verification claims, or an audit URL.
+| Artifact | Base address | Deployment transaction | Runtime code hash |
+| --- | --- | --- | --- |
+| `DefiSimplify7702Account` | [`0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69`](https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69) | [`0x9256cd…80855`](https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855) | `0x3ccebf2c563db0b2284a322ed5a53067ba4a561949973f375e267a3230babc00` |
+| `FlowAssertions` | [`0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16`](https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16) | [`0x936043…d22c6`](https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6) | `0xadbf11b88ce66db628549fa169006eb55e88c382708716ddb7c1c9c1d9b754c5` |
+| `StaticCallUint256Assertions` | [`0x28734029a24448cAA307D286823cA21DC57e8393`](https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393) | [`0x944c82…b9900`](https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900) | `0xb6ed9520e6684c6b4342d03c92f4995ca2774ac909306f7876d8cdf047ecf9f6` |
 
-| Artifact | Predicted Base address | Runtime code hash |
-| --- | --- | --- |
-| `DefiSimplify7702Account` | `0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69` | `0x3ccebf2c563db0b2284a322ed5a53067ba4a561949973f375e267a3230babc00` |
-| `FlowAssertions` | `0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16` | `0xadbf11b88ce66db628549fa169006eb55e88c382708716ddb7c1c9c1d9b754c5` |
-| `StaticCallUint256Assertions` | `0x28734029a24448cAA307D286823cA21DC57e8393` | `0xb6ed9520e6684c6b4342d03c92f4995ca2774ac909306f7876d8cdf047ecf9f6` |
+The three canonical receipts have status `1`; their exact factory calldata and
+deployed runtime hashes match the reviewed candidate. The account immutable
+resolves to the frozen Base EntryPoint, and all three contracts are direct,
+immutable, non-proxy artifacts.
 
-These are predicted addresses, not deployments. Code existence must be checked
-again immediately before any separately approved broadcast.
+This is not a release or explorer-verification claim. The manifest remains
+`unreleased`, `not-submitted`, independently unaudited, and `not-integrated`,
+and deliberately omits an assigned `trustLevel` and verification URLs.
 
-### Reproduce the candidate
+### Reproduce the deployment record
 
 Use the repository-pinned toolchain and dependency revisions:
 
@@ -39,57 +40,55 @@ export PATH="$HOME/.foundry/bin:$PATH"
 make check
 ./script/generate-base-v1.1-candidate-manifest.sh
 ./script/check-base-v1.1-candidate-manifest.sh
+./script/generate-base-v1.1-manifest.sh
+./script/check-base-v1.1-manifest.sh
 ./script/generate-base-v1.1-verification-inputs.sh
 ./script/check-base-v1.1-verification-inputs.sh
 ./script/generate-base-v1.1-factory-payloads.sh
 ```
 
+With `BASE_RPC_URL`, independently re-read the deployed transactions, receipts,
+calldata, direct runtimes, EIP-1967 proxy slots, and account immutable:
+
+```sh
+./script/check-base-v1.1-onchain-deployment.sh
+```
+
 The generated Standard JSON inputs under
 `out/verification/base-v1.1-candidate/` contain only each selected contract and
 its metadata-derived transitive source closure. They exclude tests, scripts,
-build output, and unrelated production contracts. They are preparation
-artifacts only and must not be submitted to an explorer under this candidate
-ticket.
+build output, and unrelated production contracts. They remain preparation
+artifacts only; generation does not authorize explorer submission.
 
-With `BASE_RPC_URL`, verify the live prerequisites, candidate-address vacancy,
-actual-factory behavior on a disposable fork, and the dry-run script:
+The frozen candidate and its pre-broadcast factory proof remain reproducible at
+the documented pre-deployment block:
 
 ```sh
-make check-base-candidate
-
 forge test \
   --match-path 'test/fork/BaseDeploymentCandidateFactory.t.sol' \
   --fork-url "$BASE_RPC_URL"
 ```
 
 `DeployBaseV1_1Candidate.s.sol` permanently rejects Forge broadcast and resume
-contexts. DSC-91 adds a separate reviewed `DeployBaseV1_1.s.sol` live path and
-a no-broadcast preflight. Both are thin version adapters over the reusable
+contexts. DSC-91 used the separate reviewed `DeployBaseV1_1.s.sol` live path.
+Both are thin version adapters over the reusable
 `BaseDeployment.sol` engine and internal-only
 `libraries/DeterministicDeployment.sol` identity primitives, so later versions
 reuse the deployment and safety logic while retaining separate manifests,
-salts, addresses, and evidence:
+salts, addresses, and evidence.
 
-```sh
-export BASE_RPC_URL="<Base RPC supplied outside the repository>"
-export BASE_V1_1_DEPLOYER_ADDRESS="<approved public sender>"
-make preflight-base-v1.1
-```
-
-The preflight reconstructs exact calldata, rechecks current Base vacancy and
-prerequisite identities, estimates both L2 execution and GasPriceOracle L1 data
-fees with explicit margins, checks deployer funding, and dry-runs all three
-calls. It does not authorize or perform a broadcast or BaseScan submission.
-The candidate remains `not-broadcast` until confirmed receipts exist.
+The preflight and vacancy checker are retained as historical pre-broadcast
+evidence. They are expected to reject the now-occupied addresses and are not
+active post-deployment gates.
 
 The reviewed signer mechanism is a local encrypted Foundry keystore selected
 by a named `--account`; the repository stores only the matching public
-`BASE_V1_1_DEPLOYER_ADDRESS`. The final command, account name, address,
-preflight evidence, and clean commit must be reviewed before approval. The
-live command is intentionally not part of `make check` and must not be run
-until the maintainer separately authorizes the external Base write.
+`BASE_V1_1_DEPLOYER_ADDRESS`. The broadcast was separately approved after the
+final command, account name, address, preflight evidence, and clean commit were
+reviewed. The live command remains outside `make check`.
 
-For BaseScan, submit one generated Standard JSON file per contract. Each file
+If separately approved for BaseScan, submit one generated Standard JSON file
+per contract. Each file
 must contain only that selected production contract and its metadata-derived
 transitive source closure. Never upload `test/`, `script/`, `out/`, `cache/`,
 `broadcast/`, build-info, fixtures, harnesses, or unrelated production

@@ -41,6 +41,13 @@ independently callable implementation units used by those targets.
 - `check-base-v1.1-candidate-manifest.sh` independently regenerates the active
   candidate and rejects stale output or any deployed, released, verified,
   assigned-trust, warranty, SDK-readiness, or security overclaim.
+- `generate-base-v1.1-manifest.sh` binds the frozen candidate manifest to the
+  reviewed observed Base transactions and receipts. It emits the active
+  deployed manifest while preserving `unreleased`, `not-submitted`,
+  independently unaudited, `not-integrated`, and unassigned-trust status.
+- `check-base-v1.1-manifest.sh` independently regenerates that deployed
+  manifest and rejects stale evidence, verification URLs, assigned trust,
+  release, SDK-readiness, or security overclaims.
 - `generate-base-v1.1-verification-inputs.sh` prepares one metadata-derived
   Solidity Standard JSON source closure per candidate artifact under the
   ignored `out/` tree. It does not submit those inputs to an explorer.
@@ -54,7 +61,13 @@ independently callable implementation units used by those targets.
   ignored `out/` tree for human review.
 - `check-base-v1.1-candidate-onchain.sh` verifies the live Base chain, factory,
   and EntryPoint identities, then requires all three predicted addresses to
-  remain vacant.
+  remain vacant. It is retained as historical pre-broadcast evidence and is
+  expected to reject the deployed addresses.
+- `check-base-v1.1-onchain-deployment.sh` verifies each active transaction and
+  receipt against `deployments/base-v1.1.json`, including sender, factory,
+  nonce, calldata hash, salt, initcode hash, block identity, Base gas and L1
+  fee evidence, final direct runtime, zero EIP-1967 proxy slots, and the account
+  EntryPoint immutable.
 - `DeployBaseV1_1Candidate.s.sol` reconstructs all candidate identities and
   dry-runs the exact factory payloads as a thin version adapter. It permanently
   rejects Forge broadcast and resume contexts.
@@ -78,7 +91,8 @@ independently callable implementation units used by those targets.
   calldata evidence; checks current Base prerequisite hashes and vacancy;
   estimates L2 execution and GasPriceOracle L1 data fees with explicit
   margins; checks the public deployer balance; and runs the live script without
-  `--broadcast`. Its temporary Forge traces are deleted on exit.
+  `--broadcast`. Its temporary Forge traces are deleted on exit. It is a
+  historical pre-broadcast workflow and is not an active post-deployment gate.
 - `generate-base-v1-manifest.sh` validates the official Base deployment config
   from the retired v1.0.0 source state. It is historical tooling and is outside
   active current-source validation.
@@ -96,5 +110,5 @@ independently callable implementation units used by those targets.
 - `check-reproducible-build.sh` performs two clean builds and compares the
   SHA-256 digest of every generated JSON artifact.
 
-See `deployments/README.md` for the active candidate, retired addresses,
-manifest semantics, and non-broadcast reproduction commands.
+See `deployments/README.md` for the active deployment, frozen candidate,
+retired addresses, manifest semantics, and reproduction commands.
