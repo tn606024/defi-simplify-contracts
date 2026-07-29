@@ -3,6 +3,8 @@ pragma solidity 0.8.36;
 
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {Test} from "forge-std/Test.sol";
+import {DeployBaseV1_1Candidate} from "../../script/DeployBaseV1_1Candidate.s.sol";
+import {DeterministicDeployment} from "../../script/libraries/DeterministicDeployment.sol";
 import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
@@ -48,6 +50,35 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         );
         _deployCandidateOnFork("FlowAssertions", type(FlowAssertions).creationCode);
         _deployCandidateOnFork("StaticCallUint256Assertions", type(StaticCallUint256Assertions).creationCode);
+    }
+
+    function test_CandidateScript_WhenExactRuntimesAlreadyExist_RemainsIdempotent() public {
+        DeployBaseV1_1Candidate deploymentScript = new DeployBaseV1_1Candidate();
+        (address account, address flowAssertions, address staticAssertions) = deploymentScript.run();
+
+        bytes32 accountCodeHash = account.codehash;
+        bytes32 flowAssertionsCodeHash = flowAssertions.codehash;
+        bytes32 staticAssertionsCodeHash = staticAssertions.codehash;
+
+        deploymentScript.run();
+
+        assertEq(account.codehash, accountCodeHash, "account runtime changed");
+        assertEq(flowAssertions.codehash, flowAssertionsCodeHash, "typed-checker runtime changed");
+        assertEq(staticAssertions.codehash, staticAssertionsCodeHash, "generic-checker runtime changed");
+    }
+
+    function test_CandidateScript_WhenAddressHasUnexpectedRuntime_RejectsOccupiedAddress() public {
+        address account = vm.parseJsonAddress(manifest, ".artifacts.DefiSimplify7702Account.expectedAddress");
+        bytes32 expectedCodeHash = vm.parseJsonBytes32(manifest, ".artifacts.DefiSimplify7702Account.runtimeCodeHash");
+        vm.etch(account, hex"00");
+        DeployBaseV1_1Candidate deploymentScript = new DeployBaseV1_1Candidate();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DeterministicDeployment.RuntimeCodeHashMismatch.selector, account, expectedCodeHash, account.codehash
+            )
+        );
+        deploymentScript.run();
     }
 
     function _assertCandidateAddressVacant(string memory contractName) private view {

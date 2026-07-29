@@ -44,12 +44,41 @@ independently callable implementation units used by those targets.
 - `generate-base-v1.1-verification-inputs.sh` prepares one metadata-derived
   Solidity Standard JSON source closure per candidate artifact under the
   ignored `out/` tree. It does not submit those inputs to an explorer.
+- `check-base-v1.1-verification-inputs.sh` independently requires each input to
+  equal its selected artifact's metadata source closure. BaseScan payloads
+  contain only the selected production contract and its transitive `src/`/`lib/`
+  dependencies: never `test/`, `script/`, build output, fixtures, or unrelated
+  production contracts.
+- `generate-base-v1.1-factory-payloads.sh` writes the exact three
+  `salt || initcode` payloads and their calldata hashes and sizes under the
+  ignored `out/` tree for human review.
 - `check-base-v1.1-candidate-onchain.sh` verifies the live Base chain, factory,
   and EntryPoint identities, then requires all three predicted addresses to
   remain vacant.
 - `DeployBaseV1_1Candidate.s.sol` reconstructs all candidate identities and
-  dry-runs the exact factory payloads. It deliberately rejects Forge broadcast
-  and resume contexts until a separate approved live-deployment change.
+  dry-runs the exact factory payloads as a thin version adapter. It permanently
+  rejects Forge broadcast and resume contexts.
+- `libraries/DeterministicDeployment.sol` contains the version-independent,
+  internal-only CREATE2 prediction, initcode validation, and runtime-identity
+  primitives. It performs no factory call and introduces no linked deployment
+  or `DELEGATECALL`.
+- `BaseDeployment.sol` is the version-independent manifest-schema,
+  reconstruction, idempotency, final runtime-validation, candidate-policy, and
+  live-policy engine. Future Base versions reuse it and supply only their
+  reviewed manifest path and version-scoped environment names and approval
+  phrase.
+- `DeployBaseV1_1.s.sol` is the separate live-deployment path. It never reads a
+  secret and is a thin adapter over the reusable live policy. It binds calls to
+  `BASE_V1_1_DEPLOYER_ADDRESS`; broadcast or resume additionally requires the
+  exact DSC-91 approval phrase. That phrase is an accidental-action guard, not
+  authorization by itself. The reviewed signer mechanism is a named local
+  Foundry keystore supplied through `--account`; neither its password nor key
+  material belongs in the repository.
+- `preflight-base-v1.1-deployment.sh` regenerates candidate, source-closure, and
+  calldata evidence; checks current Base prerequisite hashes and vacancy;
+  estimates L2 execution and GasPriceOracle L1 data fees with explicit
+  margins; checks the public deployer balance; and runs the live script without
+  `--broadcast`. Its temporary Forge traces are deleted on exit.
 - `generate-base-v1-manifest.sh` validates the official Base deployment config
   from the retired v1.0.0 source state. It is historical tooling and is outside
   active current-source validation.

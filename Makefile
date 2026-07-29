@@ -16,6 +16,8 @@ export FOUNDRY_PROFILE
 	format \
 	build \
 	check-artifacts \
+	check-base-verification-inputs \
+	generate-base-v1.1-payloads \
 	test \
 	snapshot \
 	coverage \
@@ -26,6 +28,7 @@ export FOUNDRY_PROFILE
 	require-base-rpc \
 	check-base \
 	check-base-candidate \
+	preflight-base-v1.1 \
 	check-base-deployment \
 	test-base \
 	snapshot-base
@@ -35,6 +38,8 @@ help:
 		'make check                 Run the complete non-RPC validation suite' \
 		'make check-base            Run active Base fork and gas checks (requires BASE_RPC_URL)' \
 		'make check-base-candidate  Check candidate vacancy and dry-run deployment on Base' \
+		'make preflight-base-v1.1   Run no-broadcast deployment preflight (requires RPC and deployer address)' \
+		'make generate-base-v1.1-payloads  Generate exact ignored factory calldata review file' \
 		'make check-toolchain       Verify Foundry and pinned dependency revisions' \
 		'make format                Check Solidity formatting' \
 		'make build                 Build contracts and report sizes' \
@@ -66,13 +71,19 @@ format:
 build:
 	forge build --sizes
 
-check-artifacts: build
+check-artifacts: build check-base-verification-inputs
 	./script/check-minimal-account-surface.sh
 	./script/check-flow-assertions-surface.sh
 	./script/check-static-call-uint256-assertions-surface.sh
 	./script/check-direct-immutable-artifacts.sh
 	./script/check-abi-fixtures.sh
 	./script/check-base-v1.1-candidate-manifest.sh
+
+check-base-verification-inputs:
+	./script/check-base-v1.1-verification-inputs.sh
+
+generate-base-v1.1-payloads:
+	./script/generate-base-v1.1-factory-payloads.sh
 
 test:
 	forge test \
@@ -83,7 +94,7 @@ test:
 snapshot:
 	forge snapshot --check \
 		--no-match-test 'testFuzz|invariant_' \
-		--no-match-contract 'BaseDeployment.*ManifestTest' \
+		--no-match-contract 'BaseDeployment.*ManifestTest|BaseV1_1DeploymentAuthorizationTest|DeterministicDeploymentTest' \
 		--no-match-path 'test/fork/**'
 
 coverage:
@@ -110,8 +121,15 @@ check-base: check-toolchain check-base-candidate test-base snapshot-base
 
 check-base-candidate: require-base-rpc
 	./script/check-base-v1.1-candidate-onchain.sh
-	forge script script/DeployBaseV1_1Candidate.s.sol:DeployBaseV1_1Candidate \
-		--rpc-url "$${BASE_RPC_URL}"
+	temporary_run_directory="$$(mktemp -d "$${TMPDIR:-/tmp}/base-v1.1-candidate.XXXXXX")"; \
+	trap 'rm -rf -- "$$temporary_run_directory"' EXIT; \
+	FOUNDRY_BROADCAST="$$temporary_run_directory/broadcast" \
+	FOUNDRY_CACHE_PATH="$$temporary_run_directory/cache" \
+		forge script script/DeployBaseV1_1Candidate.s.sol:DeployBaseV1_1Candidate \
+			--rpc-url "$${BASE_RPC_URL}"
+
+preflight-base-v1.1: require-base-rpc
+	./script/preflight-base-v1.1-deployment.sh
 
 check-base-deployment: require-base-rpc
 	./script/check-base-v1-onchain-deployment.sh
