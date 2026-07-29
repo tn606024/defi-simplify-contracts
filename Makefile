@@ -25,6 +25,7 @@ export FOUNDRY_PROFILE
 	slither-gate \
 	require-base-rpc \
 	check-base \
+	check-base-candidate \
 	check-base-deployment \
 	test-base \
 	snapshot-base
@@ -33,6 +34,7 @@ help:
 	@printf '%s\n' \
 		'make check                 Run the complete non-RPC validation suite' \
 		'make check-base            Run active Base fork and gas checks (requires BASE_RPC_URL)' \
+		'make check-base-candidate  Check candidate vacancy and dry-run deployment on Base' \
 		'make check-toolchain       Verify Foundry and pinned dependency revisions' \
 		'make format                Check Solidity formatting' \
 		'make build                 Build contracts and report sizes' \
@@ -70,6 +72,7 @@ check-artifacts: build
 	./script/check-static-call-uint256-assertions-surface.sh
 	./script/check-direct-immutable-artifacts.sh
 	./script/check-abi-fixtures.sh
+	./script/check-base-v1.1-candidate-manifest.sh
 
 test:
 	forge test \
@@ -80,7 +83,7 @@ test:
 snapshot:
 	forge snapshot --check \
 		--no-match-test 'testFuzz|invariant_' \
-		--no-match-contract 'BaseDeploymentManifestTest' \
+		--no-match-contract 'BaseDeployment.*ManifestTest' \
 		--no-match-path 'test/fork/**'
 
 coverage:
@@ -103,7 +106,12 @@ require-base-rpc:
 		exit 1; \
 	}
 
-check-base: check-toolchain test-base snapshot-base
+check-base: check-toolchain check-base-candidate test-base snapshot-base
+
+check-base-candidate: require-base-rpc
+	./script/check-base-v1.1-candidate-onchain.sh
+	forge script script/DeployBaseV1_1Candidate.s.sol:DeployBaseV1_1Candidate \
+		--rpc-url "$${BASE_RPC_URL}"
 
 check-base-deployment: require-base-rpc
 	./script/check-base-v1-onchain-deployment.sh

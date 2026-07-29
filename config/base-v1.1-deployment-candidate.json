@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "manifestStatus": "candidate",
+  "releaseVersion": "v1.1.0",
+  "releaseStatus": "unreleased",
+  "intendedTrustLevel": "official",
+  "addressFamilyId": "defi-simplify-v1.1.0-arachnid-entrypoint-v0.9.0",
+  "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
+  "artifactSource": {
+    "commit": "ab073f845af86d130792baef6f4981be3c36781b",
+    "tree": "953b1a3269f76352cbbb6cf3d27bcb366c79804b"
+  },
+  "network": {
+    "name": "Base",
+    "chainId": 8453
+  },
+  "factory": {
+    "name": "Arachnid Deterministic Deployment Proxy",
+    "address": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+    "runtimeCodeHash": "0x2fa86add0aed31f33a762c9d88e807c475bd51d0f52bd0955754b2608f7e4989",
+    "calldataEncoding": "bytes32 salt || initcode"
+  },
+  "entryPoint": {
+    "version": "v0.9.0",
+    "address": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
+    "runtimeCodeHash": "0x826b7ec542db9f3345234a25c2a6330a61f99483dedb6e6709928cc97e4e4d5d"
+  },
+  "dependencies": {
+    "accountAbstraction": {
+      "repository": "https://github.com/eth-infinitism/account-abstraction",
+      "tag": "v0.9.0",
+      "commit": "b36a1ed52ae00da6f8a4c8d50181e2877e4fa410"
+    },
+    "openzeppelinContracts": {
+      "repository": "https://github.com/OpenZeppelin/openzeppelin-contracts",
+      "tag": "v5.1.0",
+      "commit": "69c8def5f222ff96f2b5beff05dfba996368aa79"
+    },
+    "forgeStd": {
+      "repository": "https://github.com/foundry-rs/forge-std",
+      "tag": "v1.16.2",
+      "commit": "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
+    }
+  },
+  "build": {
+    "foundryVersion": "v1.7.1",
+    "solidityVersion": "0.8.36",
+    "evmVersion": "prague",
+    "optimizer": true,
+    "optimizerRuns": 10000,
+    "viaIR": true,
+    "bytecodeHash": "ipfs",
+    "useLiteralContent": true
+  },
+  "security": {
+    "status": "unaudited",
+    "experimental": true,
+    "independentAuditCompleted": false,
+    "securityGuarantee": false,
+    "warranty": "none",
+    "totalLossRisk": true
+  },
+  "scope": {
+    "chain": "Base-only",
+    "strategyClaims": "documented Base Aave proofs only"
+  },
+  "salts": {
+    "DefiSimplify7702Account": {
+      "preimage": "defi-simplify.v1.1.0.DefiSimplify7702Account",
+      "value": "0x3e125cccaaaab1be359768f6f72964fda1c075392f3480fd2e0f864a165e1626"
+    },
+    "FlowAssertions": {
+      "preimage": "defi-simplify.v1.1.0.FlowAssertions",
+      "value": "0xf9ea72b763b411758c9eb2613d2845480e24db7a7b5a40a1bfe74d7f17304e36"
+    },
+    "StaticCallUint256Assertions": {
+      "preimage": "defi-simplify.v1.1.0.StaticCallUint256Assertions",
+      "value": "0x598d3f0f3cf335f5c80879065283647c4f723f17691fe4991475f6c7e8d1ad03"
+    }
+  }
+}
