@@ -40,6 +40,8 @@ make check
 ./script/generate-base-v1.1-candidate-manifest.sh
 ./script/check-base-v1.1-candidate-manifest.sh
 ./script/generate-base-v1.1-verification-inputs.sh
+./script/check-base-v1.1-verification-inputs.sh
+./script/generate-base-v1.1-factory-payloads.sh
 ```
 
 The generated Standard JSON inputs under
@@ -60,9 +62,38 @@ forge test \
   --fork-url "$BASE_RPC_URL"
 ```
 
-`DeployBaseV1_1Candidate.s.sol` rejects Forge broadcast and resume contexts.
-A later live-deployment ticket must receive explicit maintainer approval and
-review a separate change before that guard can be removed.
+`DeployBaseV1_1Candidate.s.sol` permanently rejects Forge broadcast and resume
+contexts. DSC-91 adds a separate reviewed `DeployBaseV1_1.s.sol` live path and
+a no-broadcast preflight. Both are thin version adapters over the reusable
+`BaseDeployment.sol` engine and internal-only
+`libraries/DeterministicDeployment.sol` identity primitives, so later versions
+reuse the deployment and safety logic while retaining separate manifests,
+salts, addresses, and evidence:
+
+```sh
+export BASE_RPC_URL="<Base RPC supplied outside the repository>"
+export BASE_V1_1_DEPLOYER_ADDRESS="<approved public sender>"
+make preflight-base-v1.1
+```
+
+The preflight reconstructs exact calldata, rechecks current Base vacancy and
+prerequisite identities, estimates both L2 execution and GasPriceOracle L1 data
+fees with explicit margins, checks deployer funding, and dry-runs all three
+calls. It does not authorize or perform a broadcast or BaseScan submission.
+The candidate remains `not-broadcast` until confirmed receipts exist.
+
+The reviewed signer mechanism is a local encrypted Foundry keystore selected
+by a named `--account`; the repository stores only the matching public
+`BASE_V1_1_DEPLOYER_ADDRESS`. The final command, account name, address,
+preflight evidence, and clean commit must be reviewed before approval. The
+live command is intentionally not part of `make check` and must not be run
+until the maintainer separately authorizes the external Base write.
+
+For BaseScan, submit one generated Standard JSON file per contract. Each file
+must contain only that selected production contract and its metadata-derived
+transitive source closure. Never upload `test/`, `script/`, `out/`, `cache/`,
+`broadcast/`, build-info, fixtures, harnesses, or unrelated production
+contracts.
 
 ## Retired Base v1.0.0 deployment
 
