@@ -41,7 +41,8 @@ jq -e '
   .schemaVersion == 1
   and .candidateManifest.path == "deployments/base-v1.1-candidate.json"
   and .manifestStatus == "deployed"
-  and .releaseStatus == "unreleased"
+  and .releaseStatus == "released"
+  and .trustLevel == "official"
   and .verificationStatus == "exact-match"
   and (.deployment.deployerAddress | test("^0x[0-9a-fA-F]{40}$"))
   and (.deployment.startedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
@@ -104,6 +105,7 @@ jq -nS \
     | $candidateManifest
     | .manifestStatus = $deploymentConfig.manifestStatus
     | .releaseStatus = $deploymentConfig.releaseStatus
+    | .trustLevel = $deploymentConfig.trustLevel
     | .verificationStatus = $deploymentConfig.verificationStatus
     | .candidateManifest = $deploymentConfig.candidateManifest
     | .network.deploymentStatus = "deployed"
@@ -136,4 +138,4 @@ jq -nS \
       )
   ' > "$output_path"
 
-echo "Generated Base v1.1.0 deployed, exact-match verified, unreleased manifest at $output_path"
+echo "Generated Base v1.1.0 official release manifest at $output_path"

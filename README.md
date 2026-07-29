@@ -39,24 +39,14 @@ immutable contracts recorded in the reproducible
 
 All three receipts and direct runtime identities have been independently
 re-read from Base. Each direct contract has exact-match BaseScan source
-verification from its metadata-derived production source closure. The manifest
-remains `unreleased`, independently unaudited, not integrated into the SDK, and
-has no assigned deployment trust level. Deployment, source verification, and
-repository-authored evidence are not an audit or security guarantee.
-
-## Retired Base v1.0 deployment
+verification from its metadata-derived production source closure. The released
+manifest assigns `official` only as the project-published artifact and
+deployment identity. The contracts remain independently unaudited,
+experimental, and not integrated into the SDK. Deployment, source verification,
+official identity, and repository-authored evidence are not an audit or
+security guarantee.
 
 Base is the only supported chain in this version.
-The former deployment remains visible as the experimental, unaudited
-[`v1.0.0`](https://github.com/tn606024/defi-simplify-contracts/releases/tag/v1.0.0)
-release, but it is retired and unsupported. The current source build supersedes
-it and is not deployed at these legacy addresses.
-
-| Contract | Address |
-| --- | --- |
-| `DefiSimplify7702Account` | [`0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA`](https://basescan.org/address/0xf5e7cAAdAb81B4d585432f860a161e64F10Ab2CA#code) |
-| `FlowAssertions` | [`0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5`](https://basescan.org/address/0x2D59990485A0a71619b8b16B70e11Cdc91b20FB5#code) |
-| `StaticCallUint256Assertions` | [`0x034ee940A644323463AB074DCA99504BF5a666EA`](https://basescan.org/address/0x034ee940A644323463AB074DCA99504BF5a666EA#code) |
 
 The account address above is an implementation address. Do not send user funds
 to it. An EOA authorizes that implementation through EIP-7702 and continues to
@@ -64,8 +54,7 @@ hold assets and protocol positions at the EOA address.
 
 Complete ABIs are available in [`abi/`](abi/). Deployment transactions, runtime
 code hashes, and reproducible deployment identities are available in
-[`deployments/base-v1.1.json`](deployments/base-v1.1.json) and the retired
-[`deployments/base-v1.json`](deployments/base-v1.json).
+[`deployments/base-v1.1.json`](deployments/base-v1.1.json).
 
 ## Using `DefiSimplify7702Account`
 
