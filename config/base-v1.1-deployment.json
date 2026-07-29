@@ -6,7 +6,7 @@
   },
   "manifestStatus": "deployed",
   "releaseStatus": "unreleased",
-  "verificationStatus": "not-submitted",
+  "verificationStatus": "exact-match",
   "deployment": {
     "deployerAddress": "0xb5FD9f60Fc6ca7662Ff22D09ec7832CD221fbcdD",
     "startedAt": "2026-07-29T12:05:57Z",
@@ -27,7 +27,8 @@
         "effectiveGasPriceWei": 6000000,
         "l1FeeWei": 28993318008,
         "observedTotalFeeWei": 16022515318008,
-        "verificationStatus": "not-submitted"
+        "verificationStatus": "exact-match",
+        "verificationUrl": "https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69#code"
       },
       "FlowAssertions": {
         "address": "0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16",
@@ -43,7 +44,8 @@
         "effectiveGasPriceWei": 6000000,
         "l1FeeWei": 5556565266,
         "observedTotalFeeWei": 3169938565266,
-        "verificationStatus": "not-submitted"
+        "verificationStatus": "exact-match",
+        "verificationUrl": "https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16#code"
       },
       "StaticCallUint256Assertions": {
         "address": "0x28734029a24448cAA307D286823cA21DC57e8393",
@@ -59,7 +61,8 @@
         "effectiveGasPriceWei": 5005043,
         "l1FeeWei": 4801344328,
         "observedTotalFeeWei": 1998540203206,
-        "verificationStatus": "not-submitted"
+        "verificationStatus": "exact-match",
+        "verificationUrl": "https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393#code"
       }
     }
   }

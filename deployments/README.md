@@ -18,18 +18,20 @@ runtime evidence.
 
 | Artifact | Base address | Deployment transaction | Runtime code hash |
 | --- | --- | --- | --- |
-| `DefiSimplify7702Account` | [`0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69`](https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69) | [`0x9256cd…80855`](https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855) | `0x3ccebf2c563db0b2284a322ed5a53067ba4a561949973f375e267a3230babc00` |
-| `FlowAssertions` | [`0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16`](https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16) | [`0x936043…d22c6`](https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6) | `0xadbf11b88ce66db628549fa169006eb55e88c382708716ddb7c1c9c1d9b754c5` |
-| `StaticCallUint256Assertions` | [`0x28734029a24448cAA307D286823cA21DC57e8393`](https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393) | [`0x944c82…b9900`](https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900) | `0xb6ed9520e6684c6b4342d03c92f4995ca2774ac909306f7876d8cdf047ecf9f6` |
+| `DefiSimplify7702Account` | [`0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69`](https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69#code) | [`0x9256cd…80855`](https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855) | `0x3ccebf2c563db0b2284a322ed5a53067ba4a561949973f375e267a3230babc00` |
+| `FlowAssertions` | [`0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16`](https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16#code) | [`0x936043…d22c6`](https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6) | `0xadbf11b88ce66db628549fa169006eb55e88c382708716ddb7c1c9c1d9b754c5` |
+| `StaticCallUint256Assertions` | [`0x28734029a24448cAA307D286823cA21DC57e8393`](https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393#code) | [`0x944c82…b9900`](https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900) | `0xb6ed9520e6684c6b4342d03c92f4995ca2774ac909306f7876d8cdf047ecf9f6` |
 
 The three canonical receipts have status `1`; their exact factory calldata and
 deployed runtime hashes match the reviewed candidate. The account immutable
 resolves to the frozen Base EntryPoint, and all three contracts are direct,
 immutable, non-proxy artifacts.
 
-This is not a release or explorer-verification claim. The manifest remains
-`unreleased`, `not-submitted`, independently unaudited, and `not-integrated`,
-and deliberately omits an assigned `trustLevel` and verification URLs.
+All three direct contracts have exact-match BaseScan source verification from
+the metadata-derived production source closures linked in the table. This is
+not a release or trust-assignment claim: the manifest remains `unreleased`,
+independently unaudited, and `not-integrated`, and deliberately omits an
+assigned `trustLevel`.
 
 ### Reproduce the deployment record
 
@@ -58,7 +60,8 @@ The generated Standard JSON inputs under
 `out/verification/base-v1.1-candidate/` contain only each selected contract and
 its metadata-derived transitive source closure. They exclude tests, scripts,
 build output, and unrelated production contracts. They remain preparation
-artifacts only; generation does not authorize explorer submission.
+artifacts and reproducible submission evidence; generation alone does not
+authorize another explorer submission.
 
 The frozen candidate and its pre-broadcast factory proof remain reproducible at
 the documented pre-deployment block:
@@ -87,12 +90,11 @@ by a named `--account`; the repository stores only the matching public
 final command, account name, address, preflight evidence, and clean commit were
 reviewed. The live command remains outside `make check`.
 
-If separately approved for BaseScan, submit one generated Standard JSON file
-per contract. Each file
-must contain only that selected production contract and its metadata-derived
-transitive source closure. Never upload `test/`, `script/`, `out/`, `cache/`,
-`broadcast/`, build-info, fixtures, harnesses, or unrelated production
-contracts.
+The separately approved BaseScan submissions used one generated Standard JSON
+file per contract. Each submitted file contained only that selected production
+contract and its metadata-derived transitive source closure. No `test/`,
+`script/`, `out/`, `cache/`, `broadcast/`, build-info, fixture, harness, or
+unrelated production contract was submitted.
 
 ## Retired Base v1.0.0 deployment
 

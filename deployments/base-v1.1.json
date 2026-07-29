@@ -39,7 +39,8 @@
         "value": "0x3e125cccaaaab1be359768f6f72964fda1c075392f3480fd2e0f864a165e1626"
       },
       "sourcePath": "src/DefiSimplify7702Account.sol",
-      "verificationStatus": "not-submitted"
+      "verificationStatus": "exact-match",
+      "verificationUrl": "https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69#code"
     },
     "FlowAssertions": {
       "abiJsonKeccak256": "0x6298b15d11d6af6962aec0b31351f4274e2af6a7fed2681574000d50a34d9fc7",
@@ -75,7 +76,8 @@
         "value": "0xf9ea72b763b411758c9eb2613d2845480e24db7a7b5a40a1bfe74d7f17304e36"
       },
       "sourcePath": "src/FlowAssertions.sol",
-      "verificationStatus": "not-submitted"
+      "verificationStatus": "exact-match",
+      "verificationUrl": "https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16#code"
     },
     "StaticCallUint256Assertions": {
       "abiJsonKeccak256": "0x6fd4c4bbb76ab95dc5ecc2933d7e00a2f33e0c327d888dd864659fa17a683b90",
@@ -111,7 +113,8 @@
         "value": "0x598d3f0f3cf335f5c80879065283647c4f723f17691fe4991475f6c7e8d1ad03"
       },
       "sourcePath": "src/StaticCallUint256Assertions.sol",
-      "verificationStatus": "not-submitted"
+      "verificationStatus": "exact-match",
+      "verificationUrl": "https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393#code"
     }
   },
   "build": {
@@ -187,5 +190,5 @@
     "warranty": "none"
   },
   "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
-  "verificationStatus": "not-submitted"
+  "verificationStatus": "exact-match"
 }

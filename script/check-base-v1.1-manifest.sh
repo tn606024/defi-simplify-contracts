@@ -20,7 +20,7 @@ jq -e '
   .manifestStatus == "deployed"
   and .releaseVersion == "v1.1.0"
   and .releaseStatus == "unreleased"
-  and .verificationStatus == "not-submitted"
+  and .verificationStatus == "exact-match"
   and .intendedTrustLevel == "official"
   and (has("trustLevel") | not)
   and .network.deploymentStatus == "deployed"
@@ -47,13 +47,13 @@ jq -e '
     and (.effectiveGasPriceWei > 0)
     and (.l1FeeWei >= 0)
     and .observedTotalFeeWei == (.gasUsed * .effectiveGasPriceWei + .l1FeeWei)
-    and .verificationStatus == "not-submitted"
-    and (has("verificationUrl") | not)
+    and .verificationStatus == "exact-match"
+    and .verificationUrl == ("https://basescan.org/address/" + .address + "#code")
   ] | all)
   and (has("auditUrl") | not)
 ' "$manifest_path" >/dev/null || {
-  echo "Base v1.1.0 manifest overstates verification, trust, release, SDK, or security status" >&2
+  echo "Base v1.1.0 manifest misstates verification, trust, release, SDK, or security status" >&2
   exit 1
 }
 
-echo "Base v1.1.0 deployed manifest reproduces exact broadcast evidence without verification or trust overclaims"
+echo "Base v1.1.0 deployed manifest reproduces exact broadcast and BaseScan evidence without trust overclaims"
