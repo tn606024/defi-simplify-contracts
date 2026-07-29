@@ -14,6 +14,7 @@ import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions
 ///         identities against the actual Base factory on a disposable fork.
 contract BaseDeploymentCandidateFactoryTest is Test {
     string internal constant MANIFEST_PATH = "deployments/base-v1.1-candidate.json";
+    uint256 internal constant PRE_DEPLOYMENT_BLOCK = 49_268_704;
 
     string private manifest;
 
@@ -35,13 +36,16 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         );
     }
 
-    function test_BaseCandidateAddresses_BeforeBroadcast_AreVacant() public view {
+    function test_BaseCandidateAddresses_AtReviewedPreDeploymentBlock_AreVacant() public {
+        vm.rollFork(PRE_DEPLOYMENT_BLOCK);
+
         _assertCandidateAddressVacant("DefiSimplify7702Account");
         _assertCandidateAddressVacant("FlowAssertions");
         _assertCandidateAddressVacant("StaticCallUint256Assertions");
     }
 
     function test_BaseFactory_CandidatePayloadsDeployExactDirectRuntimesOnDisposableFork() public {
+        vm.rollFork(PRE_DEPLOYMENT_BLOCK);
         address entryPoint = vm.parseJsonAddress(manifest, ".entryPoint.address");
 
         _deployCandidateOnFork(
@@ -50,6 +54,12 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         );
         _deployCandidateOnFork("FlowAssertions", type(FlowAssertions).creationCode);
         _deployCandidateOnFork("StaticCallUint256Assertions", type(StaticCallUint256Assertions).creationCode);
+    }
+
+    function test_BaseV1_1Addresses_AfterBroadcast_HaveFrozenRuntimeIdentities() public view {
+        _assertCandidateAddressHasExpectedRuntime("DefiSimplify7702Account");
+        _assertCandidateAddressHasExpectedRuntime("FlowAssertions");
+        _assertCandidateAddressHasExpectedRuntime("StaticCallUint256Assertions");
     }
 
     function test_CandidateScript_WhenExactRuntimesAlreadyExist_RemainsIdempotent() public {
@@ -85,6 +95,17 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         address expectedAddress =
             vm.parseJsonAddress(manifest, string.concat(".artifacts.", contractName, ".expectedAddress"));
         assertEq(expectedAddress.code.length, 0, string.concat(contractName, " candidate address occupied"));
+    }
+
+    function _assertCandidateAddressHasExpectedRuntime(string memory contractName) private view {
+        string memory artifactRoot = string.concat(".artifacts.", contractName);
+        address expectedAddress = vm.parseJsonAddress(manifest, string.concat(artifactRoot, ".expectedAddress"));
+        assertGt(expectedAddress.code.length, 0, string.concat(contractName, " deployed runtime missing"));
+        assertEq(
+            expectedAddress.codehash,
+            vm.parseJsonBytes32(manifest, string.concat(artifactRoot, ".runtimeCodeHash")),
+            string.concat(contractName, " deployed runtime hash")
+        );
     }
 
     /// @dev Calls the live Base factory only inside the disposable fork and

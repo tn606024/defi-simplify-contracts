@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "candidateManifest": {
+    "path": "deployments/base-v1.1-candidate.json",
+    "keccak256": "0xc6f0c3a999dc8837a2f2baa4b6ec3d1ed15dfe54cb2bb12e163a1ca1a9f6a00d"
+  },
+  "manifestStatus": "deployed",
+  "releaseStatus": "unreleased",
+  "verificationStatus": "not-submitted",
+  "deployment": {
+    "deployerAddress": "0xb5FD9f60Fc6ca7662Ff22D09ec7832CD221fbcdD",
+    "startedAt": "2026-07-29T12:05:57Z",
+    "completedAt": "2026-07-29T12:11:37Z",
+    "totalObservedFeeWei": 21190994086480,
+    "artifacts": {
+      "DefiSimplify7702Account": {
+        "address": "0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69",
+        "transactionHash": "0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855",
+        "transactionUrl": "https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855",
+        "blockNumber": 49268705,
+        "blockHash": "0x82e43677f62d1c2219a3aedd50cf8993031836e7790ca86f5b0a720dc9729ee8",
+        "timestamp": "2026-07-29T12:05:57Z",
+        "nonce": 44,
+        "calldataKeccak256": "0xa751ece8c234412457665221945a59f49302c9b789dcc3f2f7d0f8ca24111229",
+        "receiptStatus": 1,
+        "gasUsed": 2665587,
+        "effectiveGasPriceWei": 6000000,
+        "l1FeeWei": 28993318008,
+        "observedTotalFeeWei": 16022515318008,
+        "verificationStatus": "not-submitted"
+      },
+      "FlowAssertions": {
+        "address": "0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16",
+        "transactionHash": "0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6",
+        "transactionUrl": "https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6",
+        "blockNumber": 49268853,
+        "blockHash": "0xf09e25e511cccad6f22b2c9fd2c4b78342499df84d000e5cd820a3ba2df64e18",
+        "timestamp": "2026-07-29T12:10:53Z",
+        "nonce": 45,
+        "calldataKeccak256": "0x2368b45d470c348226355a567312d939be401eb261beb26725b9bb3dae69fedf",
+        "receiptStatus": 1,
+        "gasUsed": 527397,
+        "effectiveGasPriceWei": 6000000,
+        "l1FeeWei": 5556565266,
+        "observedTotalFeeWei": 3169938565266,
+        "verificationStatus": "not-submitted"
+      },
+      "StaticCallUint256Assertions": {
+        "address": "0x28734029a24448cAA307D286823cA21DC57e8393",
+        "transactionHash": "0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900",
+        "transactionUrl": "https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900",
+        "blockNumber": 49268875,
+        "blockHash": "0xe89b143ca2cbda3d626d40555e534066833586ad9321b22a81b78ffcf098e7f9",
+        "timestamp": "2026-07-29T12:11:37Z",
+        "nonce": 46,
+        "calldataKeccak256": "0x455a14a432c2885e3be76d3d48287662a241b026c3e615292d5a757e43f3a795",
+        "receiptStatus": 1,
+        "gasUsed": 398346,
+        "effectiveGasPriceWei": 5005043,
+        "l1FeeWei": 4801344328,
+        "observedTotalFeeWei": 1998540203206,
+        "verificationStatus": "not-submitted"
+      }
+    }
+  }
+}

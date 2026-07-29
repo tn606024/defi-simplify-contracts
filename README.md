@@ -25,14 +25,24 @@ They do not require the `defi-simplify` Go SDK.
 All three contracts are direct and immutable. They have no owner, admin, proxy,
 upgrade function, withdrawal function, or protocol registry.
 
-## Base v1.1.0 deployment candidate
+## Base v1.1.0 deployment
 
-The current 10,000-optimizer-run source build has a reproducible
-[`v1.1.0` Base deployment candidate](deployments/base-v1.1-candidate.json).
-Its addresses are predictions only: the candidate is explicitly
-`not-broadcast`, `unreleased`, independently unaudited, and not integrated into
-the SDK. No deployment trust level, transaction, or explorer-verification claim
-has been assigned.
+The current 10,000-optimizer-run source build is deployed as three direct,
+immutable contracts recorded in the reproducible
+[`v1.1.0` Base manifest](deployments/base-v1.1.json):
+
+| Contract | Address | Deployment transaction |
+| --- | --- | --- |
+| `DefiSimplify7702Account` | [`0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69`](https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69) | [`0x9256cd…80855`](https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855) |
+| `FlowAssertions` | [`0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16`](https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16) | [`0x936043…d22c6`](https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6) |
+| `StaticCallUint256Assertions` | [`0x28734029a24448cAA307D286823cA21DC57e8393`](https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393) | [`0x944c82…b9900`](https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900) |
+
+All three receipts and direct runtime identities have been independently
+re-read from Base. Explorer source submission has not occurred: the manifest
+is `unreleased`, `not-submitted`, independently unaudited, not integrated into
+the SDK, and has no assigned deployment trust level. Deployment and
+repository-authored verification evidence are not an audit or security
+guarantee.
 
 ## Retired Base v1.0 deployment
 
@@ -53,7 +63,8 @@ to it. An EOA authorizes that implementation through EIP-7702 and continues to
 hold assets and protocol positions at the EOA address.
 
 Complete ABIs are available in [`abi/`](abi/). Deployment transactions, runtime
-code hashes, and reproducible deployment identity are available in
+code hashes, and reproducible deployment identities are available in
+[`deployments/base-v1.1.json`](deployments/base-v1.1.json) and the retired
 [`deployments/base-v1.json`](deployments/base-v1.json).
 
 ## Using `DefiSimplify7702Account`

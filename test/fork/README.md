@@ -6,14 +6,15 @@ Use a pinned or explicitly documented Base block whenever reproducibility matter
 The workflow requires the `BASE_RPC_URL` GitHub Actions secret and never stores
 RPC credentials in the repository.
 
-`BaseDeploymentFactory.t.sol` runs at current Base state. It freezes the
-Arachnid deterministic deployment proxy and EntryPoint runtime identities,
-reconstructs every official `salt || initcode` payload, and verifies the
-already-existing direct runtimes. The vacancy branch retains an equivalent
-disposable-fork factory proof for earlier chain state. The separate
-`script/check-base-v1-onchain-deployment.sh` RPC check verifies the three
-historical transactions and receipts against the official manifest. No test or
-check broadcasts a Base transaction.
+`BaseDeploymentCandidateFactory.t.sol` checks the active v1.1.0 runtimes at
+current Base state and rolls its vacancy and actual-factory payload proofs back
+to documented pre-deployment block `49,268,704`.
+`script/check-base-v1.1-onchain-deployment.sh` independently verifies the three
+active transactions, receipts, calldata identities, runtimes, proxy slots, and
+account immutable against the deployed manifest.
+`BaseDeploymentFactory.t.sol` and
+`script/check-base-v1-onchain-deployment.sh` retain the retired v1.0.0 evidence.
+No test or checker broadcasts a Base transaction.
 
 `BaseAaveV3FlowAssertions.t.sol` pins Base block `48,961,870` and the Aave V3
 Base Pool `0xA238Dd80C259a72e81d7e4664a9801593F98d1c5`. The Pool address is sourced
