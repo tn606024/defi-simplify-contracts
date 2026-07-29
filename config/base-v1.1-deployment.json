@@ -5,7 +5,8 @@
     "keccak256": "0xc6f0c3a999dc8837a2f2baa4b6ec3d1ed15dfe54cb2bb12e163a1ca1a9f6a00d"
   },
   "manifestStatus": "deployed",
-  "releaseStatus": "unreleased",
+  "releaseStatus": "released",
+  "trustLevel": "official",
   "verificationStatus": "exact-match",
   "deployment": {
     "deployerAddress": "0xb5FD9f60Fc6ca7662Ff22D09ec7832CD221fbcdD",

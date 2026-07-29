@@ -19,10 +19,10 @@ fi
 jq -e '
   .manifestStatus == "deployed"
   and .releaseVersion == "v1.1.0"
-  and .releaseStatus == "unreleased"
+  and .releaseStatus == "released"
   and .verificationStatus == "exact-match"
   and .intendedTrustLevel == "official"
-  and (has("trustLevel") | not)
+  and .trustLevel == "official"
   and .network.deploymentStatus == "deployed"
   and .security.status == "unaudited"
   and .security.experimental == true
@@ -56,4 +56,4 @@ jq -e '
   exit 1
 }
 
-echo "Base v1.1.0 deployed manifest reproduces exact broadcast and BaseScan evidence without trust overclaims"
+echo "Base v1.1.0 official release manifest reproduces exact broadcast and BaseScan evidence without security overclaims"

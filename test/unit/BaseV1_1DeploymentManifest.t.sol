@@ -9,8 +9,8 @@ import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions
 
 /// @title BaseV1_1DeploymentManifestTest
 /// @notice Independently binds the Base v1.1.0 deployment evidence to the
-///         frozen direct artifact family and exact BaseScan verification
-///         without claiming trust, release, SDK readiness, or an audit.
+///         frozen direct artifact family and exact BaseScan verification while
+///         keeping official identity separate from SDK readiness or an audit.
 contract BaseV1_1DeploymentManifestTest is Test {
     string internal constant MANIFEST_PATH = "deployments/base-v1.1.json";
     uint256 internal constant BASE_CHAIN_ID = 8453;
@@ -48,14 +48,14 @@ contract BaseV1_1DeploymentManifestTest is Test {
         manifest = vm.readFile(MANIFEST_PATH);
     }
 
-    function test_DeploymentManifest_RecordsMinedStateWithoutOverclaimingExternalGates() public view {
+    function test_DeploymentManifest_RecordsOfficialReleaseWithoutOverclaimingSecurityOrSdkReadiness() public view {
         assertEq(vm.parseJsonUint(manifest, ".schemaVersion"), 1, "schema version");
         assertEq(vm.parseJsonString(manifest, ".manifestStatus"), "deployed", "manifest status");
         assertEq(vm.parseJsonString(manifest, ".releaseVersion"), "v1.1.0", "release version");
-        assertEq(vm.parseJsonString(manifest, ".releaseStatus"), "unreleased", "release status");
+        assertEq(vm.parseJsonString(manifest, ".releaseStatus"), "released", "release status");
         assertEq(vm.parseJsonString(manifest, ".verificationStatus"), "exact-match", "verification status");
         assertEq(vm.parseJsonString(manifest, ".intendedTrustLevel"), "official", "intended trust");
-        assertFalse(vm.keyExistsJson(manifest, ".trustLevel"), "assigned trust must be omitted");
+        assertEq(vm.parseJsonString(manifest, ".trustLevel"), "official", "assigned trust");
 
         assertEq(vm.parseJsonUint(manifest, ".network.chainId"), BASE_CHAIN_ID, "Base chain ID");
         assertEq(vm.parseJsonString(manifest, ".network.deploymentStatus"), "deployed", "network deployment status");

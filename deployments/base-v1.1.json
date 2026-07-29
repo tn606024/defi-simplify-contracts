@@ -172,7 +172,7 @@
     "deploymentStatus": "deployed",
     "name": "Base"
   },
-  "releaseStatus": "unreleased",
+  "releaseStatus": "released",
   "releaseVersion": "v1.1.0",
   "schemaVersion": 1,
   "scope": {
@@ -190,5 +190,6 @@
     "warranty": "none"
   },
   "sourceRepository": "https://github.com/tn606024/defi-simplify-contracts",
+  "trustLevel": "official",
   "verificationStatus": "exact-match"
 }
