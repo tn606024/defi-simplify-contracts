@@ -33,16 +33,16 @@ immutable contracts recorded in the reproducible
 
 | Contract | Address | Deployment transaction |
 | --- | --- | --- |
-| `DefiSimplify7702Account` | [`0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69`](https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69) | [`0x9256cd…80855`](https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855) |
-| `FlowAssertions` | [`0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16`](https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16) | [`0x936043…d22c6`](https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6) |
-| `StaticCallUint256Assertions` | [`0x28734029a24448cAA307D286823cA21DC57e8393`](https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393) | [`0x944c82…b9900`](https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900) |
+| `DefiSimplify7702Account` | [`0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69`](https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69#code) | [`0x9256cd…80855`](https://basescan.org/tx/0x9256cd73512476ad7ec3e955bbeb91d9b9f8d34d2c26aaafec0d18f4d4c80855) |
+| `FlowAssertions` | [`0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16`](https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16#code) | [`0x936043…d22c6`](https://basescan.org/tx/0x93604354100fef930e19b8924b624c8b1044d2360cbf62cd28aadba6437d22c6) |
+| `StaticCallUint256Assertions` | [`0x28734029a24448cAA307D286823cA21DC57e8393`](https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393#code) | [`0x944c82…b9900`](https://basescan.org/tx/0x944c827a13313750bd6ee282c2424a576b57bce73026bf31abcac34b7fbb9900) |
 
 All three receipts and direct runtime identities have been independently
-re-read from Base. Explorer source submission has not occurred: the manifest
-is `unreleased`, `not-submitted`, independently unaudited, not integrated into
-the SDK, and has no assigned deployment trust level. Deployment and
-repository-authored verification evidence are not an audit or security
-guarantee.
+re-read from Base. Each direct contract has exact-match BaseScan source
+verification from its metadata-derived production source closure. The manifest
+remains `unreleased`, independently unaudited, not integrated into the SDK, and
+has no assigned deployment trust level. Deployment, source verification, and
+repository-authored evidence are not an audit or security guarantee.
 
 ## Retired Base v1.0 deployment
 

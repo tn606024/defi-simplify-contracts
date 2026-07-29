@@ -42,7 +42,7 @@ jq -e '
   and .candidateManifest.path == "deployments/base-v1.1-candidate.json"
   and .manifestStatus == "deployed"
   and .releaseStatus == "unreleased"
-  and .verificationStatus == "not-submitted"
+  and .verificationStatus == "exact-match"
   and (.deployment.deployerAddress | test("^0x[0-9a-fA-F]{40}$"))
   and (.deployment.startedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
   and (.deployment.completedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
@@ -61,11 +61,11 @@ jq -e '
     and (.effectiveGasPriceWei > 0)
     and (.l1FeeWei >= 0)
     and .observedTotalFeeWei == (.gasUsed * .effectiveGasPriceWei + .l1FeeWei)
-    and .verificationStatus == "not-submitted"
-    and (has("verificationUrl") | not)
+    and .verificationStatus == "exact-match"
+    and .verificationUrl == ("https://basescan.org/address/" + .address + "#code")
   ] | all)
 ' "$config_path" >/dev/null || {
-  echo "Base v1.1.0 deployment evidence is malformed or overstates verification or release status" >&2
+  echo "Base v1.1.0 deployment or exact-match verification evidence is malformed" >&2
   exit 1
 }
 
@@ -129,10 +129,11 @@ jq -nS \
                 effectiveGasPriceWei: $evidence.effectiveGasPriceWei,
                 l1FeeWei: $evidence.l1FeeWei,
                 observedTotalFeeWei: $evidence.observedTotalFeeWei,
-                verificationStatus: $evidence.verificationStatus
+                verificationStatus: $evidence.verificationStatus,
+                verificationUrl: $evidence.verificationUrl
               }
           )
       )
   ' > "$output_path"
 
-echo "Generated Base v1.1.0 deployed, unverified manifest at $output_path"
+echo "Generated Base v1.1.0 deployed, exact-match verified, unreleased manifest at $output_path"

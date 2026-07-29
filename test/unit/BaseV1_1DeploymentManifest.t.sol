@@ -9,8 +9,8 @@ import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions
 
 /// @title BaseV1_1DeploymentManifestTest
 /// @notice Independently binds the Base v1.1.0 deployment evidence to the
-///         frozen direct artifact family without claiming verification, trust,
-///         release, SDK readiness, or an independent audit.
+///         frozen direct artifact family and exact BaseScan verification
+///         without claiming trust, release, SDK readiness, or an audit.
 contract BaseV1_1DeploymentManifestTest is Test {
     string internal constant MANIFEST_PATH = "deployments/base-v1.1.json";
     uint256 internal constant BASE_CHAIN_ID = 8453;
@@ -35,6 +35,13 @@ contract BaseV1_1DeploymentManifestTest is Test {
     bytes32 private constant STATIC_ASSERTIONS_CALLDATA_HASH =
         0x455a14a432c2885e3be76d3d48287662a241b026c3e615292d5a757e43f3a795;
 
+    string private constant ACCOUNT_VERIFICATION_URL =
+        "https://basescan.org/address/0x9B1854c65Ce4656349d04e612260dFCEaf5B1d69#code";
+    string private constant FLOW_ASSERTIONS_VERIFICATION_URL =
+        "https://basescan.org/address/0xEd66a41f7d87C6aC68c524075836B2F0DaD87a16#code";
+    string private constant STATIC_ASSERTIONS_VERIFICATION_URL =
+        "https://basescan.org/address/0x28734029a24448cAA307D286823cA21DC57e8393#code";
+
     string private manifest;
 
     function setUp() public {
@@ -46,7 +53,7 @@ contract BaseV1_1DeploymentManifestTest is Test {
         assertEq(vm.parseJsonString(manifest, ".manifestStatus"), "deployed", "manifest status");
         assertEq(vm.parseJsonString(manifest, ".releaseVersion"), "v1.1.0", "release version");
         assertEq(vm.parseJsonString(manifest, ".releaseStatus"), "unreleased", "release status");
-        assertEq(vm.parseJsonString(manifest, ".verificationStatus"), "not-submitted", "verification status");
+        assertEq(vm.parseJsonString(manifest, ".verificationStatus"), "exact-match", "verification status");
         assertEq(vm.parseJsonString(manifest, ".intendedTrustLevel"), "official", "intended trust");
         assertFalse(vm.keyExistsJson(manifest, ".trustLevel"), "assigned trust must be omitted");
 
@@ -75,7 +82,8 @@ contract BaseV1_1DeploymentManifestTest is Test {
             2_665_587,
             6_000_000,
             28_993_318_008,
-            16_022_515_318_008
+            16_022_515_318_008,
+            ACCOUNT_VERIFICATION_URL
         );
         _assertDeploymentEvidence(
             "FlowAssertions",
@@ -87,7 +95,8 @@ contract BaseV1_1DeploymentManifestTest is Test {
             527_397,
             6_000_000,
             5_556_565_266,
-            3_169_938_565_266
+            3_169_938_565_266,
+            FLOW_ASSERTIONS_VERIFICATION_URL
         );
         _assertDeploymentEvidence(
             "StaticCallUint256Assertions",
@@ -99,7 +108,8 @@ contract BaseV1_1DeploymentManifestTest is Test {
             398_346,
             5_005_043,
             4_801_344_328,
-            1_998_540_203_206
+            1_998_540_203_206,
+            STATIC_ASSERTIONS_VERIFICATION_URL
         );
     }
 
@@ -141,7 +151,8 @@ contract BaseV1_1DeploymentManifestTest is Test {
         uint256 gasUsed,
         uint256 effectiveGasPriceWei,
         uint256 l1FeeWei,
-        uint256 observedTotalFeeWei
+        uint256 observedTotalFeeWei,
+        string memory verificationUrl
     ) private view {
         string memory artifactRoot = string.concat(".artifacts.", contractName);
         assertEq(
@@ -204,12 +215,13 @@ contract BaseV1_1DeploymentManifestTest is Test {
         );
         assertEq(
             vm.parseJsonString(manifest, string.concat(artifactRoot, ".verificationStatus")),
-            "not-submitted",
+            "exact-match",
             string.concat(contractName, " verification status")
         );
-        assertFalse(
-            vm.keyExistsJson(manifest, string.concat(artifactRoot, ".verificationUrl")),
-            string.concat(contractName, " verification URL must be omitted")
+        assertEq(
+            vm.parseJsonString(manifest, string.concat(artifactRoot, ".verificationUrl")),
+            verificationUrl,
+            string.concat(contractName, " verification URL")
         );
     }
 

@@ -42,12 +42,13 @@ independently callable implementation units used by those targets.
   candidate and rejects stale output or any deployed, released, verified,
   assigned-trust, warranty, SDK-readiness, or security overclaim.
 - `generate-base-v1.1-manifest.sh` binds the frozen candidate manifest to the
-  reviewed observed Base transactions and receipts. It emits the active
-  deployed manifest while preserving `unreleased`, `not-submitted`,
-  independently unaudited, `not-integrated`, and unassigned-trust status.
+  reviewed observed Base transactions, receipts, and exact-match BaseScan
+  verification URLs. It emits the active deployed manifest while preserving
+  `unreleased`, independently unaudited, `not-integrated`, and unassigned-trust
+  status.
 - `check-base-v1.1-manifest.sh` independently regenerates that deployed
-  manifest and rejects stale evidence, verification URLs, assigned trust,
-  release, SDK-readiness, or security overclaims.
+  manifest and rejects stale deployment or verification evidence, assigned
+  trust, release, SDK-readiness, or security overclaims.
 - `generate-base-v1.1-verification-inputs.sh` prepares one metadata-derived
   Solidity Standard JSON source closure per candidate artifact under the
   ignored `out/` tree. It does not submit those inputs to an explorer.
