@@ -9,6 +9,10 @@ import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/Pac
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
+/// @title Base EntryPoint Dynamic-Target Fork Tests
+/// @notice Proves that the pinned Base v0.9 EntryPoint remains an admissible dynamic CALL target:
+///         depositTo succeeds, while a nested handleOps attempt fails at the EntryPoint's own
+///         reentrancy boundary and is wrapped with the dynamic call index and complete reason.
 contract BaseDynamicEntryPointForkTest is DelegatedAccountFixture {
     uint256 private constant BASE_CHAIN_ID = 8453;
     /// @dev Suite-specific test authority avoids collisions with existing Base delegations.
@@ -40,6 +44,9 @@ contract BaseDynamicEntryPointForkTest is DelegatedAccountFixture {
         assertEq(accountUnderTest.delegatedEoa.balance, 0.75 ether, "account native balance");
     }
 
+    /// @dev The delegated EOA is already executing account code when it CALLs handleOps. The real
+    ///      EntryPoint must reject that code-bearing caller with Reentrancy before any authorized
+    ///      account reentry, and the account must preserve that nested reason at outer call 0.
     function test_BaseEntryPointHandleOpsTargetFailsWithEntryPointReentrancy() external {
         PackedUserOperation[] memory operations = new PackedUserOperation[](0);
         bytes memory targetReason = abi.encodeWithSelector(EntryPoint.Reentrancy.selector);

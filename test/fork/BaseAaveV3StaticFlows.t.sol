@@ -5,6 +5,10 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BaseAaveV3StaticFlowFixture, IBaseAaveV3Pool} from "./BaseAaveV3StaticFlowFixture.sol";
 
+/// @title Base Aave V3 Static Delegated-Account Lifecycle Fork Tests
+/// @notice Proves inherited execute and executeBatch behavior against Aave V3 at pinned Base block
+///         48,961,870, including delegated-EOA position ownership, upstream compatibility, exact
+///         open/close accounting, indexed failure attribution, and atomic rollback.
 contract BaseAaveV3StaticFlowsForkTest is BaseAaveV3StaticFlowFixture {
     uint256 private constant BASE_STATIC_UPSTREAM_AUTHORITY_KEY = 0xA1152;
     uint256 private constant BASE_STATIC_DEFI_SIMPLIFY_AUTHORITY_KEY = 0xD5C52;
@@ -131,6 +135,10 @@ contract BaseAaveV3StaticFlowsForkTest is BaseAaveV3StaticFlowFixture {
         _assertNoAavePosition(delegatedEoa);
     }
 
+    /// @dev Given separate upstream and DeFi Simplify delegated EOAs funded with equal WETH. When
+    ///      both execute the same approve/supply/borrow lifecycle and repay/withdraw close. Then
+    ///      their Aave collateral, debt, balances, and health factors remain equivalent before
+    ///      both positions return to the no-position state.
     function test_UpstreamAndDefiSimplifyStaticLifecycles_ReachEquivalentAaveState() external {
         address payable upstreamEoa = compatibilityFixture.upstream.delegatedEoa;
         address payable defiSimplifyEoa = compatibilityFixture.defiSimplify.delegatedEoa;
@@ -158,6 +166,9 @@ contract BaseAaveV3StaticFlowsForkTest is BaseAaveV3StaticFlowFixture {
         _assertNoAavePosition(defiSimplifyEoa);
     }
 
+    /// @dev The third call deliberately over-borrows after approval and supply. Both account
+    ///      variants must preserve call-index 2 and Aave's complete nested error while restoring
+    ///      native/WETH balances, allowances, and the no-position protocol state.
     function test_LaterBorrowFailure_RollsBackEarlierApproveAndSupplyForBothAccountVariants() external {
         address payable upstreamEoa = compatibilityFixture.upstream.delegatedEoa;
         address payable defiSimplifyEoa = compatibilityFixture.defiSimplify.delegatedEoa;

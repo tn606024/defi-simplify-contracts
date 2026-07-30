@@ -8,6 +8,9 @@ import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
+/// @title Base Aave V3 Typed Flow Assertion Fork Test
+/// @notice Proves at pinned Base block 48,961,870 that FlowAssertions reads the real Aave V3 Pool
+///         in the delegated EOA's execution context rather than an arbitrary account argument.
 contract BaseAaveV3FlowAssertionsForkTest is DelegatedAccountFixture {
     uint256 private constant BASE_CHAIN_ID = 8453;
     uint256 private constant BASE_FORK_BLOCK = 48_961_870;
@@ -27,6 +30,9 @@ contract BaseAaveV3FlowAssertionsForkTest is DelegatedAccountFixture {
         flowAssertions = new FlowAssertions();
     }
 
+    /// @dev Given a delegated EOA with no Aave position and the canonical maximum health factor.
+    ///      When its inherited static batch calls the typed checker. Then msg.sender binds the
+    ///      checked Aave account to that EOA and the exact no-position lower bound succeeds.
     function test_BaseAaveV3PoolReportsAndAssertionChecksDelegatedEoaHealthFactor() external {
         (,,,,, uint256 healthFactor) = IAaveV3Pool(AAVE_V3_POOL).getUserAccountData(accountUnderTest.delegatedEoa);
         assertEq(healthFactor, type(uint256).max, "unexpected no-position health factor");

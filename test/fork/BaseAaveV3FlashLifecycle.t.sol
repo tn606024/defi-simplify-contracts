@@ -11,6 +11,13 @@ import {Vm} from "forge-std/Vm.sol";
 import {BaseAaveV3FlashLifecycleFixture, IBaseAaveV3FlashLifecyclePool} from "./BaseAaveV3FlashLifecycleFixture.sol";
 import {DynamicCallTestBuilder} from "../utils/DynamicCallTestBuilder.sol";
 
+/// @title Base Aave V3 Authenticated Flash-Lifecycle Fork Tests
+/// @notice Exercises leverage-open, partial-deleverage, and full-close plans against Aave V3 and
+///         Uniswap V3 at pinned Base block 48,961,870. The plans authenticate one direct Pool
+///         callback, use observed checkpoint deltas, enforce premium/swap/price/health bounds,
+///         repay exactly with zero residual allowances, and preserve isolated inventory.
+/// @dev The direct Router entrypoints provide amount and nonzero price bounds but no deadline.
+///      Detailed outer and callback call construction remains canonical in the shared fixture.
 contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
     uint256 private constant BASE_FLASH_LIFECYCLE_AUTHORITY_KEY = 0xD5C8201;
 
@@ -31,6 +38,11 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertNoAavePosition(accountUnderTest.delegatedEoa);
     }
 
+    /// @dev Given a no-position delegated EOA with initial cbETH capital plus cbETH/WETH sentinels.
+    ///      When the outer plan enables E-Mode, supplies that capital, and flash-borrows WETH, the
+    ///      callback swaps only the flash principal, checkpoints and supplies only observed cbETH,
+    ///      and borrows principal plus premium. Then the Pool is repaid exactly, allowances are
+    ///      zero, sentinels survive, and the resulting position meets the signed health-factor bound.
     function test_FlashAssistedLeverageOpen_UsesObservedSwapOutputAndRepaysExactly() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _fundLeverageOpenInventory(delegatedEoa);
@@ -83,6 +95,11 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertNoCustomLifecycleEvents(logs);
     }
 
+    /// @dev Given an E-Mode cbETH-collateral/WETH-debt position plus inventory sentinels. When a
+    ///      WETH flash loan repays part of the debt, the callback withdraws cbETH and exact-output
+    ///      swaps under its input/price cap, while the outer checkpoint later resupplies only the
+    ///      unspent withdrawal remainder. Then debt falls, health factor improves, repayment is
+    ///      exact, sentinels survive, and Pool/Router allowances return to zero.
     function test_FlashAssistedPartialDeleverage_ReducesDebtAndResuppliesOnlyOuterCheckpointRemainder() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _openCbEthCollateralWethDebtPosition(delegatedEoa);
@@ -135,6 +152,11 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertNoCustomLifecycleEvents(logs);
     }
 
+    /// @dev Given the same open position, the outer checkpoint patches the visible debt-token
+    ///      balance into the flash principal. The callback repays all debt, withdraws all cbETH,
+    ///      and sells only the bounded exact-output amount needed for principal plus premium.
+    ///      Final generic assertions require zero debt and the no-position health factor; unused
+    ///      collateral and both inventory sentinels return to the delegated EOA.
     function test_FlashAssistedFullClose_PatchesVisibleDebtAndReturnsUnusedCollateral() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _openCbEthCollateralWethDebtPosition(delegatedEoa);
@@ -179,6 +201,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertNoCustomLifecycleEvents(logs);
     }
 
+    /// @dev Sets the signed maximum premium one wei below the Pool's observed premium. The
+    ///      authenticated callback must reject it before repayment approval and roll back both frames.
     function test_FlashAssistedLeverageOpen_WhenMaximumPremiumIsTooLow_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _fundLeverageOpenInventory(delegatedEoa);
@@ -203,6 +227,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Makes the callback's Router minimum output unreachable so the nested target failure
+    ///      retains both outer flash-call and callback-call attribution before complete rollback.
     function test_FlashAssistedLeverageOpen_WhenSwapMinimumIsImpossible_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _fundLeverageOpenInventory(delegatedEoa);
@@ -230,6 +256,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Lets the callback and exact Pool repayment complete, then makes the outer final typed
+    ///      assertion impossible so it remains the atomic rollback boundary for the whole lifecycle.
     function test_FlashAssistedLeverageOpen_WhenFinalHealthFactorIsExcessive_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _fundLeverageOpenInventory(delegatedEoa);
@@ -255,6 +283,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Borrows less WETH than principal plus premium after the callback plan. The account must
+    ///      reject repayment coverage before approval or Pool pull and restore both execution frames.
     function test_FlashAssistedLeverageOpen_WhenRepaymentBalanceIsInsufficient_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _fundLeverageOpenInventory(delegatedEoa);
@@ -279,6 +309,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Supplies an undersized callback envelope so ABI decoding fails before any callback
+    ///      action; the outer Pool failure must carry the empty decoder reason and leave state intact.
     function test_FlashLoan_WhenCallbackEnvelopeIsMalformed_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
@@ -300,6 +332,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Marks a callback-plan action as callback-enabled. Callback prevalidation must reject
+    ///      the nested request before executing its token approval and roll back the outer flash call.
     function test_FlashLoan_WhenCallbackPlanRequestsNestedCallback_RollsBackEveryStateChange() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         IDefiSimplify7702Account.DynamicCall[] memory nestedCalls = new IDefiSimplify7702Account.DynamicCall[](1);
@@ -328,6 +362,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Lowers the exact-output Router collateral cap below the pinned quote. The nested
+    ///      callback failure must preserve attribution and restore debt, collateral, pools, and allowances.
     function test_FlashAssistedPartialDeleverage_WhenMaximumCollateralInputIsTooLow_RollsBackPosition() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         _openCbEthCollateralWethDebtPosition(delegatedEoa);
@@ -351,6 +387,8 @@ contract BaseAaveV3FlashLifecycleForkTest is BaseAaveV3FlashLifecycleFixture {
         _assertFlashLifecycleStateEquals(beforeState, delegatedEoa);
     }
 
+    /// @dev Every forced failure compares delegated balances and allowances, Aave reserve and
+    ///      position state, and Uniswap pool balances, price, tick, and liquidity with its pre-call snapshot.
     function _invokeExpectingRollback(address payable delegatedEoa, IDefiSimplify7702Account.DynamicCall[] memory calls)
         private
         returns (bytes memory revertData, FlashLifecycleState memory beforeState)

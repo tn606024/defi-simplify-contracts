@@ -9,9 +9,10 @@ import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
 
-/// @title BaseDeploymentCandidateFactoryTest
-/// @notice Proves candidate vacancy, prerequisites, payloads, and direct runtime
-///         identities against the actual Base factory on a disposable fork.
+/// @title Base v1.1 Deployment Candidate Factory Fork Tests
+/// @notice Replays the frozen v1.1 candidate against the actual Base factory at reviewed
+///         pre-deployment block 49,268,704, then distinguishes that historical vacancy proof from
+///         the active post-broadcast runtime identities. Every deployment occurs only on the fork.
 contract BaseDeploymentCandidateFactoryTest is Test {
     string internal constant MANIFEST_PATH = "deployments/base-v1.1-candidate.json";
     uint256 internal constant PRE_DEPLOYMENT_BLOCK = 49_268_704;
@@ -44,6 +45,10 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         _assertCandidateAddressVacant("StaticCallUint256Assertions");
     }
 
+    /// @dev Given vacant reviewed candidate addresses and frozen salts/initcode hashes. When the
+    ///      three payloads call the live Arachnid factory inside the disposable pre-deployment fork.
+    ///      Then each returned address and direct runtime must match the candidate manifest without
+    ///      broadcasting or mutating Base.
     function test_BaseFactory_CandidatePayloadsDeployExactDirectRuntimesOnDisposableFork() public {
         vm.rollFork(PRE_DEPLOYMENT_BLOCK);
         address entryPoint = vm.parseJsonAddress(manifest, ".entryPoint.address");
@@ -62,6 +67,8 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         _assertCandidateAddressHasExpectedRuntime("StaticCallUint256Assertions");
     }
 
+    /// @dev Runs the shared script twice at current post-broadcast state to prove exact existing
+    ///      runtimes are accepted idempotently rather than redeployed.
     function test_CandidateScript_WhenExactRuntimesAlreadyExist_RemainsIdempotent() public {
         DeployBaseV1_1Candidate deploymentScript = new DeployBaseV1_1Candidate();
         (address account, address flowAssertions, address staticAssertions) = deploymentScript.run();
@@ -77,6 +84,8 @@ contract BaseDeploymentCandidateFactoryTest is Test {
         assertEq(staticAssertions.codehash, staticAssertionsCodeHash, "generic-checker runtime changed");
     }
 
+    /// @dev Replaces the expected account runtime only on the fork so the permanent occupied-address
+    ///      guard must reject the mismatched code hash before any deployment attempt.
     function test_CandidateScript_WhenAddressHasUnexpectedRuntime_RejectsOccupiedAddress() public {
         address account = vm.parseJsonAddress(manifest, ".artifacts.DefiSimplify7702Account.expectedAddress");
         bytes32 expectedCodeHash = vm.parseJsonBytes32(manifest, ".artifacts.DefiSimplify7702Account.runtimeCodeHash");

@@ -7,9 +7,10 @@ import {DefiSimplify7702Account} from "../../src/DefiSimplify7702Account.sol";
 import {FlowAssertions} from "../../src/FlowAssertions.sol";
 import {StaticCallUint256Assertions} from "../../src/StaticCallUint256Assertions.sol";
 
-/// @title BaseDeploymentFactoryTest
-/// @notice Proves the official deployment payloads and current runtime identities
-///         against Base inside a local fork. This test never broadcasts to Base.
+/// @title Retired Base v1.0 Deployment Factory Fork Tests
+/// @notice Retains the historical v1.0 manifest's factory, initcode, address, and runtime evidence
+///         against Base inside a local fork. These retired addresses are not deployments of the
+///         active v1.1 bytecode, and this suite never broadcasts.
 contract BaseDeploymentFactoryTest is Test {
     string internal constant MANIFEST_PATH = "deployments/base-v1.json";
 
@@ -33,6 +34,9 @@ contract BaseDeploymentFactoryTest is Test {
         );
     }
 
+    /// @dev Given the historical manifest and current fork state. When each frozen v1.0 payload is
+    ///      reconstructed, the suite verifies an existing historical runtime or deploys it only on
+    ///      a vacant disposable fork address, then requires the exact direct runtime hash.
     function test_BaseFactory_OfficialPayloadsResolveToExactDirectRuntimes() public {
         address entryPoint = vm.parseJsonAddress(manifest, ".entryPoint.address");
 
@@ -44,8 +48,8 @@ contract BaseDeploymentFactoryTest is Test {
         _deployOrVerifyOnFork("StaticCallUint256Assertions", type(StaticCallUint256Assertions).creationCode);
     }
 
-    /// @dev Verifies the existing official Base runtime. The vacancy branch
-    ///      preserves the same disposable-fork proof for a fresh equivalent
+    /// @dev Verifies an existing historical Base runtime. The vacancy branch
+    ///      preserves the same disposable-fork proof for an equivalent
     ///      chain state without broadcasting a transaction.
     function _deployOrVerifyOnFork(string memory contractName, bytes memory initcode) private {
         string memory artifactRoot = string.concat(".artifacts.", contractName);

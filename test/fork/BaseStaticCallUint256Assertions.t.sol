@@ -10,6 +10,10 @@ import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {DelegatedAccountFixture} from "../utils/DelegatedAccountFixture.sol";
 
+/// @title Base Generic Static Uint256 Assertion Fork Tests
+/// @notice Proves at pinned Base block 48,961,870 that the independent checker can bind the
+///         delegated EOA into a reviewed Aave calldata word, select the health-factor return word,
+///         and separately perform an explicitly unbound global Base WETH read.
 contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
     uint256 private constant BASE_CHAIN_ID = 8453;
     uint256 private constant BASE_FORK_BLOCK = 48_961_870;
@@ -35,6 +39,10 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         genericAssertions = new StaticCallUint256Assertions();
     }
 
+    /// @dev Given a no-position delegated EOA and two reviewed adapters. When an inherited static
+    ///      batch replaces the Aave account word at offset 4 and reads return word 5, then performs
+    ///      a WETH totalSupply read with the no-binding sentinel. Then both independent lower
+    ///      bounds succeed without either target receiving mutable execution.
     function test_IndependentCheckerBindsDelegatedAccountForBaseAaveAndSupportsGlobalBaseRead() external {
         (,,,,, uint256 healthFactor) = IAaveV3Pool(AAVE_V3_POOL).getUserAccountData(accountUnderTest.delegatedEoa);
         assertEq(healthFactor, type(uint256).max, "unexpected no-position health factor");
@@ -49,6 +57,8 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         _defiSimplifyAccountView(accountUnderTest).executeBatch(calls);
     }
 
+    /// @dev Uses the same reviewed Aave selector and offsets as a final, checkpoint-free dynamic
+    ///      step, proving the checker composes with both account execution surfaces.
     function test_DynamicBatchUsesIndependentCheckerAsFinalAaveHealthFactorStep() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = new IDefiSimplify7702Account.DynamicCall[](1);
         calls[0].target = address(genericAssertions);
@@ -60,6 +70,8 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         _dynamicExecutionInterfaceView(accountUnderTest).executeBatchDynamic(calls);
     }
 
+    /// @dev Offset 4 selects getUserAccountData's account argument; return offset 160 selects its
+    ///      sixth fixed-width word, healthFactor. The placeholder must be replaced by msg.sender.
     function _encodeAaveHealthFactorAssertion() private pure returns (bytes memory) {
         bytes memory poolData = abi.encodeCall(IAaveV3Pool.getUserAccountData, (PLACEHOLDER_ACCOUNT));
         return abi.encodeCall(
@@ -68,6 +80,8 @@ contract BaseStaticCallUint256AssertionsForkTest is DelegatedAccountFixture {
         );
     }
 
+    /// @dev totalSupply has no account argument, so the explicit uint32-max sentinel disables
+    ///      account binding and return offset zero selects its only word.
     function _encodeWethTotalSupplyAssertion() private pure returns (bytes memory) {
         bytes memory wethData = abi.encodeCall(IERC20.totalSupply, ());
         return abi.encodeCall(
