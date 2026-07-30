@@ -12,6 +12,10 @@ import {
     IBaseUniswapV3SwapRouter02
 } from "./BaseAaveV3DynamicStrategyFixture.sol";
 
+/// @title Base Aave V3 Guarded Dynamic Strategy Fork Tests
+/// @notice Exercises a callback-free WETH-collateral/USDC-debt loop against Aave V3 and Uniswap V3
+///         at pinned Base block 48,961,870, including observed-delta patching, economic guards,
+///         inventory preservation, failure attribution, and atomic rollback.
 contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
     uint256 private constant BASE_DYNAMIC_STRATEGY_AUTHORITY_KEY = 0xD5C5701;
     bytes4 private constant AAVE_INVALID_AMOUNT_SELECTOR = 0x2c5211c6;
@@ -27,6 +31,12 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _fundWethCollateralUsdcDebtLoopInventory(accountUnderTest.delegatedEoa);
     }
 
+    /// @dev Given a delegated EOA with no Aave position, the WETH to supply, and isolated WETH,
+    ///      USDC, and native inventory sentinels. When the eight-call plan supplies WETH, borrows
+    ///      USDC, patches that observed USDC delta into the Router approval and swap, then patches
+    ///      the observed WETH output into the second Aave approval and supply. Then only those
+    ///      checkpoint deltas move under the Router output/price bounds and final health-factor
+    ///      guard; inventory, exact allowances, and unrelated account holders remain untouched.
     function test_WethCollateralUsdcDebtLoop_UsesObservedDeltasAndKeepsExistingInventory() external {
         address payable delegatedEoa = accountUnderTest.delegatedEoa;
         uint256 startingWethBalance = IERC20(BASE_WETH).balanceOf(delegatedEoa);
@@ -103,6 +113,8 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _assertNoCustomAccountOrAssertionEvents(logs, delegatedEoa, flowAssertions);
     }
 
+    /// @dev Raises the Router-native minimum output so call 4 must preserve the complete Uniswap
+    ///      failure while rolling back the earlier Aave supply, borrow, approvals, and pool state.
     function test_WethCollateralUsdcDebtLoop_WhenSwapMinimumIsUnreachable_RollsBackEveryStateChange() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = _buildWethCollateralUsdcDebtLoopStrategy(
             accountUnderTest.delegatedEoa,
@@ -124,6 +136,8 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
+    /// @dev Lets every protocol call succeed, then makes the final typed assertion impossible so
+    ///      the post-condition at call 7 remains the rollback boundary for the complete strategy.
     function test_WethCollateralUsdcDebtLoop_WhenFinalHealthFactorMinimumIsExcessive_RollsBackEveryStateChange()
         external
     {
@@ -147,6 +161,8 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
+    /// @dev Shifts the Router approval patch by one byte so account-side alignment validation must
+    ///      reject the indexed patch before executing the affected target.
     function test_WethCollateralUsdcDebtLoop_WhenRouterApprovalOffsetIsUnaligned_RollsBackEveryStateChange() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = _buildPinnedWethCollateralUsdcDebtLoopStrategy();
         uint32 invalidOffset = ERC20_APPROVE_AMOUNT_CALLDATA_OFFSET + 1;
@@ -169,6 +185,8 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
+    /// @dev Relabels the borrowed-USDC patch as WETH so checkpoint-token binding must fail with the
+    ///      consuming call and patch indices, rather than spending either inventory sentinel.
     function test_WethCollateralUsdcDebtLoop_WhenPatchTokenDiffersFromCheckpoint_RollsBackEveryStateChange() external {
         IDefiSimplify7702Account.DynamicCall[] memory calls = _buildPinnedWethCollateralUsdcDebtLoopStrategy();
         calls[ROUTER_APPROVE_CALL_INDEX].patches[0].token = BASE_WETH;
@@ -190,6 +208,8 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         _assertWethCollateralUsdcDebtLoopStateEquals(beforeState, accountUnderTest.delegatedEoa);
     }
 
+    /// @dev Keeps the observed-output patch mechanically valid but changes the downstream Aave
+    ///      operation, proving the complete target revert is attributed to call 6 and rolls back.
     function test_WethCollateralUsdcDebtLoop_WhenPatchedDownstreamAaveAmountIsInvalid_RollsBackEveryStateChange()
         external
     {
@@ -224,6 +244,8 @@ contract BaseAaveV3DynamicStrategyForkTest is BaseAaveV3DynamicStrategyFixture {
         );
     }
 
+    /// @dev Every failure case compares delegated-account balances and allowances, the Aave
+    ///      position, and Uniswap pool balances, price, tick, and liquidity with its pre-call state.
     function _invokeWethCollateralUsdcDebtLoopExpectingRollback(IDefiSimplify7702Account.DynamicCall[] memory calls)
         private
         returns (bytes memory revertData, WethCollateralUsdcDebtLoopState memory beforeState)
