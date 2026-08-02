@@ -31,8 +31,17 @@ All three direct contracts have exact-match BaseScan source verification from
 the metadata-derived production source closures linked in the table. The
 released manifest assigns `trustLevel: "official"` only as the
 project-published artifact and deployment identity. It does not mean audited,
-safe, SDK-integrated, production-ready, or recommended for capital. The
-contracts remain independently unaudited, experimental, and `not-integrated`.
+safe, SDK-integrated, production-ready, or recommended for capital. At the
+v1.1.0 publication commit, the contracts remained independently unaudited,
+experimental, and `not-integrated`; the manifest preserves that exact
+release-time state.
+
+The public [`defi-simplify` Go SDK](https://github.com/tn606024/defi-simplify)
+later adopted this v1.1.0 deployment identity and supports inherited static and
+custom dynamic account execution. That later compatibility fact does not
+rewrite the tagged manifest. Full public SDK parity for typed assertions,
+callback-plan construction, and every documented Base strategy remains
+separate ongoing work.
 
 ### Reproduce the deployment record
 

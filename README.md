@@ -1,29 +1,161 @@
 # DeFi Simplify Contracts
 
-Independent EIP-7702 execution and post-condition contracts for building atomic
-DeFi transactions.
+[![CI](https://github.com/tn606024/defi-simplify-contracts/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tn606024/defi-simplify-contracts/actions/workflows/ci.yml)
+[![Base fork tests](https://github.com/tn606024/defi-simplify-contracts/actions/workflows/base-fork.yml/badge.svg)](https://github.com/tn606024/defi-simplify-contracts/actions/workflows/base-fork.yml)
 
-These contracts can be integrated directly from any wallet, SDK, or automation
-system that can construct EIP-7702 transactions and encode Solidity calldata.
-They do not require the `defi-simplify` Go SDK.
+Many DeFi workflows require several calls in a specific order. Supplying
+collateral and borrowing from Aave, for example, requires an ERC20 approval and
+multiple Pool calls. These operations are most useful when the whole sequence
+succeeds or reverts as one atomic transaction.
+
+An external Multicall contract can batch the calls, but it becomes `msg.sender`
+at every downstream protocol. ERC20 and DeFi contracts then observe the
+Multicall contract instead of the user's EOA, changing whose allowances,
+assets, positions, receivers, and callbacks are involved.
+
+DeFi Simplify uses EIP-7702 to run a reusable batch executor in the user's EOA
+context. Downstream calls still originate from the EOA, so the user remains the
+protocol-visible caller and continues to hold the resulting assets and
+positions at the same address.
+
+Protocol routing and plan construction remain off chain. Developers can
+compose workflows in Go from reusable steps instead of deploying and upgrading
+a new Solidity strategy contract for every combination. The resulting plan is
+submitted to the shared on-chain account as one atomic transaction.
+
+This repository provides the three direct, immutable contracts used to execute
+those plans and check their outcomes on Base:
+
+| Contract | Responsibility |
+| --- | --- |
+| [`DefiSimplify7702Account`](src/DefiSimplify7702Account.sol) | Preserves the pinned account's ordinary `execute` / `executeBatch` behavior, adds runtime balance-based `executeBatchDynamic`, and receives one authenticated Aave V3 simple-flash-loan callback |
+| [`FlowAssertions`](src/FlowAssertions.sol) | Provides typed post-condition checks for ERC20 balances, balance changes, and Aave V3 health factor |
+| [`StaticCallUint256Assertions`](src/StaticCallUint256Assertions.sol) | Reads one reviewed `uint256` return word and enforces a minimum or maximum |
+
+Together, they let a delegated account execute an atomic call sequence, use
+token amounts that become known only while that sequence is running, and check
+the final result before the transaction can commit.
 
 > [!WARNING]
-> **Experimental and unaudited.** The contracts can execute arbitrary external
-> calls from a delegated account. Incorrect targets, calldata, patch offsets,
-> approvals, price limits, or assertions can cause total and irreversible loss.
-> The current deployment is not recommended for production funds. Use at your
-> own risk.
+> **Experimental and unaudited.** A bad execution plan can cause total and
+> irreversible loss. Do not use the current deployment with production funds.
 
-## Contracts at a glance
+## Why `executeBatchDynamic` exists
 
-| Contract | Use it when you need |
-| --- | --- |
-| [`DefiSimplify7702Account`](src/DefiSimplify7702Account.sol) | An EIP-7702 account that can execute ordinary batches, derive later call amounts from ERC20 balances, and receive one authenticated Aave V3 simple-flash-loan callback |
-| [`FlowAssertions`](src/FlowAssertions.sol) | Typed end-of-transaction checks for ERC20 balances, balance changes, or an Aave V3 health factor |
-| [`StaticCallUint256Assertions`](src/StaticCallUint256Assertions.sol) | A low-level adapter that reads one fixed `uint256` word from a caller-reviewed target and enforces a minimum or maximum |
+An ordinary multicall works only when every call's calldata can be fully encoded
+before the transaction starts. That is often not true for DeFi. A borrow,
+withdrawal, claim, swap, or flash-loan callback may produce an amount that a
+later call needs as its input. Before execution, the client can estimate that
+amount, but it cannot know the account's exact runtime balance or exact balance
+increase.
 
-All three contracts are direct and immutable. They have no owner, admin, proxy,
-upgrade function, withdrawal function, or protocol registry.
+For example, a fixed multicall cannot directly express "after this call returns,
+swap exactly the USDC it added to my account." Hard-coding the expected output
+can leave dust or make the next call revert when the actual amount differs.
+
+`executeBatchDynamic` solves this by letting an ordered batch connect a runtime
+ERC20 balance to a later call:
+
+1. A producer call declares a named checkpoint for a token. The account records
+   its balance immediately before calling the producer.
+2. After the producer runs, a later consumer call can read either the account's
+   complete current token balance or the exact increase since that checkpoint.
+3. The account applies optional basis points, then replaces one validated,
+   ABI-aligned 32-byte calldata word with the resulting amount.
+4. The consumer executes with the patched calldata. Later calls may repeat the
+   same pattern, and an assertion call can validate the final outcome.
+
+`CurrentBalance` includes inventory the account already held.
+`CheckpointDelta` computes `currentBalance - checkpointBalance`, so a consumer
+can use only the amount produced after the checkpoint. Patches are resolved
+immediately before their target call, not during off-chain plan construction.
+See [Build a dynamic batch](#3-build-a-dynamic-batch) for the exact data model
+and offset rules.
+
+The account deliberately does not interpret the strategy. It does not find
+routes, quote prices, choose protocols, decide profitability, or determine
+whether arbitrary calldata is appropriate. Those decisions remain with the
+integrating SDK, wallet, automation system, signer, and user.
+
+If any target or final assertion reverts, the execution-time protocol, token,
+and allowance changes made by the sequence revert atomically.
+
+## System boundary
+
+```text
+Go SDK / wallet / automation / signer
+  - builds typed calldata and EIP-7702 authorization
+  - admits chain, runtime, target, selector, offsets, and economic limits
+  - simulates the exact transaction and explains it to the signer
+                         |
+                         v
+EIP-7702 delegated EOA using DefiSimplify7702Account
+  - inherited execute / executeBatch and ERC-4337 validation
+  - checkpoint-scoped executeBatchDynamic calldata patching
+  - one authenticated direct Aave V3 flashLoanSimple callback window
+                         |
+                         v
+Reviewed protocol and token calls on Base
+                         |
+                         v
+FlowAssertions / StaticCallUint256Assertions
+  - caller-bound typed or reviewed fixed-word post-conditions
+```
+
+Every execution path uses EVM `CALL`, never `DELEGATECALL`. The three deployed
+contracts are direct and immutable, with no owner, admin, proxy, upgrade
+function, withdrawal function, protocol registry, or custom permanent storage.
+
+## Current SDK compatibility
+
+The contracts remain independently integrable from any system that can
+construct EIP-7702 transactions and encode Solidity calldata; using the
+official SDK is not required.
+
+The public [`defi-simplify` Go SDK](https://github.com/tn606024/defi-simplify)
+now selects the official v1.1.0 Base deployment and supports inherited static
+and custom dynamic account execution. Full public SDK parity for typed
+assertions, callback-plan construction, and every documented Base strategy is
+still in progress.
+
+The released [`base-v1.1.json`](deployments/base-v1.1.json) manifest retains
+`sdkIntegrationStatus: "not-integrated"` because it records the exact status at
+the v1.1.0 publication commit. It is frozen release evidence, not a live
+compatibility flag, and later SDK adoption does not rewrite that historical
+manifest state.
+
+## Development quick start
+
+Prerequisites are Git, the repository-pinned Foundry `v1.7.1`, and Slither
+`0.11.4` for the complete non-RPC gate. The
+[`ci.yml`](.github/workflows/ci.yml) workflow documents the pinned Python and
+Slither installation used by the project.
+
+```sh
+git clone --recurse-submodules \
+  https://github.com/tn606024/defi-simplify-contracts.git
+cd defi-simplify-contracts
+export PATH="$HOME/.foundry/bin:$PATH"
+make check
+```
+
+For an existing checkout, initialize or refresh the exact submodule revisions
+before validation:
+
+```sh
+git submodule update --init --recursive
+make check-toolchain
+```
+
+The Base suite is intentionally separate because it requires an RPC endpoint:
+
+```sh
+BASE_RPC_URL="https://your-reviewed-base-rpc.example" make check-base
+```
+
+Never commit RPC URLs, API keys, keystores, or broadcast output. Run
+`make help` for focused build, test, coverage, gas, reproducibility, deployment,
+and fork targets.
 
 ## Base v1.1.0 deployment
 
@@ -41,10 +173,10 @@ All three receipts and direct runtime identities have been independently
 re-read from Base. Each direct contract has exact-match BaseScan source
 verification from its metadata-derived production source closure. The released
 manifest assigns `official` only as the project-published artifact and
-deployment identity. The contracts remain independently unaudited,
-experimental, and not integrated into the SDK. Deployment, source verification,
-official identity, and repository-authored evidence are not an audit or
-security guarantee.
+deployment identity, not as a security claim. The manifest's `not-integrated`
+value records its release-publication state; see
+[Current SDK compatibility](#current-sdk-compatibility) for the later SDK
+adoption.
 
 Base is the only supported chain in this version.
 
@@ -288,39 +420,3 @@ Usage references:
 - [`abi/StaticCallUint256Assertions.json`](abi/StaticCallUint256Assertions.json)
 - [`StaticCallUint256AssertionsBatchIntegration.t.sol`](test/integration/StaticCallUint256AssertionsBatchIntegration.t.sol)
 - [`BaseStaticCallUint256Assertions.t.sol`](test/fork/BaseStaticCallUint256Assertions.t.sol)
-
-## Integration checklist
-
-Before submitting a transaction:
-
-1. verify the chain ID, implementation address, runtime code hash, EntryPoint,
-   protocol targets, and selectors;
-2. encode calls from structured ABIs rather than editing raw hex;
-3. derive and test every patch or assertion offset;
-4. set protocol-native slippage, price, premium, and other economic limits;
-5. append final assertions for the outcome that must remain true;
-6. simulate the exact signed transaction against recent chain state;
-7. display targets, asset movements, approvals, and bounds to the signer;
-8. keep a way to clear or replace the EIP-7702 delegation.
-
-Simulation reduces mistakes but is not an on-chain safety proof. State,
-liquidity, oracle values, proxy implementations, and prices may change before
-inclusion.
-
-## Important limitations
-
-- A failed execution still consumes gas and nonce. A newly processed EIP-7702
-  delegation may remain installed even if the execution portion reverts.
-- Dynamic patches read ERC20 balances only. Native ETH balances and target
-  return values cannot be used as patch sources in v1.
-- Only direct Aave V3 `flashLoanSimple` callbacks are supported. Multi-asset,
-  nested, wrapper-mediated, ERC-3156, Balancer, Morpho, and Uniswap callbacks
-  are not supported.
-- The account does not identify safe protocols, routers, tokens, proxies, or
-  calldata. Target admission belongs to the integrating wallet or client.
-- A successful EVM call does not prove useful work occurred. Calls to addresses
-  without code may succeed, and value may be transferred to them.
-- Token behavior is assumed to resemble conventional ERC20
-  `balanceOf`/`allowance`/`approve`. Unusual tokens require separate review.
-- Assertions check only their stated post-condition. They do not validate
-  profitability, fair pricing, oracle quality, or every intermediate action.
